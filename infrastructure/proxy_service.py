@@ -2,13 +2,41 @@
 import logging
 import time
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 from fastapi import Request
 
 from api.config import config
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Security: Allowed proxy schemes and blocked hosts for SSRF prevention
+ALLOWED_PROXY_SCHEMES = {'http', 'https'}
+BLOCKED_HOSTS = {'localhost', '127.0.0.1', '0.0.0.0', '::1'}
+
+
+def _is_internal_host(hostname: str) -> bool:
+    """Check if hostname is an internal/private IP address."""
+    if hostname in BLOCKED_HOSTS:
+        return True
+    # Check private IP ranges
+    if hostname.startswith('192.168.') or hostname.startswith('10.'):
+        return True
+    # Check 172.16.0.0/12 range (172.16.0.0 - 172.31.255.255)
+    if hostname.startswith('172.'):
+        parts = hostname.split('.')
+        if len(parts) >= 2:
+            try:
+                second_octet = int(parts[1])
+                if 16 <= second_octet <= 31:
+                    return True
+            except ValueError:
+                pass
+    return False
+
+
 class ProxyManager:
     def __init__(self):
         self.proxies = []
@@ -24,11 +52,36 @@ class ProxyManager:
             logger.info(f"Loaded {len(self.proxies)} proxies from environment")
     
     def get_proxies_from_header(self, request: Request) -> List[str]:
-        """Get proxy list from X-Proxy-List header."""
+        """Get proxy list from X-Proxy-List header with validation."""
         proxy_header = request.headers.get('X-Proxy-List', '')
-        if proxy_header:
-            return [p.strip() for p in proxy_header.split(',') if p.strip()]
-        return []
+        if not proxy_header:
+            return []
+        
+        validated_proxies = []
+        for proxy in proxy_header.split(','):
+            proxy = proxy.strip()
+            if not proxy:
+                continue
+            
+            try:
+                parsed = urlparse(proxy)
+                # Validate scheme
+                if parsed.scheme not in ALLOWED_PROXY_SCHEMES:
+                    logger.warning(f"Rejected proxy with invalid scheme: {proxy}")
+                    continue
+                # Block internal hosts
+                hostname = parsed.hostname
+                if not hostname:
+                    logger.warning(f"Rejected proxy with no hostname: {proxy}")
+                    continue
+                if _is_internal_host(hostname):
+                    logger.warning(f"Rejected proxy with internal host: {proxy}")
+                    continue
+                validated_proxies.append(proxy)
+            except Exception as e:
+                logger.warning(f"Rejected malformed proxy: {proxy}, error: {e}")
+        
+        return validated_proxies
     
     def get_available_proxies(self, request: Optional[Request] = None) -> List[str]:
         """Get list of available proxies, filtering out failed ones."""
