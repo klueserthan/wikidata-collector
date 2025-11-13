@@ -160,7 +160,7 @@ query = wiki_service.build_public_figures_query(
 
 ## Architecture
 
-```
+```text
 wikidata_retriever/          # Standalone module (no FastAPI)
 ├── __init__.py              # Public API
 ├── client.py                # WikidataClient

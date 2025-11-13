@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import Request
 
-from core.models import AccountEntry, Coordinates, PublicInstitution, WebsiteEntry
+from ..models import AccountEntry, Coordinates, PublicInstitution, WebsiteEntry
 
 
 def normalize_public_institution(
@@ -63,15 +63,23 @@ def normalize_public_institution(
     name_value = item.get("institutionLabel", {}).get("value")
 
     needs_label_fallback = not name_value or (
-        isinstance(name_value, str) and name_value.startswith("Q") and name_value[1:].isdigit()
+        isinstance(name_value, str)
+        and name_value.startswith("Q")
+        and name_value[1:].isdigit()
     )
     if needs_label_fallback:
-        labels_map = wiki_service.get_labels_from_qids([qid], lang=lang, request=request)
+        labels_map = wiki_service.get_labels_from_qids(
+            [qid], lang=lang, request=request
+        )
         fallback_label = labels_map.get(qid)
         if fallback_label:
             name_value = fallback_label
         elif not name_value:
-            aliases = expanded_data.get("aliases", []) if isinstance(expanded_data, dict) else []
+            aliases = (
+                expanded_data.get("aliases", [])
+                if isinstance(expanded_data, dict)
+                else []
+            )
             name_value = next((alias for alias in aliases if alias), None)
         if not name_value:
             name_value = qid
@@ -88,8 +96,14 @@ def normalize_public_institution(
     hq_coords_list = []
     coords_list = expanded_data.get("headquarters_coords", []) or []
     for coords_dict in coords_list:
-        if isinstance(coords_dict, dict) and coords_dict.get("lat") is not None and coords_dict.get("lon") is not None:
-            hq_coords_list.append(Coordinates(lat=coords_dict["lat"], lon=coords_dict["lon"]))
+        if (
+            isinstance(coords_dict, dict)
+            and coords_dict.get("lat") is not None
+            and coords_dict.get("lon") is not None
+        ):
+            hq_coords_list.append(
+                Coordinates(lat=coords_dict["lat"], lon=coords_dict["lon"])
+            )
 
     types = expanded_data.get("types", []) or []
     if not types and item.get("type"):
@@ -97,7 +111,9 @@ def normalize_public_institution(
         if type_binding:
             type_qid = type_binding.get("value", "").split("/")[-1]
             if type_qid.startswith("Q"):
-                labels_map = wiki_service.get_labels_from_qids([type_qid], lang=lang, request=request)
+                labels_map = wiki_service.get_labels_from_qids(
+                    [type_qid], lang=lang, request=request
+                )
                 type_label = labels_map.get(type_qid, type_qid)
                 if type_label:
                     types = [type_label]
@@ -126,7 +142,9 @@ def normalize_public_institution(
     def add_account(platform: str, handle: Optional[str]):
         if not handle:
             return
-        if not any(acc.platform == platform and acc.handle == handle for acc in accounts_list):
+        if not any(
+            acc.platform == platform and acc.handle == handle for acc in accounts_list
+        ):
             accounts_list.append(
                 AccountEntry(
                     platform=platform,
@@ -166,4 +184,3 @@ def normalize_public_institution(
         accounts=accounts_list,
         updated_at=current_time,
     )
-

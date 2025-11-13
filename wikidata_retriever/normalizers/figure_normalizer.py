@@ -1,12 +1,11 @@
 from typing import Any, Dict, Optional
 
-from core.models import AccountEntry, Identifier, PublicFigure, WebsiteEntry
+from ..models import AccountEntry, Identifier, PublicFigure, WebsiteEntry
 
 
 def normalize_public_figure(
     item: Dict[str, Any],
     expanded_data: Optional[Dict[str, Any]],
-    lang: str,
     wiki_service,
 ) -> PublicFigure:
     """Normalize Wikidata result to the public figure schema."""
@@ -72,7 +71,9 @@ def normalize_public_figure(
     def add_account(platform: str, handle: Optional[str]):
         if not handle:
             return
-        if not any(acc.platform == platform and acc.handle == handle for acc in accounts_list):
+        if not any(
+            acc.platform == platform and acc.handle == handle for acc in accounts_list
+        ):
             accounts_list.append(
                 AccountEntry(
                     platform=platform,
@@ -129,4 +130,3 @@ def normalize_public_figure(
         image=image_list,
         updated_at=current_time,
     )
-
