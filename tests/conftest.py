@@ -13,11 +13,15 @@ from infrastructure.cache import entity_expansion_cache, sparql_cache
 @pytest.fixture(autouse=True)
 def clear_caches():
     """Clear all caches before each test."""
+    from api.dependencies import get_wiki_service
+    
     sparql_cache.clear()
     entity_expansion_cache.clear()
+    get_wiki_service.cache_clear()  # Clear the dependency singleton cache
     yield
     sparql_cache.clear()
     entity_expansion_cache.clear()
+    get_wiki_service.cache_clear()  # Clear after test as well
 
 
 @pytest.fixture
