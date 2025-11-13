@@ -1,21 +1,26 @@
+from functools import lru_cache
 from fastapi import Depends
 from core.wiki_service import WikiService
 from api.services.entity_service import EntityService
 from api.services.list_processor import ListProcessor
 
-# Global WikiService instance (singleton pattern)
-_wiki_service_instance = None
 
+@lru_cache(maxsize=1)
 def get_wiki_service() -> WikiService:
-    """Get WikiService instance (singleton).
+    """Get WikiService instance (cached singleton).
+    
+    Uses functools.lru_cache to ensure a single WikiService instance is created
+    and reused across requests. This provides thread-safe singleton behavior
+    without global mutable state.
+    
+    For testing, use get_wiki_service.cache_clear() to reset the singleton,
+    or use FastAPI's dependency override mechanism: 
+    app.dependency_overrides[get_wiki_service] = lambda: mock_service
     
     Returns:
         WikiService instance
     """
-    global _wiki_service_instance
-    if _wiki_service_instance is None:
-        _wiki_service_instance = WikiService()
-    return _wiki_service_instance
+    return WikiService()
 
 def get_entity_service(
     wiki_service: WikiService = Depends(get_wiki_service)
