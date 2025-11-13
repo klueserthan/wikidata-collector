@@ -35,7 +35,7 @@ class ExpansionHandler:
         expand_list = [e.strip() for e in expand.split(',')]
         ent_claims = ent.get('claims', {})
         
-        if ExpansionType.SUB_INSTITUTIONS.value in expand_list and hasattr(entity, 'sub_institutions'):
+        if ExpansionType.SUB_INSTITUTIONS.value in expand_list and isinstance(entity, PublicInstitution):
             # Fetch sub-institutions
             subs = self.wiki_service.expand_sub_institutions(qid, lang=lang, request=request)
             entity.sub_institutions = subs
@@ -59,8 +59,8 @@ class ExpansionHandler:
             # Resolve QIDs to labels
             if unique_qids:
                 labels_map = self.wiki_service.get_labels_from_qids(unique_qids, lang=lang, request=request)
-                # Convert to list of labels, preserving order, fallback to QID if label not found
-                affiliation_labels = [labels_map.get(qid, qid) for qid in unique_qids]
+                # Convert to list of labels, preserving order, only include QIDs that have labels
+                affiliation_labels = [labels_map[qid] for qid in unique_qids if qid in labels_map]
                 entity.affiliations = affiliation_labels
             else:
                 entity.affiliations = []
