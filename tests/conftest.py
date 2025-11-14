@@ -2,7 +2,7 @@
 Pytest configuration and shared fixtures.
 """
 import pytest
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock
 
 from fastapi import Request
 

@@ -4,7 +4,8 @@ Unit tests for api/dependencies.py module.
 Tests the refactored dependency injection pattern using lru_cache
 instead of global mutable state.
 """
-from unittest.mock import Mock
+import pytest
+from unittest.mock import Mock, patch
 
 from api.dependencies import get_wiki_service, get_entity_service, get_list_processor
 from core.wiki_service import WikiService

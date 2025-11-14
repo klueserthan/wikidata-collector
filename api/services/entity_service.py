@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, Any
 from fastapi import HTTPException, Request, Response
 
 from core.wiki_service import WikiService
@@ -6,9 +6,10 @@ from api.services.response_builder import ResponseBuilder
 from api.services.expansion_handler import ExpansionHandler
 from api.utils.entity_utils import EntityTypeDetector
 from api.utils.cache_utils import CacheKeyGenerator
-from api.exceptions import InternalErrorException
+from api.exceptions import InvalidQIDException, InternalErrorException
 from api.validators import QIDValidator
 from api.constants import EntityType, WikidataProperty
+from api.config import config
 from infrastructure.observability import get_request_id
 from infrastructure.cache import entity_expansion_cache
 import logging

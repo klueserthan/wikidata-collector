@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from fastapi import HTTPException
 
 from core.models import PublicFigure, PublicInstitution
+from core.wiki_service import WikiService
 
 pytestmark = pytest.mark.integration
 

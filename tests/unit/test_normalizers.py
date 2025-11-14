@@ -1,8 +1,10 @@
 """
 Unit tests for normalizers (normalize_public_figure and normalize_public_institution).
 """
+import pytest
 
 from core.models import PublicFigure, PublicInstitution
+from core.wiki_service import WikiService
 
 
 class TestNormalizePublicFigure:
