@@ -2,7 +2,6 @@
 Unit tests for infrastructure/proxy_service.py
 Focus on proxy URL validation and SSRF prevention
 """
-import pytest
 from unittest.mock import Mock
 from infrastructure.proxy_service import ProxyManager, _is_internal_host
 

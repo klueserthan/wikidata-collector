@@ -2,7 +2,7 @@
 Unit tests for ExpansionHandler.
 """
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 
 from api.services.expansion_handler import ExpansionHandler
 from core.models import PublicFigure, PublicInstitution, SubInstitution

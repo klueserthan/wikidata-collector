@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi import FastAPI
 from api.utils.entity_utils import TYPE_MAPPINGS
 from api.config import config
-from api.constants import EntityType
 
 router = APIRouter()
 

@@ -33,8 +33,8 @@ def build_public_figures_query(
     Raises:
         ValueError: If QID validation fails
     """
-    query = f"""
-    SELECT DISTINCT ?person ?personLabel ?description ?birthDate ?deathDate ?genderLabel ?countryLabel ?occupationLabel ?image ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle WHERE {{
+    query = """
+    SELECT DISTINCT ?person ?personLabel ?description ?birthDate ?deathDate ?genderLabel ?countryLabel ?occupationLabel ?image ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle WHERE {
     ?person wdt:P31 wd:Q5;
             wdt:P569 ?birthDate.
     """

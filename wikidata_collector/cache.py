@@ -1,7 +1,7 @@
 import time
 import hashlib
 import threading
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Optional, Tuple
 from collections import OrderedDict
 
 from api.config import config

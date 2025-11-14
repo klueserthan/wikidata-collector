@@ -1,9 +1,7 @@
 """
 Unit tests for SPARQL query builders.
 """
-import pytest
 
-from core.wiki_service import WikiService
 
 
 class TestBuildPublicFiguresQuery:

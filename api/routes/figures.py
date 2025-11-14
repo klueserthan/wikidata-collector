@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, Request, Depends
 from typing import List, Optional
 from api.services.list_processor import ListProcessor
 from api.dependencies import get_list_processor
-from api.constants import EntityType, StreamFormat
+from api.constants import EntityType
 from api.config import config
 
 router = APIRouter()

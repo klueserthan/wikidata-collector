@@ -14,15 +14,11 @@ import requests
 
 from .cache import TTLCache
 from .config import WikidataCollectorConfig
-from .constants import TYPE_MAPPINGS
 from .exceptions import (
     EntityNotFoundError,
     InvalidQIDError,
     QueryExecutionError,
 )
-from .models import PublicFigure, PublicInstitution, SubInstitution
-from .normalizers.figure_normalizer import normalize_public_figure
-from .normalizers.institution_normalizer import normalize_public_institution
 from .proxy import ProxyManager
 from .query_builders.figures_query_builder import build_public_figures_query
 from .query_builders.institutions_query_builder import build_public_institutions_query
