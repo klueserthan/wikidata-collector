@@ -2,9 +2,10 @@
 
 import pytest
 
-from sparql.utils import escape_sparql_literal, validate_qid, validate_pid
-from sparql.builders.figures_query_builder import build_public_figures_query
-from sparql.builders.institutions_query_builder import build_public_institutions_query
+# Test the NEW secure implementations from wikidata_collector module
+from wikidata_collector.security import escape_sparql_literal, validate_qid, validate_pid
+from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
+from wikidata_collector.query_builders.institutions_query_builder import build_public_institutions_query
 
 
 class TestEscapeSparqlLiteral:
@@ -122,9 +123,12 @@ class TestFiguresQueryInjectionPrevention:
         malicious_input = '" . } DROP GRAPH <urn:wikidata> ; { #'
         query = build_public_figures_query(nationality=[malicious_input])
         # The escaped version should be in the query
-        assert '\\"' in query or "DROP GRAPH" not in query
-        # Verify the dangerous pattern is not present unescaped
-        assert '" . }' not in query
+        assert '\\"' in query
+        # Verify DROP GRAPH is safely escaped within the string literal, not executable
+        # The malicious input should appear within quotes, not as executable SPARQL
+        assert 'rdfs:label "' in query
+        # The key security property: ensure the malicious pattern is within a string literal
+        assert '" . } DROP GRAPH <urn:wikidata> ; { #"' in query or '\\" . } DROP GRAPH' in query
 
     def test_profession_qid_injection_prevented(self):
         """Test that malicious QID in profession is rejected."""

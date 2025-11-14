@@ -1,24 +1,37 @@
+"""SPARQL query builder for public institutions."""
+
 from typing import List, Optional
 
-from api.config import config
-from api.utils import TYPE_MAPPINGS
+from ..security import validate_qid, escape_sparql_literal
+from ..constants import TYPE_MAPPINGS
 
 
 def build_public_institutions_query(
     country: Optional[str] = None,
     type: Optional[List[str]] = None,
     jurisdiction: Optional[str] = None,
-    lang: Optional[str] = None,
-    limit: Optional[int] = None,
+    lang: str = "en",
+    limit: int = 100,
     cursor: int = 0,
     after_qid: Optional[str] = None,
 ) -> str:
-    """Build SPARQL query for public institutions with optional filters."""
-
-    lang = lang or config.DEFAULT_LANG
-    query_limit = limit or config.DEFAULT_LIMIT
-    type_mappings = TYPE_MAPPINGS
-
+    """Build SPARQL query for public institutions with optional filters.
+    
+    Args:
+        country: Country filter (QID, ISO code, or label)
+        type: List of institution type filters (mapped keys, QIDs, or labels)
+        jurisdiction: Jurisdiction filter (QID or label)
+        lang: Language code for labels
+        limit: Maximum results to return
+        cursor: Offset for pagination
+        after_qid: QID for keyset pagination
+        
+    Returns:
+        SPARQL query string
+        
+    Raises:
+        ValueError: If QID validation fails
+    """
     query = f"""
     SELECT DISTINCT ?institution ?institutionLabel ?description ?type ?countryLabel ?jurisdictionLabel ?foundedDate ?dissolvedDate ?image ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle  WHERE {{
     ?institution wdt:P31 ?type.
@@ -27,13 +40,20 @@ def build_public_institutions_query(
     if type:
         type_conditions = []
         for value in type:
-            if value in type_mappings:
-                type_conditions.append(f"?institution wdt:P31 wd:{type_mappings[value]}.")
+            value = value.strip()
+            if value in TYPE_MAPPINGS:
+                # Use mapped QID
+                mapped_qid = TYPE_MAPPINGS[value]
+                type_conditions.append(f"?institution wdt:P31 wd:{mapped_qid}.")
             elif value.startswith("Q"):
-                type_conditions.append(f"?institution wdt:P31 wd:{value}.")
+                # Validate QID format
+                validated_qid = validate_qid(value)
+                type_conditions.append(f"?institution wdt:P31 wd:{validated_qid}.")
             else:
+                # Label filter - escape to prevent injection
+                escaped_label = escape_sparql_literal(value)
                 type_conditions.append(
-                    f'?institution wdt:P31 ?type. ?type rdfs:label "{value}"@{lang}.'
+                    f'?institution wdt:P31 ?type. ?type rdfs:label "{escaped_label}"@{lang}.'
                 )
         query += "  " + " ".join(type_conditions) + "\n"
 
@@ -41,27 +61,37 @@ def build_public_institutions_query(
     if country:
         country_value = country.strip()
         if country_value.startswith("Q"):
-            query += f"  ?institution wdt:P17 wd:{country_value}.\n"
+            # Validate QID format
+            validated_qid = validate_qid(country_value)
+            query += f"  ?institution wdt:P17 wd:{validated_qid}.\n"
             country_filter_applied = True
         elif len(country_value) == 3 and country_value.isalpha():
-            code = country_value.upper()
+            # ISO country code
+            code = escape_sparql_literal(country_value.upper())
             query += "  ?institution wdt:P17 ?country.\n"
             query += f'  ?country wdt:P298 "{code}".\n'
             country_filter_applied = True
         else:
+            # Label filter - escape to prevent injection
+            escaped_label = escape_sparql_literal(country_value)
             query += (
-                f'  ?institution wdt:P17 ?country. ?country rdfs:label "{country_value}"@{lang}.\n'
+                f'  ?institution wdt:P17 ?country. ?country rdfs:label "{escaped_label}"@{lang}.\n'
             )
             country_filter_applied = True
 
     jurisdiction_filter_applied = False
     if jurisdiction:
-        if jurisdiction.startswith("Q"):
-            query += f"  ?institution wdt:P1001 wd:{jurisdiction}.\n"
+        jurisdiction_value = jurisdiction.strip()
+        if jurisdiction_value.startswith("Q"):
+            # Validate QID format
+            validated_qid = validate_qid(jurisdiction_value)
+            query += f"  ?institution wdt:P1001 wd:{validated_qid}.\n"
             jurisdiction_filter_applied = True
         else:
+            # Label filter - escape to prevent injection
+            escaped_label = escape_sparql_literal(jurisdiction_value)
             query += (
-                f'  ?institution wdt:P1001 ?jurisdiction. ?jurisdiction rdfs:label "{jurisdiction}"@{lang}.\n'
+                f'  ?institution wdt:P1001 ?jurisdiction. ?jurisdiction rdfs:label "{escaped_label}"@{lang}.\n'
             )
             jurisdiction_filter_applied = True
 
@@ -90,8 +120,10 @@ def build_public_institutions_query(
     """
 
     if after_qid and after_qid.startswith("Q"):
+        # Validate and use keyset pagination
+        validated_qid = validate_qid(after_qid)
         try:
-            after_qnum = int(after_qid[1:])
+            after_qnum = int(validated_qid[1:])
             query += (
                 '\nBIND(xsd:integer(STRAFTER(STR(?institution), "Q")) AS ?qidNum)\n'
                 f"FILTER(?qidNum > {after_qnum})\n"
@@ -102,7 +134,7 @@ def build_public_institutions_query(
     query += "}"
 
     query += "\nORDER BY ?institution"
-    page_limit = max(1, int(query_limit) + 1)
+    page_limit = max(1, int(limit) + 1)
     query += f"\nLIMIT {page_limit}"
 
     if (not after_qid) and cursor > 0:

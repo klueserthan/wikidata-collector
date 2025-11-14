@@ -1,6 +1,8 @@
+"""SPARQL query builder for public figures."""
+
 from typing import List, Optional
 
-from api.config import config
+from ..security import validate_qid, escape_sparql_literal
 
 
 def build_public_figures_query(
@@ -8,16 +10,29 @@ def build_public_figures_query(
     birthday_to: Optional[str] = None,
     nationality: Optional[List[str]] = None,
     profession: Optional[List[str]] = None,
-    lang: Optional[str] = None,
-    limit: Optional[int] = None,
+    lang: str = "en",
+    limit: int = 100,
     cursor: int = 0,
     after_qid: Optional[str] = None,
 ) -> str:
-    """Build SPARQL query for public figures with optional filters."""
-
-    lang = lang or config.DEFAULT_LANG
-    query_limit = limit or config.DEFAULT_LIMIT
-
+    """Build SPARQL query for public figures with optional filters.
+    
+    Args:
+        birthday_from: Start date filter (ISO format)
+        birthday_to: End date filter (ISO format)
+        nationality: List of nationality filters (QIDs, ISO codes, or labels)
+        profession: List of profession filters (QIDs or labels)
+        lang: Language code for labels
+        limit: Maximum results to return
+        cursor: Offset for pagination
+        after_qid: QID for keyset pagination
+        
+    Returns:
+        SPARQL query string
+        
+    Raises:
+        ValueError: If QID validation fails
+    """
     query = f"""
     SELECT DISTINCT ?person ?personLabel ?description ?birthDate ?deathDate ?genderLabel ?countryLabel ?occupationLabel ?image ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle WHERE {{
     ?person wdt:P31 wd:Q5;
@@ -35,13 +50,18 @@ def build_public_figures_query(
         for nat in nationality:
             nat_value = nat.strip()
             if nat_value.startswith("Q"):
-                nationality_conditions.append(f"?person wdt:P27 wd:{nat_value}.")
+                # Validate QID format
+                validated_qid = validate_qid(nat_value)
+                nationality_conditions.append(f"?person wdt:P27 wd:{validated_qid}.")
             elif len(nat_value) == 3 and nat_value.isalpha():
-                code = nat_value.upper()
+                # ISO country code
+                code = escape_sparql_literal(nat_value.upper())
                 nationality_conditions.append(f'?person wdt:P27 ?country. ?country wdt:P298 "{code}".')
             else:
+                # Label filter - escape to prevent injection
+                escaped_label = escape_sparql_literal(nat_value)
                 nationality_conditions.append(
-                    f'?person wdt:P27 ?country. ?country rdfs:label "{nat_value}"@{lang}.'
+                    f'?person wdt:P27 ?country. ?country rdfs:label "{escaped_label}"@{lang}.'
                 )
         query += "  " + " ".join(nationality_conditions) + "\n"
         nationality_filter_applied = True
@@ -50,11 +70,16 @@ def build_public_figures_query(
     if profession:
         profession_conditions = []
         for prof in profession:
-            if prof.startswith("Q"):
-                profession_conditions.append(f"?person wdt:P106 wd:{prof}.")
+            prof_value = prof.strip()
+            if prof_value.startswith("Q"):
+                # Validate QID format
+                validated_qid = validate_qid(prof_value)
+                profession_conditions.append(f"?person wdt:P106 wd:{validated_qid}.")
             else:
+                # Label filter - escape to prevent injection
+                escaped_label = escape_sparql_literal(prof_value)
                 profession_conditions.append(
-                    f'?person wdt:P106 ?occupation. ?occupation rdfs:label "{prof}"@{lang}.'
+                    f'?person wdt:P106 ?occupation. ?occupation rdfs:label "{escaped_label}"@{lang}.'
                 )
         query += "  " + " ".join(profession_conditions) + "\n"
         profession_filter_applied = True
@@ -91,8 +116,10 @@ def build_public_figures_query(
     """
 
     if after_qid and after_qid.startswith("Q"):
+        # Validate and use keyset pagination
+        validated_qid = validate_qid(after_qid)
         try:
-            after_qnum = int(after_qid[1:])
+            after_qnum = int(validated_qid[1:])
             query += (
                 '\nBIND(xsd:integer(STRAFTER(STR(?person), "Q")) AS ?qidNum)\n'
                 f"FILTER(?qidNum > {after_qnum})\n"
@@ -103,7 +130,7 @@ def build_public_figures_query(
     query += "}"
 
     query += "\nORDER BY ?person"
-    page_limit = max(1, int(query_limit) + 1)
+    page_limit = max(1, int(limit) + 1)
     query += f"\nLIMIT {page_limit}"
 
     if (not after_qid) and cursor > 0:
