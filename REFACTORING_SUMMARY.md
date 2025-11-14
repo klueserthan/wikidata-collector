@@ -2,13 +2,13 @@
 
 ## Overview
 
-This refactoring creates a standalone `wikidata_retriever` module that is completely independent of FastAPI, allowing it to be used as a library or within the FastAPI API layer.
+This refactoring creates a standalone `wikidata_collector` module that is completely independent of FastAPI, allowing it to be used as a library or within the FastAPI API layer.
 
 ## What Was Accomplished
 
 ### ✅ Phase 1: Module Scaffolding
 
-Created `wikidata_retriever/` directory with:
+Created `wikidata_collector/` directory with:
 - `__init__.py` - Public API exports
 - `config.py` - Configuration without FastAPI dependencies
 - `exceptions.py` - Domain-specific exceptions
@@ -18,27 +18,27 @@ Created `wikidata_retriever/` directory with:
 ### ✅ Phase 2: Core Component Migration
 
 Migrated and adapted core components:
-- **Query Builders**: `sparql/builders/` → `wikidata_retriever/query_builders/`
+- **Query Builders**: `sparql/builders/` → `wikidata_collector/query_builders/`
   - Added QID validation (`validate_qid()`)
   - Added SPARQL literal escaping (`escape_sparql_literal()`)
   - Removed FastAPI/config dependencies
   - Use default parameters instead of global config
 
-- **Models**: `core/models.py` → `wikidata_retriever/models.py`
-- **Normalizers**: `core/normalizers/` → `wikidata_retriever/normalizers/`
-- **Cache**: `infrastructure/cache.py` → `wikidata_retriever/cache.py`
-- **Proxy Manager**: `infrastructure/proxy_service.py` → `wikidata_retriever/proxy.py`
+- **Models**: `core/models.py` → `wikidata_collector/models.py`
+- **Normalizers**: `core/normalizers/` → `wikidata_collector/normalizers/`
+- **Cache**: `infrastructure/cache.py` → `wikidata_collector/cache.py`
+- **Proxy Manager**: `infrastructure/proxy_service.py` → `wikidata_collector/proxy.py`
   - Removed FastAPI `Request` dependency
   - Now accepts proxy lists directly via `override_proxies` parameter
 
 ### ✅ Phase 3: WikidataClient (Partial)
 
-Created `wikidata_retriever/client.py` with:
+Created `wikidata_collector/client.py` with:
 - Core SPARQL query execution with caching and proxy support
 - `get_public_figures()` - Query public figures with filters
 - `get_public_institutions()` - Query institutions with filters  
 - `get_entity()` - Fetch single entity by QID with validation
-- Configuration via `WikidataRetrieverConfig` class
+- Configuration via `WikidataCollectorConfig` class
 
 Note: Full WikiService functionality migration is deferred. The client provides the essential query methods, and existing WikiService continues to handle entity expansion.
 
@@ -50,7 +50,7 @@ Updated `core/wiki_service.py` to use secure query builders:
 from sparql.builders.figures_query_builder import build_public_figures_query
 
 # After (secure)
-from wikidata_retriever.query_builders.figures_query_builder import build_public_figures_query
+from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
 ```
 
 This provides immediate security benefits without breaking changes.
@@ -107,10 +107,10 @@ build_public_figures_query(profession=['actor\nUNION { ?x ?y ?z }'])
 ### Standalone Usage
 
 ```python
-from wikidata_retriever import WikidataClient, WikidataRetrieverConfig
+from wikidata_collector import WikidataClient, WikidataCollectorConfig
 
 # Configure
-config = WikidataRetrieverConfig(
+config = WikidataCollectorConfig(
     contact_email="you@example.com",
     proxy_list=["http://proxy:8080"],
     cache_ttl_seconds=300
@@ -161,7 +161,7 @@ query = wiki_service.build_public_figures_query(
 ## Architecture
 
 ```text
-wikidata_retriever/          # Standalone module (no FastAPI)
+wikidata_collector/          # Standalone module (no FastAPI)
 ├── __init__.py              # Public API
 ├── client.py                # WikidataClient
 ├── config.py                # Module configuration
@@ -185,7 +185,7 @@ api/                         # FastAPI wrapper (uses module)
 └── dependencies.py          # Dependency injection
 
 core/
-└── wiki_service.py          # Uses wikidata_retriever query builders
+└── wiki_service.py          # Uses wikidata_collector query builders
 
 infrastructure/              # FastAPI-specific observability
 └── observability.py         # Logging, metrics, request IDs
@@ -193,7 +193,7 @@ infrastructure/              # FastAPI-specific observability
 
 ## Benefits
 
-1. **Modularity**: `wikidata_retriever` can be:
+1. **Modularity**: `wikidata_collector` can be:
    - Used standalone in scripts/notebooks
    - Installed as a package
    - Imported by other projects
@@ -228,7 +228,7 @@ infrastructure/              # FastAPI-specific observability
 
 ### Long Term
 - Deprecate WikiService in favor of WikidataClient
-- Package wikidata_retriever as standalone PyPI package
+- Package wikidata_collector as standalone PyPI package
 - Add async support to WikidataClient
 - Add CLI tool for standalone usage
 
@@ -244,7 +244,7 @@ pytest tests/unit/ -v
 pytest tests/unit/test_sparql_security.py -v
 
 # Check coverage
-pytest --cov=wikidata_retriever --cov=core --cov=api tests/unit/
+pytest --cov=wikidata_collector --cov=core --cov=api tests/unit/
 ```
 
 ## Migration Guide
@@ -258,11 +258,11 @@ ws = WikiService()
 query = ws.build_public_figures_query(nationality=["Q30"])
 
 # New approach (module-direct)  
-from wikidata_retriever.query_builders.figures_query_builder import build_public_figures_query
+from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
 query = build_public_figures_query(nationality=["Q30"], lang="en", limit=100)
 
 # Or use the client (recommended)
-from wikidata_retriever import WikidataClient
+from wikidata_collector import WikidataClient
 client = WikidataClient()
 results, proxy = client.get_public_figures(nationality=["Q30"], limit=100)
 ```

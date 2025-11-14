@@ -2,10 +2,10 @@
 
 import pytest
 
-# Test the NEW secure implementations from wikidata_retriever module
-from wikidata_retriever.security import escape_sparql_literal, validate_qid, validate_pid
-from wikidata_retriever.query_builders.figures_query_builder import build_public_figures_query
-from wikidata_retriever.query_builders.institutions_query_builder import build_public_institutions_query
+# Test the NEW secure implementations from wikidata_collector module
+from wikidata_collector.security import escape_sparql_literal, validate_qid, validate_pid
+from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
+from wikidata_collector.query_builders.institutions_query_builder import build_public_institutions_query
 
 
 class TestEscapeSparqlLiteral:

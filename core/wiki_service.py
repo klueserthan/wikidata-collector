@@ -21,11 +21,11 @@ from infrastructure.observability import (
     sparql_latency_ctx,
 )
 from infrastructure.proxy_service import ProxyManager
-# Use secure query builders from wikidata_retriever module
-from wikidata_retriever.query_builders.figures_query_builder import (
+# Use secure query builders from wikidata_collector module
+from wikidata_collector.query_builders.figures_query_builder import (
     build_public_figures_query as build_figures_query,
 )
-from wikidata_retriever.query_builders.institutions_query_builder import (
+from wikidata_collector.query_builders.institutions_query_builder import (
     build_public_institutions_query as build_institutions_query,
 )
 

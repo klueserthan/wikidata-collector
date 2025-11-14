@@ -1,5 +1,5 @@
 """
-Wikidata Retriever - Standalone module for fetching Wikidata entities.
+Wikidata Collector - Standalone module for fetching Wikidata entities.
 
 This module provides a pure Python interface for querying Wikidata via SPARQL,
 with no FastAPI dependencies. It can be used standalone or as part of the API wrapper.
@@ -8,7 +8,7 @@ with no FastAPI dependencies. It can be used standalone or as part of the API wr
 from .client import WikidataClient
 from .models import PublicFigure, PublicInstitution, SubInstitution
 from .exceptions import (
-    WikidataRetrieverError,
+    WikidataCollectorError,
     InvalidQIDError,
     EntityNotFoundError,
     QueryExecutionError,
@@ -20,7 +20,7 @@ __all__ = [
     "PublicFigure",
     "PublicInstitution",
     "SubInstitution",
-    "WikidataRetrieverError",
+    "WikidataCollectorError",
     "InvalidQIDError",
     "EntityNotFoundError",
     "QueryExecutionError",

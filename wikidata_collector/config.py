@@ -1,10 +1,10 @@
-"""Configuration for the Wikidata Retriever module (no FastAPI dependencies)."""
+"""Configuration for the Wikidata Collector module (no FastAPI dependencies)."""
 
 import os
 from typing import List, Optional
 
 
-class WikidataRetrieverConfig:
+class WikidataCollectorConfig:
     """Module-only configuration for Wikidata retrieval."""
     
     def __init__(
@@ -58,6 +58,6 @@ class WikidataRetrieverConfig:
     def get_user_agent(self) -> str:
         """Get User-Agent string for Wikidata requests."""
         return (
-            f"WikidataRetrieverModule/1.0.0 "
+            f"WikidataCollectorModule/1.0.0 "
             f"(https://github.com/klueserthan/wikidata-collector, contact: {self.contact_email})"
         )

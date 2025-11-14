@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from .cache import TTLCache
-from .config import WikidataRetrieverConfig
+from .config import WikidataCollectorConfig
 from .constants import TYPE_MAPPINGS
 from .exceptions import (
     EntityNotFoundError,
@@ -34,13 +34,13 @@ logger = logging.getLogger(__name__)
 class WikidataClient:
     """Client for fetching Wikidata entities via SPARQL and Entity API."""
     
-    def __init__(self, config: Optional[WikidataRetrieverConfig] = None):
+    def __init__(self, config: Optional[WikidataCollectorConfig] = None):
         """Initialize the Wikidata client.
         
         Args:
             config: Configuration object. If None, uses defaults from environment.
         """
-        self.config = config or WikidataRetrieverConfig()
+        self.config = config or WikidataCollectorConfig()
         self.proxy_manager = ProxyManager(
             proxy_list=self.config.proxy_list,
             timeout_per_hop=self.config.sparql_timeout_seconds,
