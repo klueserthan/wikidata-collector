@@ -19,8 +19,7 @@ def main():
     
     # Or with custom configuration
     # config = WikidataCollectorConfig(
-    #     contact_email="your-email@example.com",
-    #     cache_ttl_seconds=300
+    #     contact_email="your-email@example.com"
     # )
     # client = WikidataClient(config)
     

@@ -13,8 +13,6 @@ class WikidataCollectorConfig:
         wikidata_sparql_url: Optional[str] = None,
         wikidata_entity_api_url: Optional[str] = None,
         proxy_list: Optional[List[str]] = None,
-        cache_ttl_seconds: int = 300,
-        cache_max_size: int = 10000,
         sparql_timeout_seconds: int = 60,
         max_retries: int = 3,
         proxy_cooldown_seconds: int = 300,
@@ -26,8 +24,6 @@ class WikidataCollectorConfig:
             wikidata_sparql_url: SPARQL endpoint URL
             wikidata_entity_api_url: Entity API URL template
             proxy_list: List of proxy URLs
-            cache_ttl_seconds: TTL for cached queries
-            cache_max_size: Maximum cache size
             sparql_timeout_seconds: Timeout for SPARQL requests
             max_retries: Maximum retry attempts
             proxy_cooldown_seconds: Cooldown period for failed proxies
@@ -49,8 +45,6 @@ class WikidataCollectorConfig:
         else:
             self.proxy_list = proxy_list
         
-        self.cache_ttl_seconds = int(os.getenv("CACHE_TTL_SECONDS", cache_ttl_seconds))
-        self.cache_max_size = int(os.getenv("CACHE_MAX_SIZE", cache_max_size))
         self.sparql_timeout_seconds = int(os.getenv("SPARQL_TIMEOUT_SECONDS", sparql_timeout_seconds))
         self.max_retries = max_retries
         self.proxy_cooldown_seconds = int(os.getenv("PROXY_COOLDOWN_SECONDS", proxy_cooldown_seconds))

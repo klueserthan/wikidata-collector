@@ -4,7 +4,6 @@ WikidataClient - Pure Python client for Wikidata SPARQL queries.
 This client has no FastAPI dependencies and can be used standalone.
 """
 
-import hashlib
 import logging
 import time
 from datetime import datetime, timezone
@@ -12,7 +11,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-from .cache import TTLCache
 from .config import WikidataCollectorConfig
 from .exceptions import (
     EntityNotFoundError,
@@ -43,21 +41,7 @@ class WikidataClient:
             cooldown_period=self.config.proxy_cooldown_seconds
         )
         
-        # Initialize caches
-        self.sparql_cache = TTLCache(
-            ttl_seconds=self.config.cache_ttl_seconds,
-            max_size=self.config.cache_max_size
-        )
-        self.entity_expansion_cache = TTLCache(
-            ttl_seconds=self.config.cache_ttl_seconds,
-            max_size=self.config.cache_max_size
-        )
-        
         logger.info(f"Initialized WikidataClient with {len(self.config.proxy_list)} proxies")
-    
-    def _hash_query(self, query: str) -> str:
-        """Generate MD5 hash of query for caching."""
-        return hashlib.md5(query.encode('utf-8')).hexdigest()
     
     def _get_current_timestamp(self) -> str:
         """Get current timestamp in ISO format."""
@@ -68,29 +52,18 @@ class WikidataClient:
         query: str,
         override_proxies: Optional[List[str]] = None
     ) -> Tuple[Dict[str, Any], str]:
-        """Execute SPARQL query against Wikidata with proxy support and caching.
+        """Execute SPARQL query against Wikidata with proxy support.
         
         Args:
             query: SPARQL query string
             override_proxies: Optional list of proxy URLs to use instead of configured ones
             
         Returns:
-            Tuple of (result_dict, used_proxy) where used_proxy is "cached", "direct", or proxy URL
+            Tuple of (result_dict, used_proxy) where used_proxy is "direct" or proxy URL
             
         Raises:
             QueryExecutionError: If query execution fails after retries
         """
-        query_hash = self._hash_query(query)
-        
-        # Check cache first
-        cached_result = self.sparql_cache.get(query)
-        if cached_result:
-            logger.info(f"SPARQL query cache hit: {query_hash[:8]}")
-            return cached_result, "cached"
-        
-        logger.info(f"SPARQL query cache miss: {query_hash[:8]}")
-        
-        # Cache miss - execute query
         sparql_start_time = time.time()
         
         headers = {
@@ -142,11 +115,8 @@ class WikidataClient:
                 
                 result = response.json()
                 
-                # Store in cache
-                self.sparql_cache.set(query, result)
-                
                 logger.info(
-                    f"SPARQL query executed successfully: {query_hash[:8]} "
+                    f"SPARQL query executed successfully "
                     f"(latency: {sparql_latency_ms:.2f}ms, proxy: {used_proxy})"
                 )
                 
