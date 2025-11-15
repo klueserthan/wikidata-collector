@@ -54,3 +54,6 @@ Thumbs.db
 *.tmp
 *.log
 metrics.json
+
+.copilot-tracking/
+*.pdf
