@@ -1,6 +1,5 @@
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
-
-from fastapi import Request
 
 from ..models import AccountEntry, Coordinates, PublicInstitution, WebsiteEntry
 
@@ -8,14 +7,11 @@ from ..models import AccountEntry, Coordinates, PublicInstitution, WebsiteEntry
 def normalize_public_institution(
     item: Dict[str, Any],
     expanded_data: Optional[Dict[str, Any]],
-    lang: str,
-    request: Optional[Request],
-    wiki_service,
 ) -> PublicInstitution:
     """Normalize Wikidata result to the public institution schema."""
 
     qid = item["institution"]["value"].split("/")[-1]
-    current_time = wiki_service.get_current_timestamp()
+    current_time = datetime.now(timezone.utc).isoformat()
 
     if expanded_data is None:
         expanded_data = {

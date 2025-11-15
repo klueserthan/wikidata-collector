@@ -35,12 +35,22 @@ env/
 .env.local
 .env.*.local
 
-*.pdf
-*.PDF
-metrics.json
-
-.venv/
-.env
+# Testing
 .pytest_cache/
-__pycache__/
-*.md
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
+metrics.json

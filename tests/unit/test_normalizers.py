@@ -3,14 +3,15 @@ Unit tests for normalizers (normalize_public_figure and normalize_public_institu
 """
 import pytest
 
-from core.models import PublicFigure, PublicInstitution
-from core.wiki_service import WikiService
+from wikidata_collector.models import PublicFigure, PublicInstitution
+from wikidata_collector.normalizers.figure_normalizer import normalize_public_figure
+from wikidata_collector.normalizers.institution_normalizer import normalize_public_institution
 
 
 class TestNormalizePublicFigure:
     """Test normalize_public_figure method."""
     
-    def test_basic_normalization(self, wiki_service, sample_expanded_data):
+    def test_basic_normalization(self, sample_expanded_data):
         """Test basic normalization with minimal data."""
         item = {
             "person": {"value": "http://www.wikidata.org/entity/Q42"},
@@ -19,7 +20,7 @@ class TestNormalizePublicFigure:
             "birthDate": {"value": "1952-03-11T00:00:00Z"},
         }
         
-        result = wiki_service.normalize_public_figure(item, sample_expanded_data)
+        result = normalize_public_figure(item, sample_expanded_data)
         
         assert isinstance(result, PublicFigure)
         assert result.id == "Q42"
@@ -28,7 +29,7 @@ class TestNormalizePublicFigure:
         assert result.entity_kind == "public_figure"
         assert result.birthday == "1952-03-11T00:00:00Z"
     
-    def test_with_expanded_data(self, wiki_service, sample_expanded_data):
+    def test_with_expanded_data(self, sample_expanded_data):
         """Test normalization with expanded data."""
         item = {
             "person": {"value": "http://www.wikidata.org/entity/Q42"},
@@ -36,7 +37,7 @@ class TestNormalizePublicFigure:
             "description": {"value": "English writer"},
         }
         
-        result = wiki_service.normalize_public_figure(item, sample_expanded_data)
+        result = normalize_public_figure(item, sample_expanded_data)
         
         assert result.nationalities == ["United Kingdom"]
         assert result.professions == ["writer", "humorist"]
@@ -45,7 +46,7 @@ class TestNormalizePublicFigure:
         assert result.aliases == ["Douglas Noël Adams"]
         assert result.gender == "male"
     
-    def test_social_media_from_sparql(self, wiki_service):
+    def test_social_media_from_sparql(self):
         """Test social media handles from SPARQL result."""
         item = {
             "person": {"value": "http://www.wikidata.org/entity/Q42"},
@@ -71,14 +72,14 @@ class TestNormalizePublicFigure:
             "identifiers": []
         }
         
-        result = wiki_service.normalize_public_figure(item, expanded_data)
+        result = normalize_public_figure(item, expanded_data)
         
         handles = {(acc.platform, acc.handle) for acc in result.accounts}
         assert ("twitter", "@testuser") in handles
         assert ("instagram", "@testuser_inst") in handles
         assert ("youtube", "testchannel") in handles
     
-    def test_without_expanded_data(self, wiki_service):
+    def test_without_expanded_data(self):
         """Test normalization without expanded data (fallback)."""
         item = {
             "person": {"value": "http://www.wikidata.org/entity/Q42"},
@@ -88,13 +89,13 @@ class TestNormalizePublicFigure:
             "genderLabel": {"value": "Male"},
         }
         
-        result = wiki_service.normalize_public_figure(item, None)
+        result = normalize_public_figure(item, None)
         
         assert result.nationalities == ["United States"]
         assert result.professions == ["Actor"]
         assert result.gender == "male"
     
-    def test_empty_expanded_data(self, wiki_service):
+    def test_empty_expanded_data(self):
         """Test with empty expanded data."""
         item = {
             "person": {"value": "http://www.wikidata.org/entity/Q42"},
@@ -117,7 +118,7 @@ class TestNormalizePublicFigure:
             "identifiers": []
         }
         
-        result = wiki_service.normalize_public_figure(item, expanded_data)
+        result = normalize_public_figure(item, expanded_data)
         
         assert isinstance(result, PublicFigure)
         assert result.nationalities == []
@@ -128,7 +129,7 @@ class TestNormalizePublicFigure:
 class TestNormalizePublicInstitution:
     """Test normalize_public_institution method."""
     
-    def test_basic_normalization(self, wiki_service):
+    def test_basic_normalization(self):
         """Test basic institution normalization."""
         item = {
             "institution": {"value": "http://www.wikidata.org/entity/Q123"},
@@ -157,7 +158,7 @@ class TestNormalizePublicInstitution:
             "accounts": []
         }
         
-        result = wiki_service.normalize_public_institution(item, expanded_data)
+        result = normalize_public_institution(item, expanded_data)
         
         assert isinstance(result, PublicInstitution)
         assert result.id == "Q123"
@@ -166,7 +167,7 @@ class TestNormalizePublicInstitution:
         assert result.entity_kind == "public_institution"
         assert result.types == ["Organization"]
     
-    def test_with_complete_expanded_data(self, wiki_service):
+    def test_with_complete_expanded_data(self):
         """Test with complete expanded data."""
         item = {
             "institution": {"value": "http://www.wikidata.org/entity/Q123"},
@@ -198,7 +199,7 @@ class TestNormalizePublicInstitution:
             "accounts": []
         }
         
-        result = wiki_service.normalize_public_institution(item, expanded_data)
+        result = normalize_public_institution(item, expanded_data)
         
         assert result.types == ["Government Agency"]
         assert result.country == ["USA"]
@@ -208,7 +209,7 @@ class TestNormalizePublicInstitution:
         assert result.headquarters_coords[0].lat == 38.9072
         assert len(result.website) == 1
     
-    def test_social_media_from_sparql(self, wiki_service):
+    def test_social_media_from_sparql(self):
         """Test social media from SPARQL result."""
         item = {
             "institution": {"value": "http://www.wikidata.org/entity/Q123"},
@@ -236,12 +237,12 @@ class TestNormalizePublicInstitution:
             "accounts": []
         }
         
-        result = wiki_service.normalize_public_institution(item, expanded_data, request=None)
+        result = normalize_public_institution(item, expanded_data)
         
         handles = {(acc.platform, acc.handle) for acc in result.accounts}
         assert ("twitter", "@testorg") in handles
 
-    def test_youtube_social_media(self, wiki_service):
+    def test_youtube_social_media(self):
         """Ensure YouTube handles populate the accounts list."""
         item = {
             "institution": {"value": "http://www.wikidata.org/entity/Q999"},
@@ -269,12 +270,12 @@ class TestNormalizePublicInstitution:
             "accounts": []
         }
 
-        result = wiki_service.normalize_public_institution(item, expanded_data, request=None)
+        result = normalize_public_institution(item, expanded_data)
 
         handles = {(acc.platform, acc.handle) for acc in result.accounts}
         assert ("youtube", "videoorgchannel") in handles
     
-    def test_without_expanded_data(self, wiki_service):
+    def test_without_expanded_data(self):
         """Test normalization without expanded data."""
         item = {
             "institution": {"value": "http://www.wikidata.org/entity/Q123"},
@@ -282,7 +283,7 @@ class TestNormalizePublicInstitution:
             "jurisdictionLabel": {"value": "State"},
         }
         
-        result = wiki_service.normalize_public_institution(item, None, request=None)
+        result = normalize_public_institution(item, None)
         
         assert isinstance(result, PublicInstitution)
         assert result.jurisdiction == ["State"]
