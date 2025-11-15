@@ -4,7 +4,6 @@ import threading
 from typing import Dict, Any, Optional, Tuple
 from collections import OrderedDict
 
-from api.config import config
 
 class TTLCache:
     """Thread-safe in-memory cache with TTL (Time-To-Live) support."""
@@ -85,16 +84,4 @@ class TTLCache:
             ]
             for key in expired_keys:
                 del self._cache[key]
-
-
-# Global cache instances
-sparql_cache = TTLCache(
-    ttl_seconds=config.CACHE_TTL_SECONDS,
-    max_size=config.CACHE_MAX_SIZE
-)
-entity_expansion_cache = TTLCache(
-    ttl_seconds=config.CACHE_TTL_SECONDS,
-    max_size=config.CACHE_MAX_SIZE
-)
-
 

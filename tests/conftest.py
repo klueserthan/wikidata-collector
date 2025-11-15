@@ -2,40 +2,15 @@
 Pytest configuration and shared fixtures.
 """
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
-from fastapi import Request
-
-from core.wiki_service import WikiService
-from infrastructure.cache import entity_expansion_cache, sparql_cache
-
-# Clear caches before each test
-@pytest.fixture(autouse=True)
-def clear_caches():
-    """Clear all caches before each test."""
-    from api.dependencies import get_wiki_service
-    
-    sparql_cache.clear()
-    entity_expansion_cache.clear()
-    get_wiki_service.cache_clear()  # Clear the dependency singleton cache
-    yield
-    sparql_cache.clear()
-    entity_expansion_cache.clear()
-    get_wiki_service.cache_clear()  # Clear after test as well
+from wikidata_collector import WikidataClient
 
 
 @pytest.fixture
-def wiki_service():
-    """Create a WikiService instance for testing."""
-    return WikiService()
-
-
-@pytest.fixture
-def mock_request():
-    """Create a mock FastAPI Request object."""
-    request = Mock(spec=Request)
-    request.headers = {}
-    return request
+def wikidata_client():
+    """Create a WikidataClient instance for testing."""
+    return WikidataClient()
 
 
 @pytest.fixture

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from ..models import AccountEntry, Identifier, PublicFigure, WebsiteEntry
@@ -6,12 +7,11 @@ from ..models import AccountEntry, Identifier, PublicFigure, WebsiteEntry
 def normalize_public_figure(
     item: Dict[str, Any],
     expanded_data: Optional[Dict[str, Any]],
-    wiki_service,
 ) -> PublicFigure:
     """Normalize Wikidata result to the public figure schema."""
 
     qid = item["person"]["value"].split("/")[-1]
-    current_time = wiki_service.get_current_timestamp()
+    current_time = datetime.now(timezone.utc).isoformat()
 
     if expanded_data is None:
         expanded_data = {
