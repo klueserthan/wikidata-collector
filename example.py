@@ -7,7 +7,6 @@ and institutions from Wikidata.
 """
 
 from wikidata_collector import WikidataClient
-from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.normalizers.figure_normalizer import normalize_public_figure
 
 

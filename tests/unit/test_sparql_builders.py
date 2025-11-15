@@ -1,7 +1,6 @@
 """
 Unit tests for SPARQL query builders.
 """
-import pytest
 
 from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
 from wikidata_collector.query_builders.institutions_query_builder import build_public_institutions_query

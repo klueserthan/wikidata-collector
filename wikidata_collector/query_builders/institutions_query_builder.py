@@ -32,8 +32,8 @@ def build_public_institutions_query(
     Raises:
         ValueError: If QID validation fails
     """
-    query = f"""
-    SELECT DISTINCT ?institution ?institutionLabel ?description ?type ?countryLabel ?jurisdictionLabel ?foundedDate ?dissolvedDate ?image ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle  WHERE {{
+    query = """
+    SELECT DISTINCT ?institution ?institutionLabel ?description ?type ?countryLabel ?jurisdictionLabel ?foundedDate ?dissolvedDate ?image ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle  WHERE {
     ?institution wdt:P31 ?type.
     """
 

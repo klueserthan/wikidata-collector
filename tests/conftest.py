@@ -2,7 +2,6 @@
 Pytest configuration and shared fixtures.
 """
 import pytest
-from unittest.mock import Mock
 
 from wikidata_collector import WikidataClient
 

@@ -1,7 +1,6 @@
 """
 Unit tests for normalizers (normalize_public_figure and normalize_public_institution).
 """
-import pytest
 
 from wikidata_collector.models import PublicFigure, PublicInstitution
 from wikidata_collector.normalizers.figure_normalizer import normalize_public_figure

@@ -2,9 +2,7 @@
 Unit tests for wikidata_collector/proxy.py
 Focus on proxy URL validation and SSRF prevention
 """
-import pytest
-from unittest.mock import Mock
-from wikidata_collector.proxy import ProxyManager, _is_internal_host
+from wikidata_collector.proxy import _is_internal_host
 
 
 class TestIsInternalHost:
