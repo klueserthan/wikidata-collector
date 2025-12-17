@@ -23,14 +23,7 @@ setup(
         "Programming Language :: Python :: 3.13",
     ],
     python_requires=">=3.13",
-    install_requires=[
-        "pydantic>=2.12.3",
-        "pytest>=8.0.0",
-        "pytest-cov>=4.1.0",
-        "pytest-mock>=3.12.0",
-        "python-dotenv>=1.1.1",
-        "requests>=2.32.5",
-    ],
+    install_requires=requirements,
     extras_require={
         "dev": [
             "pytest>=8.0.0",
