@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, 'feature/*', '[0-9]*-*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.13']
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install -e '.[dev]'
+    
+    - name: Run type checker (pyright)
+      run: |
+        pyright wikidata_collector tests
+    
+    - name: Run linter (ruff)
+      run: |
+        ruff check wikidata_collector tests
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/unit -v --cov=wikidata_collector --cov-report=term --cov-report=xml
+    
+    - name: Run integration tests (non-live)
+      run: |
+        pytest tests/integration -v -m "not live"
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      if: matrix.python-version == '3.13'
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      continue-on-error: true
