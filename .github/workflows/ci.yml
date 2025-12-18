@@ -32,6 +32,10 @@ jobs:
       run: |
         uv run pyright wikidata_collector tests
 
+    - name: Check code formatting (ruff format)
+      run: |
+        uv run ruff format --check wikidata_collector tests
+
     - name: Run linter (ruff)
       run: |
         uv run ruff check wikidata_collector tests
