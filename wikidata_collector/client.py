@@ -642,7 +642,6 @@ class WikidataClient:
         
         try:
             # Use datetime.strptime for proper validation including leap years
-            from datetime import datetime
             datetime.strptime(date_str, "%Y-%m-%d")
             return True
         except ValueError:
