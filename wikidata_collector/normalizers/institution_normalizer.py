@@ -101,14 +101,13 @@ def normalize_public_institution(
 
     types = expanded_data.get("types", []) or []
     # If no types in expanded data, try to extract from item
-    if not types and item.get("type"):
-        type_binding = item.get("type")
-        if type_binding.get("value"):
-            type_qid = type_binding.get("value", "").split("/")[-1] if "/" in type_binding.get("value", "") else type_binding.get("value", "")
-            # Use the type label if available, otherwise use QID
-            type_label = item.get("typeLabel", {}).get("value") or type_qid
-            if type_label:
-                types = [type_label]
+    if not types and item.get("type") and item.get("type").get("value"):
+        type_value = item.get("type").get("value", "")
+        type_qid = type_value.split("/")[-1] if "/" in type_value else type_value
+        # Use the type label if available, otherwise use QID
+        type_label = item.get("typeLabel", {}).get("value") or type_qid
+        if type_label:
+            types = [type_label]
 
     founded_value = None
     founded_dates = expanded_data.get("founded", []) or []
