@@ -19,11 +19,11 @@
 
 **Purpose**: Ensure local and CI environments are ready for Python ≥ 3.13, Pydantic v2, pytest, and type checking for this feature.
 
-- [ ] T001 Verify Python ≥ 3.13 and dependencies via pyproject in pyproject.toml
-- [ ] T002 [P] Configure pytest for iterator-focused tests in tests/README.md and pytest.ini
-- [ ] T003 [P] Confirm Pydantic v2 usage and upgrade path in wikidata_collector/models.py
-- [ ] T004 [P] Ensure type checker configuration (e.g., pyright) covers wikidata_collector and tests in pyproject.toml
-- [ ] T005 Configure or update CI workflows (e.g., GitHub Actions) to run the type checker and relevant pytest suites on each push and pull request
+- [X] T001 Verify Python ≥ 3.13 and dependencies via pyproject in pyproject.toml
+- [X] T002 [P] Configure pytest for iterator-focused tests in tests/README.md and pytest.ini
+- [X] T003 [P] Confirm Pydantic v2 usage and upgrade path in wikidata_collector/models.py
+- [X] T004 [P] Ensure type checker configuration (e.g., pyright) covers wikidata_collector and tests in pyproject.toml
+- [X] T005 Configure or update CI workflows (e.g., GitHub Actions) to run the type checker and relevant pytest suites on each push and pull request
 
 ---
 
