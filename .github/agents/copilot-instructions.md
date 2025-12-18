@@ -2,6 +2,28 @@
 
 > **Note**: These instructions document the **target architecture** for the `001-wikidata-etl-package` refactoring. Code examples show the planned iterator-based APIs, not the current legacy implementation. See `specs/001-wikidata-etl-package/` for full details and `tasks.md` for implementation status.
 
+## ⚠️ CRITICAL: Always Consult the Specs Folder
+
+**Before making any code changes, ALWAYS refer to `specs/001-wikidata-etl-package/` for authoritative requirements:**
+
+- **`spec.md`** - Feature specification with user stories, acceptance scenarios, functional requirements, and success criteria
+- **`plan.md`** - Implementation plan with technical context, architecture decisions, and project structure
+- **`research.md`** - Design decisions with rationales and alternatives considered
+- **`data-model.md`** - Detailed Pydantic model specifications with all fields and types
+- **`contracts/python-api.md`** - Exact API signatures, parameter types, and return values
+- **`quickstart.md`** - Usage examples showing how the library should be used
+- **`tasks.md`** - Task breakdown by user story with implementation checklist
+- **`checklists/requirements.md`** - Requirements verification checklist
+
+**When working on any feature:**
+1. Read relevant user stories in `spec.md` to understand the "why"
+2. Check `tasks.md` to see implementation status and task dependencies
+3. Review `data-model.md` and `contracts/python-api.md` for exact specifications
+4. Consult `research.md` for design decisions and rationales
+5. Use `quickstart.md` examples as reference for expected behavior
+
+**Never assume or invent requirements** - all specifications are documented in the specs folder.
+
 ## Project Overview
 
 **wikidata-collector** is a pure Python ETL library for streaming public figures and public institutions from Wikidata via SPARQL queries. It provides iterator-based APIs with robust proxy support, structured logging, and security features—designed specifically for batch ETL pipelines with no web framework dependencies.
@@ -310,15 +332,19 @@ Every security-related function MUST have tests for:
 ## Common Tasks and Patterns
 
 ### Adding Iterator-Based APIs (NEW - Target Architecture)
-1. Define iterator method in `wikidata_collector/client.py`
-2. Accept human-readable filter labels (not QIDs)
-3. Use query builders to translate labels and construct SPARQL
-4. Implement internal pagination with fixed page size (default: 15)
-5. Yield normalized Pydantic models one-by-one
-6. Add structured logging for query events
-7. Write tests that verify filtering, pagination, and model structure
+**BEFORE implementing, read**: `specs/001-wikidata-etl-package/contracts/python-api.md` for exact signatures
 
-Example (target API):
+1. Review user story in `spec.md` to understand requirements
+2. Check `tasks.md` for dependencies and implementation order
+3. Define iterator method in `wikidata_collector/client.py` per `contracts/python-api.md`
+4. Accept human-readable filter labels (not QIDs) as specified in contracts
+5. Use query builders to translate labels and construct SPARQL
+6. Implement internal pagination with fixed page size (default: 15 per `research.md`)
+7. Yield normalized Pydantic models one-by-one (see `data-model.md`)
+8. Add structured logging for query events (schema in `spec.md`)
+9. Write tests that verify filtering, pagination, and model structure
+
+Example (target API from `contracts/python-api.md`):
 ```python
 def iterate_public_figures(
     self,
@@ -336,21 +362,27 @@ def iterate_public_figures(
 ```
 
 ### Adding a New Query Builder
-1. Create or extend file in `wikidata_collector/query_builders/`
-2. Translate human-readable labels to QIDs (use constants.py mappings)
-3. Implement builder function with security validations
-4. Support stable ordering by entity ID for pagination
-5. Add comprehensive tests in `tests/unit/test_sparql_builders.py`
-6. Document query parameters and SPARQL output format
+**BEFORE implementing, read**: `specs/001-wikidata-etl-package/spec.md` for filter requirements
+
+1. Review functional requirements (FR-002, FR-005, etc.) in `spec.md`
+2. Create or extend file in `wikidata_collector/query_builders/`
+3. Translate human-readable labels to QIDs (use constants.py mappings per `research.md`)
+4. Implement builder function with security validations
+5. Support stable ordering by entity ID for pagination (per `research.md` decision #3)
+6. Add comprehensive tests in `tests/unit/test_sparql_builders.py`
+7. Document query parameters and SPARQL output format
 
 ### Adding a New Data Model
-1. Define Pydantic v2 model in `wikidata_collector/models.py`
-2. Use modern type hints: `list[str]` not `List[str]`
-3. Include `entity_kind` discriminator field
-4. Use `Field()` for metadata and validation
-5. Export from `__init__.py` if public API
-6. Add normalizer in `normalizers/` for SPARQL result transformation
-7. Document in `specs/001-wikidata-etl-package/data-model.md`
+**BEFORE implementing, read**: `specs/001-wikidata-etl-package/data-model.md` for complete field specifications
+
+1. Review entity definition in `data-model.md` (e.g., PublicFigure, PublicInstitution)
+2. Define Pydantic v2 model in `wikidata_collector/models.py` with ALL required fields
+3. Use modern type hints: `list[str]` not `List[str]`
+4. Include `entity_kind` discriminator field (per `data-model.md`)
+5. Use `Field()` for metadata and validation as shown in examples
+6. Export from `__init__.py` if public API
+7. Add normalizer in `normalizers/` for SPARQL result transformation
+8. Verify against supporting types (WebsiteEntry, AccountEntry, Identifier) in `data-model.md`
 
 ### Adding Client Methods (DEPRECATED - Use Iterators Instead)
 **Note**: New APIs should use iterator pattern, not tuple returns.
@@ -450,15 +482,19 @@ client = WikidataClient(config)
 ## Best Practices for Contributors
 
 1. **Follow TDD Workflow**: Write tests first, verify they fail, then implement (per constitution)
-2. **Iterator-Based APIs**: New APIs should stream entities, not return bulk lists
-3. **Human-Readable Filters**: Accept ISO codes/labels, not QIDs, in public APIs
-4. **Make Minimal Changes**: Only modify what's necessary for the task
-5. **Security First**: Validate all inputs, especially those used in SPARQL queries
-6. **Type Safety**: Use modern type hints (`list[str]`) and Pydantic v2 models
-7. **Structured Logging**: Emit logs with consistent schema for ETL observability
-8. **Test Coverage**: Add tests for new functionality with clear scenarios
-9. **No Breaking Changes**: Maintain backward compatibility or document migrations
-10. **Consult Specs**: Refer to `specs/001-wikidata-etl-package/` for planned architecture
+2. **Consult Specs First**: Always check `specs/001-wikidata-etl-package/` before implementing features
+   - User stories define requirements → `spec.md`
+   - Tasks show implementation order → `tasks.md`
+   - Data models are specified → `data-model.md`
+   - API contracts are exact → `contracts/python-api.md`
+3. **Iterator-Based APIs**: New APIs should stream entities, not return bulk lists
+4. **Human-Readable Filters**: Accept ISO codes/labels, not QIDs, in public APIs
+5. **Make Minimal Changes**: Only modify what's necessary for the task
+6. **Security First**: Validate all inputs, especially those used in SPARQL queries
+7. **Type Safety**: Use modern type hints (`list[str]`) and Pydantic v2 models
+8. **Structured Logging**: Emit logs with consistent schema for ETL observability
+9. **Test Coverage**: Add tests for new functionality with clear scenarios
+10. **No Breaking Changes**: Maintain backward compatibility or document migrations
 
 ## Architecture Principles (from Constitution)
 
@@ -468,6 +504,21 @@ client = WikidataClient(config)
 - **Stable ordering**: Results ordered by entity ID for reproducibility
 - **Observable**: Structured logs enable monitoring and debugging
 - **Pythonic**: Simple, explicit APIs with minimal abstractions
+
+## Reference Documents (ALWAYS Consult These)
+
+When implementing features for the `001-wikidata-etl-package` refactoring:
+
+| Document | Purpose | When to Use |
+|----------|---------|-------------|
+| `specs/001-wikidata-etl-package/spec.md` | User stories, requirements, acceptance criteria | Understanding what to build and why |
+| `specs/001-wikidata-etl-package/tasks.md` | Task breakdown by phase and user story | Planning implementation order |
+| `specs/001-wikidata-etl-package/data-model.md` | Complete model specifications | Defining or updating Pydantic models |
+| `specs/001-wikidata-etl-package/contracts/python-api.md` | API signatures and types | Implementing public APIs |
+| `specs/001-wikidata-etl-package/research.md` | Design decisions and rationales | Understanding why choices were made |
+| `specs/001-wikidata-etl-package/plan.md` | Technical context and architecture | Understanding overall structure |
+| `specs/001-wikidata-etl-package/quickstart.md` | Usage examples | Testing user-facing behavior |
+| `specs/001-wikidata-etl-package/checklists/requirements.md` | Requirements verification | Validating implementation completeness |
 
 ## Debugging Tips
 
@@ -534,7 +585,7 @@ except ValueError as e:
 
 ## Structured Logging Schema (NEW)
 
-When debugging ETL issues, look for these log fields:
+When debugging ETL issues, look for these log fields (schema defined in `spec.md`):
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -559,6 +610,44 @@ Example log entry:
   "status": "success"
 }
 ```
+
+## Spec-Driven Development Workflow
+
+**Always follow this workflow when implementing features:**
+
+1. **Start with User Stories**: Read `specs/001-wikidata-etl-package/spec.md`
+   - Understand the user's need and acceptance scenarios
+   - Review functional requirements (FR-XXX) related to your task
+
+2. **Check Implementation Tasks**: Review `specs/001-wikidata-etl-package/tasks.md`
+   - Find your task in the phase/user story breakdown
+   - Verify prerequisites are complete
+   - Note any parallel tasks you can coordinate with
+
+3. **Review Design Decisions**: Consult `specs/001-wikidata-etl-package/research.md`
+   - Understand why certain approaches were chosen
+   - Learn about alternatives that were rejected and why
+
+4. **Define Data Structures**: Reference `specs/001-wikidata-etl-package/data-model.md`
+   - Use exact field names and types specified
+   - Include all required fields for entity types
+   - Verify supporting type definitions (WebsiteEntry, AccountEntry, etc.)
+
+5. **Implement API Contracts**: Follow `specs/001-wikidata-etl-package/contracts/python-api.md`
+   - Use exact method signatures provided
+   - Match parameter names and types precisely
+   - Return specified iterator types
+
+6. **Test with Examples**: Use `specs/001-wikidata-etl-package/quickstart.md`
+   - Verify your implementation matches usage examples
+   - Ensure filter parameters work as documented
+   - Confirm iterator behavior matches expectations
+
+7. **Verify Requirements**: Check `specs/001-wikidata-etl-package/checklists/requirements.md`
+   - Validate your implementation meets all applicable requirements
+   - Ensure edge cases are handled per spec
+
+**Remember**: The specs are the source of truth. Don't assume or invent—always reference the documentation.
 
 ---
 
