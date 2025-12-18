@@ -683,4 +683,115 @@ This branch implements a major architectural shift from the legacy codebase:
 
 <!-- MANUAL ADDITIONS START -->
 <!-- Add any repository-specific instructions below this line -->
+
+## Branch Strategy & Workflow
+
+### Current Development Context
+- **Base branch**: `001-wikidata-etl-package` (major refactoring branch)
+- **Target merge**: This branch will eventually merge to `main`
+- **Agent workflow**: Create feature branches from `001-wikidata-etl-package`, NOT from `main`
+
+### Creating Branches
+When working on tasks:
+1. Create your feature branch from `001-wikidata-etl-package`
+2. Use naming convention: `{task-id}-{brief-description}` (e.g., `T001-iterator-api`)
+3. Submit PRs against `001-wikidata-etl-package`, NOT against `main`
+
+### Example Commands
+```bash
+# Checkout the base branch
+git checkout 001-wikidata-etl-package
+
+# Create your feature branch
+git checkout -b T001-iterator-api
+
+# When ready to create PR, ensure base is set correctly
+gh pr create --base 001-wikidata-etl-package
+```
+
+## CI Compliance (REQUIRED)
+
+### Pre-Commit Checks
+Before committing any code, run these checks locally:
+
+```bash
+# 1. Type checking
+uv run pyright wikidata_collector tests
+
+# 2. Code formatting (auto-fix)
+uv run ruff format wikidata_collector tests
+
+# 3. Linting (auto-fix where possible)
+uv run ruff check --fix wikidata_collector tests
+
+# 4. Unit tests
+uv run pytest tests/unit -v
+
+# 5. Integration tests (non-live)
+uv run pytest tests/integration -v -m "not live"
+```
+
+### Quick Check Script
+Run all checks with one command:
+
+```bash
+.github/scripts/pre-commit-checks.sh
+```
+
+Or use this one-liner:
+
+```bash
+uv run pyright wikidata_collector tests && \
+uv run ruff format wikidata_collector tests && \
+uv run ruff check --fix wikidata_collector tests && \
+uv run pytest tests/unit -v && \
+uv run pytest tests/integration -v -m "not live"
+```
+
+### Required Standards
+All code MUST:
+
+1. ✅ **Pass type checking** - No type errors from `pyright`
+2. ✅ **Be formatted** - Auto-formatted with `ruff format`
+3. ✅ **Pass linting** - No violations from `ruff check`
+4. ✅ **Have tests** - New features require unit tests
+5. ✅ **Pass existing tests** - All tests must pass
+
+### Constitution Compliance
+
+Per [`.specify/memory/constitution.md`](.specify/memory/constitution.md):
+
+> Before merging, every change MUST:
+> - Pass the configured static type checks (for example, mypy or an equivalent tool) and the relevant pytest test suites (unit and, where applicable, integration) in CI.
+
+This means:
+
+1. **Local checks first** - Run all checks before pushing
+2. **CI must pass** - Green CI is required before review
+3. **No exceptions** - Constitution is non-negotiable
+4. **TDD workflow** - Write tests first, then implement
+
+### PR Workflow
+
+Before requesting code review:
+
+1. ✅ Run `.github/scripts/pre-commit-checks.sh` locally
+2. ✅ Verify all checks pass
+3. ✅ Push changes to your feature branch
+4. ✅ Create PR against `001-wikidata-etl-package` (verify base branch!)
+5. ✅ Verify CI passes in the PR
+6. ✅ Fill out PR template completely
+7. ✅ Only then request review
+
+**CI must be green before merge** - this is enforced by the constitution.
+
+### Test-Driven Development
+
+Follow TDD as per constitution:
+
+1. Write failing tests first
+2. Implement minimal code to pass tests
+3. Refactor while keeping tests green
+4. Ensure coverage for new code (>80% target, 100% for critical paths)
+
 <!-- MANUAL ADDITIONS END -->
