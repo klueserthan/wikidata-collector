@@ -412,9 +412,13 @@ class WikidataClient:
                 break
             
             # Get QID from last result for next page
-            last_qid = results[-1].get("person", {}).get("value", "").split("/")[-1]
-            if last_qid:
-                after_qid = last_qid
+            person_uri = results[-1].get("person", {}).get("value", "")
+            if person_uri and "/" in person_uri:
+                last_qid = person_uri.rsplit("/", 1)[-1]
+                if last_qid:
+                    after_qid = last_qid
+                else:
+                    break
             else:
                 break
     
@@ -485,8 +489,12 @@ class WikidataClient:
                 break
             
             # Get QID from last result for next page
-            last_qid = results[-1].get("institution", {}).get("value", "").split("/")[-1]
-            if last_qid:
-                after_qid = last_qid
+            institution_uri = results[-1].get("institution", {}).get("value", "")
+            if institution_uri and "/" in institution_uri:
+                last_qid = institution_uri.rsplit("/", 1)[-1]
+                if last_qid:
+                    after_qid = last_qid
+                else:
+                    break
             else:
                 break

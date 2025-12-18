@@ -102,9 +102,9 @@ def normalize_public_institution(
     # If no types in expanded data, try to extract from item
     if not types and item.get("type"):
         type_binding = item.get("type")
-        if type_binding:
-            type_qid = type_binding.get("value", "").split("/")[-1]
-            # Use the type QID or label if available
+        if type_binding and type_binding.get("value"):
+            type_qid = type_binding.get("value", "").split("/")[-1] if "/" in type_binding.get("value", "") else type_binding.get("value", "")
+            # Use the type label if available, otherwise use QID
             type_label = item.get("typeLabel", {}).get("value") or type_qid
             if type_label:
                 types = [type_label]
