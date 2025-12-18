@@ -58,25 +58,22 @@ def normalize_public_institution(
 
     name_value = item.get("institutionLabel", {}).get("value")
 
+    # Fallback to aliases or QID if name is missing or is just a QID
     needs_label_fallback = not name_value or (
         isinstance(name_value, str)
         and name_value.startswith("Q")
         and name_value[1:].isdigit()
     )
     if needs_label_fallback:
-        labels_map = wiki_service.get_labels_from_qids(
-            [qid], lang=lang, request=request
-        )
-        fallback_label = labels_map.get(qid)
-        if fallback_label:
-            name_value = fallback_label
-        elif not name_value:
+        # Try to use aliases from expanded data
+        if not name_value:
             aliases = (
                 expanded_data.get("aliases", [])
                 if isinstance(expanded_data, dict)
                 else []
             )
             name_value = next((alias for alias in aliases if alias), None)
+        # Final fallback to QID
         if not name_value:
             name_value = qid
 
@@ -102,17 +99,15 @@ def normalize_public_institution(
             )
 
     types = expanded_data.get("types", []) or []
+    # If no types in expanded data, try to extract from item
     if not types and item.get("type"):
         type_binding = item.get("type")
         if type_binding:
             type_qid = type_binding.get("value", "").split("/")[-1]
-            if type_qid.startswith("Q"):
-                labels_map = wiki_service.get_labels_from_qids(
-                    [type_qid], lang=lang, request=request
-                )
-                type_label = labels_map.get(type_qid, type_qid)
-                if type_label:
-                    types = [type_label]
+            # Use the type QID or label if available
+            type_label = item.get("typeLabel", {}).get("value") or type_qid
+            if type_label:
+                types = [type_label]
 
     founded_value = None
     founded_dates = expanded_data.get("founded", []) or []
