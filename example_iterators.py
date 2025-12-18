@@ -29,8 +29,8 @@ def example_iterate_figures():
     count = 0
     for figure in client.iter_public_figures(
         birthday_from="1990-01-01",
-        nationality=["Q30"],  # United States
-        profession=["Q33999"],  # Actor
+        nationality=["US"],  # United States
+        profession=["actor"],  # Actor
         page_size=15  # Uses DEFAULT_PAGE_SIZE internally
     ):
         count += 1
@@ -64,8 +64,8 @@ def example_iterate_institutions():
     
     count = 0
     for institution in client.iter_public_institutions(
-        country="Q30",  # United States
-        type=["Q327333"],  # Government agency
+        country="US",  # United States
+        type=["government_agency"],  # Government agency
         page_size=15
     ):
         count += 1
@@ -106,7 +106,7 @@ def example_structured_logging():
     # The iterator will log structured information about each page
     count = 0
     for figure in client.iter_public_figures(
-        nationality=["Q30"],
+        nationality=["US"],
         page_size=15
     ):
         count += 1
