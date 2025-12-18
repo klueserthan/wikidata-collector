@@ -10,7 +10,7 @@
 
 ## Technology Stack
 
-- **Python**: ≥ 3.13 (target version for new development; see `.python-version` and specs)
+- **Python**: ≥ 3.13 (target version per specs; current `.python-version` is 3.12 for compatibility during transition)
 - **Core Libraries**:
   - `pydantic` v2 - Type-safe data models and validation
   - `requests` - HTTP client for SPARQL queries
@@ -177,6 +177,7 @@ client.iterate_public_institutions(
 #### 4. Pydantic Models for Data (UNCHANGED)
 ```python
 # Use Pydantic v2 for all data models
+from typing import Literal
 from pydantic import BaseModel, Field
 
 class PublicFigure(BaseModel):
@@ -186,7 +187,7 @@ class PublicFigure(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     professions: list[str] = Field(default_factory=list)
     nationalities: list[str] = Field(default_factory=list)
-    accounts: list[AccountEntry] = Field(default_factory=list)
+    # Note: Supporting types like AccountEntry defined in data-model.md
     # ... more fields per specs/001-wikidata-etl-package/data-model.md
 ```
 
@@ -571,7 +572,7 @@ This branch implements a major architectural shift from the legacy codebase:
 ### What's Changing
 - **APIs**: From tuple returns `(data, proxy_used)` → Iterator-based streaming `Iterator[PublicFigure]`
 - **Filters**: From QIDs `["Q30"]` → Human-readable labels `["US", "DE"]`
-- **Target**: Python 3.12 → Python ≥ 3.13
+- **Target**: Python 3.12 (current) → Python ≥ 3.13 (planned per specs)
 - **Pagination**: From exposed cursors → Hidden internal pagination (fixed 15/page default)
 - **Logging**: From basic logs → Structured logging with schema
 - **Proxy**: From rotation list → Single endpoint with fail-closed default
