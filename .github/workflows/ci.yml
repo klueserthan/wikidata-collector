@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, 'feature/*', '[0-9]*-*' ]
+    branches: ['[0-9]*-*' ]
   pull_request:
     branches: [ main ]
 
