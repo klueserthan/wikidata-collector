@@ -26,7 +26,7 @@ class TestIteratePublicInstitutionsHappyPath:
                 "description": {"value": "A test government agency"},
                 "foundedDate": {"value": "1950-01-01T00:00:00Z"},
                 "countryLabel": {"value": "United States"},
-                "typeLabel": {"value": "government agency"}
+                "typeLabel": {"value": "government agency"},
             },
             {
                 "institution": {"value": "http://www.wikidata.org/entity/Q456"},
@@ -34,22 +34,19 @@ class TestIteratePublicInstitutionsHappyPath:
                 "description": {"value": "A test broadcasting organization"},
                 "foundedDate": {"value": "1970-06-15T00:00:00Z"},
                 "countryLabel": {"value": "United Kingdom"},
-                "typeLabel": {"value": "public broadcaster"}
-            }
+                "typeLabel": {"value": "public broadcaster"},
+            },
         ]
 
         client = WikidataClient()
         mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call the iterator API
-        results = list(client.iterate_public_institutions(
-            country="US",
-            types=["government_agency"]
-        ))
+        results = list(
+            client.iterate_public_institutions(country="US", types=["government_agency"])
+        )
 
         # Verify results
         assert len(results) == 2
@@ -73,16 +70,11 @@ class TestIteratePublicInstitutionsHappyPath:
 
         client = WikidataClient()
         mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Request only 10 results
-        results = list(client.iterate_public_institutions(
-            country="US",
-            max_results=10
-        ))
+        results = list(client.iterate_public_institutions(country="US", max_results=10))
 
         # Verify only 10 results returned
         assert len(results) == 10
@@ -101,23 +93,15 @@ class TestIteratePublicInstitutionsHappyPath:
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call with country filter
-        results = list(client.iterate_public_institutions(
-            country="Germany",
-            lang="en"
-        ))
+        results = list(client.iterate_public_institutions(country="Germany", lang="en"))
 
         # Verify the underlying iterator was called with correct parameters
         mock_iter.assert_called_once_with(
-            country="Germany",
-            type=None,
-            jurisdiction=None,
-            lang="en"
+            country="Germany", type=None, jurisdiction=None, lang="en"
         )
 
         assert len(results) == 1
@@ -134,21 +118,20 @@ class TestIteratePublicInstitutionsHappyPath:
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call with types filter
-        results = list(client.iterate_public_institutions(
-            types=["political_party", "government_agency"],
-            lang="en"
-        ))
+        results = list(
+            client.iterate_public_institutions(
+                types=["political_party", "government_agency"], lang="en"
+            )
+        )
 
         # Verify the underlying iterator was called with correct parameters
         mock_iter.assert_called_once()
         call_args = mock_iter.call_args
-        assert call_args.kwargs['type'] == ["political_party", "government_agency"]
+        assert call_args.kwargs["type"] == ["political_party", "government_agency"]
 
         assert len(results) == 1
 
@@ -164,23 +147,15 @@ class TestIteratePublicInstitutionsHappyPath:
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call with jurisdiction filter
-        results = list(client.iterate_public_institutions(
-            jurisdiction="California",
-            lang="en"
-        ))
+        results = list(client.iterate_public_institutions(jurisdiction="California", lang="en"))
 
         # Verify the underlying iterator was called with correct parameters
         mock_iter.assert_called_once_with(
-            country=None,
-            type=None,
-            jurisdiction="California",
-            lang="en"
+            country=None, type=None, jurisdiction="California", lang="en"
         )
 
         assert len(results) == 1
@@ -200,25 +175,19 @@ class TestIteratePublicInstitutionsHappyPath:
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call with combined filters
-        results = list(client.iterate_public_institutions(
-            country="US",
-            types=["government_agency"],
-            jurisdiction="Q30",
-            lang="en"
-        ))
+        results = list(
+            client.iterate_public_institutions(
+                country="US", types=["government_agency"], jurisdiction="Q30", lang="en"
+            )
+        )
 
         # Verify the underlying iterator was called with all filters
         mock_iter.assert_called_once_with(
-            country="US",
-            type=["government_agency"],
-            jurisdiction="Q30",
-            lang="en"
+            country="US", type=["government_agency"], jurisdiction="Q30", lang="en"
         )
 
         assert len(results) == 1
@@ -233,17 +202,14 @@ class TestIteratePublicInstitutionsEdgeCases:
     def test_iterate_empty_results(self, mocker):
         """Test iteration with no matching results."""
         client = WikidataClient()
-        mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter([])
-        )
+        mocker.patch.object(client, "iter_public_institutions", return_value=iter([]))
 
         # Call the iterator with filters that return no results
-        results = list(client.iterate_public_institutions(
-            country="NonexistentCountry",
-            types=["nonexistent_type"]
-        ))
+        results = list(
+            client.iterate_public_institutions(
+                country="NonexistentCountry", types=["nonexistent_type"]
+            )
+        )
 
         # Verify empty results
         assert len(results) == 0
@@ -277,9 +243,7 @@ class TestIteratePublicInstitutionsEdgeCases:
             yield  # pragma: no cover
 
         mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            side_effect=lambda **kwargs: error_generator()
+            client, "iter_public_institutions", side_effect=lambda **kwargs: error_generator()
         )
 
         with pytest.raises(QueryExecutionError) as exc_info:
@@ -297,9 +261,7 @@ class TestIteratePublicInstitutionsEdgeCases:
             yield  # pragma: no cover
 
         mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            side_effect=lambda **kwargs: error_generator()
+            client, "iter_public_institutions", side_effect=lambda **kwargs: error_generator()
         )
 
         with pytest.raises(InvalidFilterError) as exc_info:
@@ -319,9 +281,7 @@ class TestIteratePublicInstitutionsEdgeCases:
 
         client = WikidataClient()
         mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call without filters
@@ -340,14 +300,12 @@ class TestIteratePublicInstitutionsEdgeCases:
             {
                 "institution": {"value": "http://www.wikidata.org/entity/Q2"},
                 "institutionLabel": {"value": "Institution 2"},
-            }
+            },
         ]
 
         client = WikidataClient()
         mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         results = list(client.iterate_public_institutions(max_results=1))
@@ -367,9 +325,7 @@ class TestIteratePublicInstitutionsEdgeCases:
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call with ISO code
@@ -378,7 +334,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         # Verify the ISO code was passed
         mock_iter.assert_called_once()
         call_args = mock_iter.call_args
-        assert call_args.kwargs['country'] == "USA"
+        assert call_args.kwargs["country"] == "USA"
 
         assert len(results) == 1
 
@@ -394,9 +350,7 @@ class TestIteratePublicInstitutionsEdgeCases:
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call with QID
@@ -405,7 +359,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         # Verify the QID was passed
         mock_iter.assert_called_once()
         call_args = mock_iter.call_args
-        assert call_args.kwargs['country'] == "Q145"
+        assert call_args.kwargs["country"] == "Q145"
 
         assert len(results) == 1
 
@@ -421,20 +375,18 @@ class TestIteratePublicInstitutionsEdgeCases:
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call with mapped type keys
-        results = list(client.iterate_public_institutions(
-            types=["political_party", "municipality"]
-        ))
+        results = list(
+            client.iterate_public_institutions(types=["political_party", "municipality"])
+        )
 
         # Verify the types were passed
         mock_iter.assert_called_once()
         call_args = mock_iter.call_args
-        assert call_args.kwargs['type'] == ["political_party", "municipality"]
+        assert call_args.kwargs["type"] == ["political_party", "municipality"]
 
         assert len(results) == 1
 
@@ -449,9 +401,7 @@ class TestIteratePublicInstitutionsEdgeCases:
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client,
-            'iter_public_institutions',
-            return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
         )
 
         # Call with empty types list - should be treated as None
@@ -460,6 +410,6 @@ class TestIteratePublicInstitutionsEdgeCases:
         mock_iter.assert_called_once()
         call_args = mock_iter.call_args
         # Empty list should be passed as is (query builder handles it)
-        assert call_args.kwargs['type'] == []
+        assert call_args.kwargs["type"] == []
 
         assert len(results) == 1

@@ -6,14 +6,14 @@ with no FastAPI dependencies. It can be used standalone or as part of the API wr
 """
 
 from .client import WikidataClient
-from .models import PublicFigure, PublicInstitution, SubInstitution
 from .exceptions import (
-    WikidataCollectorError,
-    InvalidQIDError,
     EntityNotFoundError,
-    QueryExecutionError,
     InvalidFilterError,
+    InvalidQIDError,
+    QueryExecutionError,
+    WikidataCollectorError,
 )
+from .models import PublicFigure, PublicInstitution, SubInstitution
 
 __version__ = "1.0.0"
 __all__ = [

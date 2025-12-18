@@ -2,8 +2,8 @@
 
 from typing import List, Optional
 
-from ..security import validate_qid, escape_sparql_literal
 from ..constants import TYPE_MAPPINGS
+from ..security import escape_sparql_literal, validate_qid
 
 
 def build_public_institutions_query(

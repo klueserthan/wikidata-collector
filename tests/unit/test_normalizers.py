@@ -43,14 +43,27 @@ class TestPublicFigureModel:
             place_of_birth="Cambridge",
             place_of_death="Santa Barbara",
             residence=["London"],
-            website=[WebsiteEntry(url="https://example.com", source="wikidata", retrieved_at="2024-01-01T00:00:00Z")],
-            accounts=[AccountEntry(platform="twitter", handle="@test", source="wikidata", retrieved_at="2024-01-01T00:00:00Z")],
+            website=[
+                WebsiteEntry(
+                    url="https://example.com",
+                    source="wikidata",
+                    retrieved_at="2024-01-01T00:00:00Z",
+                )
+            ],
+            accounts=[
+                AccountEntry(
+                    platform="twitter",
+                    handle="@test",
+                    source="wikidata",
+                    retrieved_at="2024-01-01T00:00:00Z",
+                )
+            ],
             affiliations=["Affiliation 1"],
             notable_works=["The Hitchhiker's Guide to the Galaxy"],
             awards=["Award 1"],
             identifiers=[Identifier(scheme="VIAF", id="12345")],
             image=["https://example.com/image.jpg"],
-            updated_at="2024-01-01T00:00:00Z"
+            updated_at="2024-01-01T00:00:00Z",
         )
 
         assert figure.id == "Q42"
@@ -133,7 +146,7 @@ class TestNormalizePublicFigure:
             "affiliations": [],
             "notable_works": [],
             "awards": [],
-            "identifiers": []
+            "identifiers": [],
         }
 
         result = normalize_public_figure(item, expanded_data)
@@ -179,7 +192,7 @@ class TestNormalizePublicFigure:
             "affiliations": [],
             "notable_works": [],
             "awards": [],
-            "identifiers": []
+            "identifiers": [],
         }
 
         result = normalize_public_figure(item, expanded_data)
@@ -219,7 +232,7 @@ class TestNormalizePublicInstitution:
             "parent_institution": [],
             "sector": [],
             "affiliations": [],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
@@ -249,18 +262,20 @@ class TestNormalizePublicInstitution:
             "legal_form": ["Public Agency"],
             "headquarters": ["Washington, D.C."],
             "headquarters_coords": [{"lat": 38.9072, "lon": -77.0369}],
-            "website": [{
-                "url": "https://example.org",
-                "source": "wikidata",
-                "retrieved_at": "2024-01-15T10:00:00Z"
-            }],
+            "website": [
+                {
+                    "url": "https://example.org",
+                    "source": "wikidata",
+                    "retrieved_at": "2024-01-15T10:00:00Z",
+                }
+            ],
             "official_language": ["English"],
             "logo": ["https://example.org/logo.png"],
             "budget": ["1000000"],
             "parent_institution": ["Parent Org"],
             "sector": [],
             "affiliations": ["Affiliate 1"],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
@@ -298,7 +313,7 @@ class TestNormalizePublicInstitution:
             "parent_institution": [],
             "sector": [],
             "affiliations": [],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
@@ -331,7 +346,7 @@ class TestNormalizePublicInstitution:
             "parent_institution": [],
             "sector": [],
             "affiliations": [],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
@@ -388,7 +403,7 @@ class TestNormalizePublicInstitution:
             "parent_institution": [],
             "sector": [],
             "affiliations": [],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
@@ -421,7 +436,7 @@ class TestNormalizePublicInstitution:
             "parent_institution": [],
             "sector": [],
             "affiliations": [],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
@@ -457,7 +472,7 @@ class TestNormalizePublicInstitution:
             "parent_institution": [],
             "sector": [],
             "affiliations": [],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
@@ -488,7 +503,7 @@ class TestNormalizePublicInstitution:
             "headquarters": ["Location 1", "Location 2"],
             "headquarters_coords": [
                 {"lat": 40.7128, "lon": -74.0060},
-                {"lat": 51.5074, "lon": -0.1278}
+                {"lat": 51.5074, "lon": -0.1278},
             ],
             "website": [],
             "official_language": [],
@@ -497,7 +512,7 @@ class TestNormalizePublicInstitution:
             "parent_institution": [],
             "sector": [],
             "affiliations": [],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
@@ -525,9 +540,9 @@ class TestNormalizePublicInstitution:
             "headquarters": [],
             "headquarters_coords": [
                 {"lat": None, "lon": -74.0060},  # Invalid - missing lat
-                {"lat": 51.5074, "lon": None},   # Invalid - missing lon
-                None,                             # Invalid - None
-                "not a dict",                     # Invalid - not a dict
+                {"lat": 51.5074, "lon": None},  # Invalid - missing lon
+                None,  # Invalid - None
+                "not a dict",  # Invalid - not a dict
             ],
             "website": [],
             "official_language": [],
@@ -536,11 +551,10 @@ class TestNormalizePublicInstitution:
             "parent_institution": [],
             "sector": [],
             "affiliations": [],
-            "accounts": []
+            "accounts": [],
         }
 
         result = normalize_public_institution(item, expanded_data)
 
         # All invalid coords should be filtered out
         assert len(result.headquarters_coords) == 0
-
