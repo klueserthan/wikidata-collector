@@ -81,10 +81,9 @@ from wikidata_collector import WikidataClient
 
 client = WikidataClient()
 
-# Stream public institutions by founding date and country label/code
+# Stream public institutions by country and type
 for institution in client.iterate_public_institutions(
-    founded_from="1990-01-01",
-    country=["US"],  # United States (label/code, not QID)
+    country="US",  # Single country (QID, ISO code, or label)
     types=["public broadcaster"],  # Example institution type label
     max_results=50,
     lang="en",
@@ -94,6 +93,10 @@ for institution in client.iterate_public_institutions(
     print(f"  Country: {', '.join(institution.country)}")
     print(f"  Types: {', '.join(institution.types)}")
 ```
+
+**Note**: The current implementation supports `country` (single value), `types`, and `jurisdiction` filters. 
+Full support for `founded_from`, `founded_to`, multiple countries, and `headquarter` filters will be added 
+in future iterations when the underlying SPARQL query builder is enhanced.
 
 ## Error Handling
 

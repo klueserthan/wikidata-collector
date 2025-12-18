@@ -199,6 +199,46 @@ class TestIteratePublicFiguresEdgeCases:
         
         assert "Invalid birthday_to format" in str(exc_info.value)
     
+    def test_invalid_date_february_30(self):
+        """Test that invalid dates like February 30 raise InvalidFilterError."""
+        client = WikidataClient()
+        
+        with pytest.raises(InvalidFilterError) as exc_info:
+            list(client.iterate_public_figures(birthday_from="2000-02-30"))
+        
+        assert "Invalid birthday_from format" in str(exc_info.value)
+    
+    def test_invalid_date_april_31(self):
+        """Test that invalid dates like April 31 raise InvalidFilterError."""
+        client = WikidataClient()
+        
+        with pytest.raises(InvalidFilterError) as exc_info:
+            list(client.iterate_public_figures(birthday_to="2000-04-31"))
+        
+        assert "Invalid birthday_to format" in str(exc_info.value)
+    
+    def test_valid_leap_year_date(self, mocker):
+        """Test that February 29 in a leap year is accepted."""
+        client = WikidataClient()
+        
+        sample_sparql_results = [
+            {
+                "person": {"value": "http://www.wikidata.org/entity/Q1"},
+                "personLabel": {"value": "Leap Year Person"},
+                "birthDate": {"value": "2000-02-29T00:00:00Z"},
+            }
+        ]
+        
+        mocker.patch.object(
+            client,
+            'iter_public_figures',
+            return_value=iter(sample_sparql_results)
+        )
+        
+        # Should not raise an error
+        results = list(client.iterate_public_figures(birthday_from="2000-02-29"))
+        assert len(results) == 1
+    
     def test_invalid_max_results_zero(self):
         """Test that max_results=0 raises InvalidFilterError."""
         client = WikidataClient()
