@@ -6,7 +6,7 @@ from typing import List, Optional
 
 class WikidataCollectorConfig:
     """Module-only configuration for Wikidata retrieval."""
-    
+
     def __init__(
         self,
         contact_email: Optional[str] = None,
@@ -18,7 +18,7 @@ class WikidataCollectorConfig:
         proxy_cooldown_seconds: int = 300,
     ):
         """Initialize configuration.
-        
+
         Args:
             contact_email: Contact email for User-Agent header
             wikidata_sparql_url: SPARQL endpoint URL
@@ -30,25 +30,27 @@ class WikidataCollectorConfig:
         """
         self.contact_email = contact_email or os.getenv("CONTACT_EMAIL", "not-provided")
         self.wikidata_sparql_url = wikidata_sparql_url or os.getenv(
-            "WIKIDATA_SPARQL_URL",
-            "https://query.wikidata.org/sparql"
+            "WIKIDATA_SPARQL_URL", "https://query.wikidata.org/sparql"
         )
         self.wikidata_entity_api_url = wikidata_entity_api_url or os.getenv(
-            "WIKIDATA_ENTITY_API_URL",
-            "https://www.wikidata.org/wiki/Special:EntityData/{qid}.json"
+            "WIKIDATA_ENTITY_API_URL", "https://www.wikidata.org/wiki/Special:EntityData/{qid}.json"
         )
-        
+
         # Parse proxy list from environment if not provided
         if proxy_list is None:
             proxy_env = os.getenv("PROXY_LIST", "")
             self.proxy_list = [p.strip() for p in proxy_env.split(",") if p.strip()]
         else:
             self.proxy_list = proxy_list
-        
-        self.sparql_timeout_seconds = int(os.getenv("SPARQL_TIMEOUT_SECONDS", sparql_timeout_seconds))
+
+        self.sparql_timeout_seconds = int(
+            os.getenv("SPARQL_TIMEOUT_SECONDS", sparql_timeout_seconds)
+        )
         self.max_retries = max_retries
-        self.proxy_cooldown_seconds = int(os.getenv("PROXY_COOLDOWN_SECONDS", proxy_cooldown_seconds))
-        
+        self.proxy_cooldown_seconds = int(
+            os.getenv("PROXY_COOLDOWN_SECONDS", proxy_cooldown_seconds)
+        )
+
     def get_user_agent(self) -> str:
         """Get User-Agent string for Wikidata requests."""
         return (

@@ -87,4 +87,3 @@ class PaginatedResponse(BaseModel):
     data: List[Dict[str, Any]]
     next_cursor: Optional[str] = None
     has_more: bool = False
-

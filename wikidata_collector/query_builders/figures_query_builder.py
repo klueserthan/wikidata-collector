@@ -16,7 +16,7 @@ def build_public_figures_query(
     after_qid: Optional[str] = None,
 ) -> str:
     """Build SPARQL query for public figures with optional filters.
-    
+
     Args:
         birthday_from: Start date filter (ISO format)
         birthday_to: End date filter (ISO format)
@@ -26,10 +26,10 @@ def build_public_figures_query(
         limit: Maximum results to return
         cursor: Offset for pagination
         after_qid: QID for keyset pagination
-        
+
     Returns:
         SPARQL query string
-        
+
     Raises:
         ValueError: If QID validation fails
     """
@@ -56,7 +56,9 @@ def build_public_figures_query(
             elif len(nat_value) == 3 and nat_value.isalpha():
                 # ISO country code
                 code = escape_sparql_literal(nat_value.upper())
-                nationality_conditions.append(f'?person wdt:P27 ?country. ?country wdt:P298 "{code}".')
+                nationality_conditions.append(
+                    f'?person wdt:P27 ?country. ?country wdt:P298 "{code}".'
+                )
             else:
                 # Label filter - escape to prevent injection
                 escaped_label = escape_sparql_literal(nat_value)
@@ -137,4 +139,3 @@ def build_public_figures_query(
         query += f"\nOFFSET {cursor}"
 
     return query
-

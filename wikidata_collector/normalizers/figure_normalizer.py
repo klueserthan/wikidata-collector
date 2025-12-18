@@ -71,9 +71,7 @@ def normalize_public_figure(
     def add_account(platform: str, handle: Optional[str]):
         if not handle:
             return
-        if not any(
-            acc.platform == platform and acc.handle == handle for acc in accounts_list
-        ):
+        if not any(acc.platform == platform and acc.handle == handle for acc in accounts_list):
             accounts_list.append(
                 AccountEntry(
                     platform=platform,

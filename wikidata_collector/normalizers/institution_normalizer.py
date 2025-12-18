@@ -60,17 +60,11 @@ def normalize_public_institution(
 
     # Fallback to aliases or QID if name is missing or is just a QID
     needs_label_fallback = not name_value or (
-        isinstance(name_value, str)
-        and name_value.startswith("Q")
-        and name_value[1:].isdigit()
+        isinstance(name_value, str) and name_value.startswith("Q") and name_value[1:].isdigit()
     )
     if needs_label_fallback:
         # Try to use aliases from expanded data
-        aliases = (
-            expanded_data.get("aliases", [])
-            if isinstance(expanded_data, dict)
-            else []
-        )
+        aliases = expanded_data.get("aliases", []) if isinstance(expanded_data, dict) else []
         alias_name = next((alias for alias in aliases if alias), None)
         if alias_name:
             name_value = alias_name
@@ -95,9 +89,7 @@ def normalize_public_institution(
             and coords_dict.get("lat") is not None
             and coords_dict.get("lon") is not None
         ):
-            hq_coords_list.append(
-                Coordinates(lat=coords_dict["lat"], lon=coords_dict["lon"])
-            )
+            hq_coords_list.append(Coordinates(lat=coords_dict["lat"], lon=coords_dict["lon"]))
 
     types = expanded_data.get("types", []) or []
     # If no types in expanded data, try to extract from item
@@ -134,9 +126,7 @@ def normalize_public_institution(
     def add_account(platform: str, handle: Optional[str]):
         if not handle:
             return
-        if not any(
-            acc.platform == platform and acc.handle == handle for acc in accounts_list
-        ):
+        if not any(acc.platform == platform and acc.handle == handle for acc in accounts_list):
             accounts_list.append(
                 AccountEntry(
                     platform=platform,

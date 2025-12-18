@@ -16,7 +16,7 @@ def build_public_institutions_query(
     after_qid: Optional[str] = None,
 ) -> str:
     """Build SPARQL query for public institutions with optional filters.
-    
+
     Args:
         country: Country filter (QID, ISO code, or label)
         type: List of institution type filters (mapped keys, QIDs, or labels)
@@ -25,10 +25,10 @@ def build_public_institutions_query(
         limit: Maximum results to return
         cursor: Offset for pagination
         after_qid: QID for keyset pagination
-        
+
     Returns:
         SPARQL query string
-        
+
     Raises:
         ValueError: If QID validation fails
     """
@@ -90,9 +90,7 @@ def build_public_institutions_query(
         else:
             # Label filter - escape to prevent injection
             escaped_label = escape_sparql_literal(jurisdiction_value)
-            query += (
-                f'  ?institution wdt:P1001 ?jurisdiction. ?jurisdiction rdfs:label "{escaped_label}"@{lang}.\n'
-            )
+            query += f'  ?institution wdt:P1001 ?jurisdiction. ?jurisdiction rdfs:label "{escaped_label}"@{lang}.\n'
             jurisdiction_filter_applied = True
 
     if not country_filter_applied:
@@ -141,4 +139,3 @@ def build_public_institutions_query(
         query += f"\nOFFSET {cursor}"
 
     return query
-
