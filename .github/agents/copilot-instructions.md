@@ -1,5 +1,7 @@
 # Wikidata Collector - Copilot Instructions
 
+> **Note**: These instructions document the **target architecture** for the `001-wikidata-etl-package` refactoring. Code examples show the planned iterator-based APIs, not the current legacy implementation. See `specs/001-wikidata-etl-package/` for full details and `tasks.md` for implementation status.
+
 ## Project Overview
 
 **wikidata-collector** is a pure Python ETL library for streaming public figures and public institutions from Wikidata via SPARQL queries. It provides iterator-based APIs with robust proxy support, structured logging, and security features—designed specifically for batch ETL pipelines with no web framework dependencies.
@@ -307,7 +309,7 @@ Every security-related function MUST have tests for:
 
 ## Common Tasks and Patterns
 
-### Adding Iterator-Based APIs (NEW)
+### Adding Iterator-Based APIs (NEW - Target Architecture)
 1. Define iterator method in `wikidata_collector/client.py`
 2. Accept human-readable filter labels (not QIDs)
 3. Use query builders to translate labels and construct SPARQL
@@ -316,7 +318,7 @@ Every security-related function MUST have tests for:
 6. Add structured logging for query events
 7. Write tests that verify filtering, pagination, and model structure
 
-Example:
+Example (target API):
 ```python
 def iterate_public_figures(
     self,
@@ -365,13 +367,13 @@ Legacy tuple-based methods may remain for backward compatibility.
 Use specific exceptions from `wikidata_collector.exceptions`:
 - `WikidataCollectorError` - Base exception
 - `InvalidQIDError` - Invalid Wikidata entity ID format
-- `InvalidFilterError` - Invalid filter parameters (NEW)
+- `InvalidFilterError` - Invalid filter parameters (PLANNED for refactoring)
 - `EntityNotFoundError` - Entity does not exist
 - `QueryExecutionError` - SPARQL query failed
-- `ProxyConfigurationError` - Proxy misconfiguration (NEW)
-- `UpstreamUnavailableError` - Wikidata service temporarily unavailable (NEW)
+- `ProxyConfigurationError` - Proxy misconfiguration (PLANNED for refactoring)
+- `UpstreamUnavailableError` - Wikidata service temporarily unavailable (PLANNED for refactoring)
 
-### Exception Pattern
+### Exception Pattern (Target Design)
 ```python
 from wikidata_collector.exceptions import InvalidFilterError
 
@@ -418,11 +420,11 @@ logger.error(
 CONTACT_EMAIL="your-email@example.com"  # Required for User-Agent header
 ```
 
-### Optional Variables
+### Optional Variables (Target Configuration)
 ```bash
-PROXY_ENDPOINT="http://proxy:8080"           # Optional proxy endpoint
-ALLOW_PROXY_FALLBACK="false"                  # Fail-closed by default
-INTERNAL_PAGE_SIZE="15"                       # SPARQL page size (default: 15)
+PROXY_ENDPOINT="http://proxy:8080"           # Optional proxy endpoint (PLANNED - currently PROXY_LIST)
+ALLOW_PROXY_FALLBACK="false"                  # Fail-closed by default (PLANNED)
+INTERNAL_PAGE_SIZE="15"                       # SPARQL page size (default: 15, PLANNED)
 SPARQL_TIMEOUT_SECONDS="60"
 LOG_LEVEL="INFO"                              # For structured logging
 ```
@@ -434,13 +436,13 @@ from wikidata_collector import WikidataClient
 
 client = WikidataClient()  # Loads from environment
 
-# Or explicit configuration
+# Or explicit configuration (target design)
 from wikidata_collector.config import WikidataCollectorConfig
 config = WikidataCollectorConfig(
     contact_email="test@example.com",
-    proxy_endpoint="http://proxy:8080",
-    allow_proxy_fallback=False,  # NEW: Fail-closed default
-    internal_page_size=15,        # NEW: Fixed page size
+    proxy_endpoint="http://proxy:8080",      # PLANNED - currently proxy_list
+    allow_proxy_fallback=False,               # PLANNED: Fail-closed default
+    internal_page_size=15,                    # PLANNED: Fixed page size
 )
 client = WikidataClient(config)
 ```
@@ -525,9 +527,9 @@ try:
 except ValueError as e:
     print(f"Caught injection attempt: {e}")
 
-# Test label translation (if implemented)
-from wikidata_collector.constants import translate_country_label
-qid = translate_country_label("US")  # Should return "Q30"
+# Test label translation (PLANNED - to be implemented)
+# from wikidata_collector.constants import translate_country_label
+# qid = translate_country_label("US")  # Should return "Q30"
 ```
 
 ## Structured Logging Schema (NEW)
