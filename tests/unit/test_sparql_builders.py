@@ -197,3 +197,120 @@ class TestBuildPublicInstitutionsQuery:
         
         assert "BIND(xsd:integer(STRAFTER(STR(?institution), \"Q\")) AS ?qidNum)" in query
         assert "FILTER(?qidNum > 1000)" in query
+    
+    def test_country_filter_iso_code(self):
+        """Test country filter with ISO country code (3-letter)."""
+        query = build_public_institutions_query(
+            country="USA"  # 3-letter ISO code
+        )
+        
+        # Should translate to country code filter
+        assert '?institution wdt:P17 ?country' in query
+        assert '?country wdt:P298 "USA"' in query
+    
+    def test_type_filter_with_label(self):
+        """Test type filter with human-readable label."""
+        query = build_public_institutions_query(
+            type=["government agency"],
+            lang="en"
+        )
+        
+        assert '?institution wdt:P31 ?type' in query
+        assert '?type rdfs:label "government agency"@en' in query
+    
+    def test_multiple_type_filters(self):
+        """Test multiple type filters."""
+        query = build_public_institutions_query(
+            type=["political_party", "Q327333"]  # mapped key and QID
+        )
+        
+        assert "wdt:P31 wd:Q7278" in query  # political_party mapping
+        assert "wdt:P31 wd:Q327333" in query
+    
+    def test_jurisdiction_filter_with_label(self):
+        """Test jurisdiction filter with label."""
+        query = build_public_institutions_query(
+            jurisdiction="California",
+            lang="en"
+        )
+        
+        assert '?institution wdt:P1001 ?jurisdiction' in query
+        assert '?jurisdiction rdfs:label "California"@en' in query
+    
+    def test_combined_filters(self):
+        """Test combining multiple filters."""
+        query = build_public_institutions_query(
+            country="Q30",  # USA
+            type=["government_agency"],
+            jurisdiction="Q99",
+            lang="en"
+        )
+        
+        assert "?institution wdt:P17 wd:Q30" in query
+        assert "wdt:P31 wd:Q327333" in query  # government_agency mapping
+        assert "?institution wdt:P1001 wd:Q99" in query
+    
+    def test_offset_pagination(self):
+        """Test offset pagination (backward compatibility)."""
+        query = build_public_institutions_query(
+            cursor=25
+        )
+        
+        assert "OFFSET 25" in query
+    
+    def test_limit_parameter(self):
+        """Test limit parameter."""
+        query = build_public_institutions_query(limit=50)
+        
+        assert "LIMIT 51" in query  # limit + 1 for has_more detection
+    
+    def test_optional_fields_without_filters(self):
+        """Test that optional fields are included when no filters applied."""
+        query = build_public_institutions_query()
+        
+        assert "OPTIONAL { ?institution wdt:P17 ?country" in query
+        assert "OPTIONAL { ?institution wdt:P1001 ?jurisdiction" in query
+        assert "OPTIONAL { ?institution wdt:P571 ?foundedDate" in query
+        assert "OPTIONAL { ?institution wdt:P18 ?image" in query
+    
+    def test_social_media_fields_included(self):
+        """Test that social media fields are included in query."""
+        query = build_public_institutions_query()
+        
+        assert "OPTIONAL { ?institution wdt:P2003 ?instagramHandle" in query
+        assert "OPTIONAL { ?institution wdt:P2002 ?twitterHandle" in query
+        assert "OPTIONAL { ?institution wdt:P2013 ?facebookHandle" in query
+        assert "OPTIONAL { ?institution wdt:P2397 ?youtubeHandle" in query
+    
+    def test_service_label_block(self):
+        """Test that SERVICE wikibase:label block is included."""
+        query = build_public_institutions_query(lang="en")
+        
+        assert "SERVICE wikibase:label" in query
+        assert '?institution rdfs:label ?institutionLabel' in query
+        assert '?type rdfs:label ?typeLabel' in query
+        assert '?country rdfs:label ?countryLabel' in query
+        assert '?jurisdiction rdfs:label ?jurisdictionLabel' in query
+    
+    def test_mixed_type_filters_qid_mapping_label(self):
+        """Test type filter with mixed QID, mapping key, and label."""
+        query = build_public_institutions_query(
+            type=["Q7278", "government_agency", "broadcaster"],
+            lang="en"
+        )
+        
+        # QID
+        assert "wdt:P31 wd:Q7278" in query
+        # Mapping
+        assert "wdt:P31 wd:Q327333" in query
+        # Label
+        assert '?type rdfs:label "broadcaster"@en' in query
+    
+    def test_type_filter_with_whitespace(self):
+        """Test that type filter handles whitespace correctly."""
+        query = build_public_institutions_query(
+            type=["  political_party  "]  # with extra spaces
+        )
+        
+        # Should be stripped and matched to mapping
+        assert "wdt:P31 wd:Q7278" in query

@@ -345,4 +345,196 @@ class TestNormalizePublicInstitution:
         
         assert isinstance(result, PublicInstitution)
         assert result.jurisdiction == ["State"]
+    
+    def test_minimal_institution(self):
+        """Test creating PublicInstitution with minimal required fields."""
+        institution = PublicInstitution(id="Q456")
+        
+        assert institution.id == "Q456"
+        assert institution.entity_kind == "public_institution"
+        assert institution.name is None
+        assert institution.aliases == []
+        assert institution.country == []
+        assert institution.types == []
+    
+    def test_founded_date_from_item(self):
+        """Test that founded date from item is used when expanded_data doesn't have it."""
+        item = {
+            "institution": {"value": "http://www.wikidata.org/entity/Q789"},
+            "institutionLabel": {"value": "Historic Org"},
+            "foundedDate": {"value": "1850-06-15T00:00:00Z"},
+        }
+        
+        expanded_data = {
+            "aliases": [],
+            "types": [],
+            "country": [],
+            "country_code": [],
+            "jurisdiction": [],
+            "founded": [],  # Empty - should use item's foundedDate
+            "legal_form": [],
+            "headquarters": [],
+            "headquarters_coords": [],
+            "website": [],
+            "official_language": [],
+            "logo": [],
+            "budget": [],
+            "parent_institution": [],
+            "sector": [],
+            "affiliations": [],
+            "accounts": []
+        }
+        
+        result = normalize_public_institution(item, expanded_data)
+        
+        assert result.founded == "1850-06-15T00:00:00Z"
+    
+    def test_type_from_item_when_no_expanded_types(self):
+        """Test extracting type from SPARQL item when expanded_data has no types."""
+        item = {
+            "institution": {"value": "http://www.wikidata.org/entity/Q111"},
+            "institutionLabel": {"value": "Some Institution"},
+            "type": {"value": "http://www.wikidata.org/entity/Q7278"},
+            "typeLabel": {"value": "political party"},
+        }
+        
+        expanded_data = {
+            "aliases": [],
+            "types": [],  # Empty - should use item's type
+            "country": [],
+            "country_code": [],
+            "jurisdiction": [],
+            "founded": [],
+            "legal_form": [],
+            "headquarters": [],
+            "headquarters_coords": [],
+            "website": [],
+            "official_language": [],
+            "logo": [],
+            "budget": [],
+            "parent_institution": [],
+            "sector": [],
+            "affiliations": [],
+            "accounts": []
+        }
+        
+        result = normalize_public_institution(item, expanded_data)
+        
+        assert result.types == ["political party"]
+    
+    def test_all_social_media_platforms(self):
+        """Test all supported social media platforms."""
+        item = {
+            "institution": {"value": "http://www.wikidata.org/entity/Q555"},
+            "institutionLabel": {"value": "Social Media Org"},
+            "twitterHandle": {"value": "@orgtwitter"},
+            "instagramHandle": {"value": "@orginsta"},
+            "facebookHandle": {"value": "orgfacebook"},
+            "youtubeHandle": {"value": "orgyoutube"},
+            "tiktokHandle": {"value": "@orgtiktok"},
+        }
+        
+        expanded_data = {
+            "aliases": [],
+            "types": [],
+            "country": [],
+            "country_code": [],
+            "jurisdiction": [],
+            "founded": [],
+            "legal_form": [],
+            "headquarters": [],
+            "headquarters_coords": [],
+            "website": [],
+            "official_language": [],
+            "logo": [],
+            "budget": [],
+            "parent_institution": [],
+            "sector": [],
+            "affiliations": [],
+            "accounts": []
+        }
+        
+        result = normalize_public_institution(item, expanded_data)
+        
+        handles = {(acc.platform, acc.handle) for acc in result.accounts}
+        assert ("twitter", "@orgtwitter") in handles
+        assert ("instagram", "@orginsta") in handles
+        assert ("facebook", "orgfacebook") in handles
+        assert ("youtube", "orgyoutube") in handles
+        assert ("tiktok", "@orgtiktok") in handles
+        assert len(result.accounts) == 5
+    
+    def test_institution_with_multiple_headquarters_coords(self):
+        """Test institution with multiple headquarters coordinates."""
+        item = {
+            "institution": {"value": "http://www.wikidata.org/entity/Q222"},
+            "institutionLabel": {"value": "Multi-location Org"},
+        }
+        
+        expanded_data = {
+            "aliases": [],
+            "types": [],
+            "country": [],
+            "country_code": [],
+            "jurisdiction": [],
+            "founded": [],
+            "legal_form": [],
+            "headquarters": ["Location 1", "Location 2"],
+            "headquarters_coords": [
+                {"lat": 40.7128, "lon": -74.0060},
+                {"lat": 51.5074, "lon": -0.1278}
+            ],
+            "website": [],
+            "official_language": [],
+            "logo": [],
+            "budget": [],
+            "parent_institution": [],
+            "sector": [],
+            "affiliations": [],
+            "accounts": []
+        }
+        
+        result = normalize_public_institution(item, expanded_data)
+        
+        assert len(result.headquarters) == 2
+        assert len(result.headquarters_coords) == 2
+        assert result.headquarters_coords[0].lat == 40.7128
+        assert result.headquarters_coords[1].lon == -0.1278
+    
+    def test_invalid_coordinates_ignored(self):
+        """Test that invalid coordinates are ignored."""
+        item = {
+            "institution": {"value": "http://www.wikidata.org/entity/Q333"},
+            "institutionLabel": {"value": "Test Org"},
+        }
+        
+        expanded_data = {
+            "aliases": [],
+            "types": [],
+            "country": [],
+            "country_code": [],
+            "jurisdiction": [],
+            "founded": [],
+            "legal_form": [],
+            "headquarters": [],
+            "headquarters_coords": [
+                {"lat": None, "lon": -74.0060},  # Invalid - missing lat
+                {"lat": 51.5074, "lon": None},   # Invalid - missing lon
+                None,                             # Invalid - None
+                "not a dict",                     # Invalid - not a dict
+            ],
+            "website": [],
+            "official_language": [],
+            "logo": [],
+            "budget": [],
+            "parent_institution": [],
+            "sector": [],
+            "affiliations": [],
+            "accounts": []
+        }
+        
+        result = normalize_public_institution(item, expanded_data)
+        
+        # All invalid coords should be filtered out
+        assert len(result.headquarters_coords) == 0
 
