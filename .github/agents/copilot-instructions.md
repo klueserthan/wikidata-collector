@@ -652,7 +652,7 @@ Example log entry:
 ---
 
 **Last Updated**: 2025-12-18  
-**Maintainer**: GitHub Copilot  
+**Maintainer**: Jonathan Klüser  
 **Status**: Active Development - Refactoring to Iterator-Based APIs  
 **Specs**: See `specs/001-wikidata-etl-package/` for detailed architecture and requirements
 
@@ -793,5 +793,10 @@ Follow TDD as per constitution:
 2. Implement minimal code to pass tests
 3. Refactor while keeping tests green
 4. Ensure coverage for new code (>80% target, 100% for critical paths)
+
+
+### Task Management
+- Use `specs/001-wikidata-etl-package/tasks.md` to track progress
+- Update task status as you complete work
 
 <!-- MANUAL ADDITIONS END -->
