@@ -66,13 +66,14 @@ def normalize_public_institution(
     )
     if needs_label_fallback:
         # Try to use aliases from expanded data
-        if not name_value:
-            aliases = (
-                expanded_data.get("aliases", [])
-                if isinstance(expanded_data, dict)
-                else []
-            )
-            name_value = next((alias for alias in aliases if alias), None)
+        aliases = (
+            expanded_data.get("aliases", [])
+            if isinstance(expanded_data, dict)
+            else []
+        )
+        alias_name = next((alias for alias in aliases if alias), None)
+        if alias_name:
+            name_value = alias_name
         # Final fallback to QID
         if not name_value:
             name_value = qid
@@ -102,7 +103,7 @@ def normalize_public_institution(
     # If no types in expanded data, try to extract from item
     if not types and item.get("type"):
         type_binding = item.get("type")
-        if type_binding and type_binding.get("value"):
+        if type_binding.get("value"):
             type_qid = type_binding.get("value", "").split("/")[-1] if "/" in type_binding.get("value", "") else type_binding.get("value", "")
             # Use the type label if available, otherwise use QID
             type_label = item.get("typeLabel", {}).get("value") or type_qid
