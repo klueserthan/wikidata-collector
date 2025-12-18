@@ -4,7 +4,7 @@ Auto-generated from all feature plans. Last updated: 2025-12-17
 
 ## Active Technologies
 
-- Python 9>= 3.13 (library code and tests written to target Python 3.13+). + Pydantic v2 for data models; existing wikidata_collector SPARQL (001-wikidata-etl-package)
+- Python >= 3.13 (library code and tests written to target Python 3.13+). + Pydantic v2 for data models; existing wikidata_collector SPARQL (001-wikidata-etl-package)
 
 ## Project Structure
 
