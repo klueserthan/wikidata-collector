@@ -95,7 +95,7 @@ for institution in client.iterate_public_institutions(
 ```
 
 **Note**: The current implementation supports `country` (single value), `types`, and `jurisdiction` filters. 
-Full support for `founded_from`, `founded_to`, multiple countries, and `headquarter` filters will be added 
+Full support for `founded_from`, `founded_to`, multiple countries, and `headquarters` filters will be added 
 in future iterations when the underlying SPARQL query builder is enhanced.
 
 ## Error Handling

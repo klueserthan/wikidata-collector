@@ -6,7 +6,6 @@ They use pytest markers to allow selective execution.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 
 from wikidata_collector import WikidataClient, PublicFigure, InvalidFilterError
 from wikidata_collector.exceptions import QueryExecutionError

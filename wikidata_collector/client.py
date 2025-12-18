@@ -543,10 +543,10 @@ class WikidataClient:
             raise InvalidFilterError(f"Invalid birthday_to format: {birthday_to}. Expected ISO format (YYYY-MM-DD)")
         
         # Validate max_results if provided
-        if max_results is not None and max_results < 1:
-            raise InvalidFilterError(f"max_results must be >= 1, got {max_results}")
+        self._validate_max_results(max_results)
         
         count = 0
+        success = False
         
         # Log iteration start
         logger.info(
@@ -591,6 +591,9 @@ class WikidataClient:
                         }
                     )
                     break
+            
+            # Mark as successful if we completed iteration without exception
+            success = True
         
         except ValueError as e:
             # Query builder or validation errors
@@ -615,18 +618,31 @@ class WikidataClient:
             )
             raise
         finally:
-            # Log iteration completion
-            duration_ms = (time.time() - start_time) * 1000
-            logger.info(
-                f"Completed iterate_public_figures: yielded {count} results in {duration_ms:.2f}ms",
-                extra={
-                    "event": "iteration_completed",
-                    "entity_kind": "public_figure",
-                    "result_count": count,
-                    "duration_ms": duration_ms,
-                    "status": "success" if count > 0 or max_results == 0 else "completed",
-                }
-            )
+            # Log iteration completion only if successful
+            if success:
+                duration_ms = (time.time() - start_time) * 1000
+                logger.info(
+                    f"Completed iterate_public_figures: yielded {count} results in {duration_ms:.2f}ms",
+                    extra={
+                        "event": "iteration_completed",
+                        "entity_kind": "public_figure",
+                        "result_count": count,
+                        "duration_ms": duration_ms,
+                        "status": "success",
+                    }
+                )
+    
+    def _validate_max_results(self, max_results: Optional[int]) -> None:
+        """Validate max_results parameter.
+        
+        Args:
+            max_results: Maximum number of results to yield
+            
+        Raises:
+            InvalidFilterError: If max_results is less than 1
+        """
+        if max_results is not None and max_results < 1:
+            raise InvalidFilterError(f"max_results must be >= 1, got {max_results}")
     
     def _is_valid_date_format(self, date_str: str) -> bool:
         """Validate ISO date format (YYYY-MM-DD).
@@ -677,10 +693,10 @@ class WikidataClient:
             QueryExecutionError: If upstream query execution fails
         """
         # Validate max_results if provided
-        if max_results is not None and max_results < 1:
-            raise InvalidFilterError(f"max_results must be >= 1, got {max_results}")
+        self._validate_max_results(max_results)
         
         count = 0
+        success = False
         
         # Log iteration start
         logger.info(
@@ -725,6 +741,9 @@ class WikidataClient:
                         }
                     )
                     break
+            
+            # Mark as successful if we completed iteration without exception
+            success = True
         
         except ValueError as e:
             # Query builder or validation errors
@@ -749,15 +768,16 @@ class WikidataClient:
             )
             raise
         finally:
-            # Log iteration completion
-            duration_ms = (time.time() - start_time) * 1000
-            logger.info(
-                f"Completed iterate_public_institutions: yielded {count} results in {duration_ms:.2f}ms",
-                extra={
-                    "event": "iteration_completed",
-                    "entity_kind": "public_institution",
-                    "result_count": count,
-                    "duration_ms": duration_ms,
-                    "status": "success" if count > 0 or max_results == 0 else "completed",
-                }
-            )
+            # Log iteration completion only if successful
+            if success:
+                duration_ms = (time.time() - start_time) * 1000
+                logger.info(
+                    f"Completed iterate_public_institutions: yielded {count} results in {duration_ms:.2f}ms",
+                    extra={
+                        "event": "iteration_completed",
+                        "entity_kind": "public_institution",
+                        "result_count": count,
+                        "duration_ms": duration_ms,
+                        "status": "success",
+                    }
+                )
