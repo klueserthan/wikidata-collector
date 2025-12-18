@@ -31,14 +31,14 @@
 
 **Purpose**: Core library infrastructure that MUST be complete before any user story implementation begins.
 
-- [ ] T006 Introduce PublicFigure and PublicInstitution Pydantic v2 models per data-model in wikidata_collector/models.py
-- [ ] T007 [P] Add supporting types (WebsiteEntry, AccountEntry, Identifier) in wikidata_collector/models.py
-- [ ] T008 [P] Extend or create figure_normalizer for new models in wikidata_collector/normalizers/figure_normalizer.py
-- [ ] T009 [P] Extend or create institution_normalizer for new models in wikidata_collector/normalizers/institution_normalizer.py
-- [ ] T010 Define iterator-friendly abstractions and SPARQL page handling helpers (using a fixed internal page size default of 15) in wikidata_collector/client.py
-- [ ] T011 [P] Ensure security and SPARQL safety checks reused for new queries in wikidata_collector/security.py
-- [ ] T012 Add structured logging helper for queries and pages in wikidata_collector/client.py
-- [ ] T013 Wire proxy configuration options into client construction in wikidata_collector/client.py and wikidata_collector/config.py
+- [X] T006 Introduce PublicFigure and PublicInstitution Pydantic v2 models per data-model in wikidata_collector/models.py
+- [X] T007 [P] Add supporting types (WebsiteEntry, AccountEntry, Identifier) in wikidata_collector/models.py
+- [X] T008 [P] Extend or create figure_normalizer for new models in wikidata_collector/normalizers/figure_normalizer.py
+- [X] T009 [P] Extend or create institution_normalizer for new models in wikidata_collector/normalizers/institution_normalizer.py
+- [X] T010 Define iterator-friendly abstractions and SPARQL page handling helpers (using a fixed internal page size default of 15) in wikidata_collector/client.py
+- [X] T011 [P] Ensure security and SPARQL safety checks reused for new queries in wikidata_collector/security.py
+- [X] T012 Add structured logging helper for queries and pages in wikidata_collector/client.py
+- [X] T013 Wire proxy configuration options into client construction in wikidata_collector/client.py and wikidata_collector/config.py
 
 **Checkpoint**: Foundation ready — models, normalizers, pagination helpers, logging, and proxy wiring exist and are testable, but user-story-specific iterators are not yet implemented.
 
