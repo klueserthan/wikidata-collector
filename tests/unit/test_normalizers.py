@@ -2,9 +2,69 @@
 Unit tests for normalizers (normalize_public_figure and normalize_public_institution).
 """
 
-from wikidata_collector.models import PublicFigure, PublicInstitution
+import pytest
+from wikidata_collector.models import PublicFigure, PublicInstitution, AccountEntry, WebsiteEntry, Identifier
 from wikidata_collector.normalizers.figure_normalizer import normalize_public_figure
 from wikidata_collector.normalizers.institution_normalizer import normalize_public_institution
+
+
+class TestPublicFigureModel:
+    """Test PublicFigure model validation and edge cases."""
+    
+    def test_minimal_public_figure(self):
+        """Test creating PublicFigure with minimal required fields."""
+        figure = PublicFigure(id="Q42")
+        
+        assert figure.id == "Q42"
+        assert figure.entity_kind == "public_figure"
+        assert figure.name is None
+        assert figure.aliases == []
+        assert figure.nationalities == []
+        assert figure.professions == []
+    
+    def test_public_figure_with_all_fields(self):
+        """Test creating PublicFigure with all fields populated."""
+        figure = PublicFigure(
+            id="Q42",
+            entity_kind="public_figure",
+            name="Douglas Adams",
+            aliases=["Douglas Noël Adams"],
+            description="English writer",
+            birthday="1952-03-11T00:00:00Z",
+            deathday="2001-05-11T00:00:00Z",
+            gender="male",
+            nationalities=["United Kingdom"],
+            professions=["writer", "humorist"],
+            place_of_birth="Cambridge",
+            place_of_death="Santa Barbara",
+            residence=["London"],
+            website=[WebsiteEntry(url="https://example.com", source="wikidata", retrieved_at="2024-01-01T00:00:00Z")],
+            accounts=[AccountEntry(platform="twitter", handle="@test", source="wikidata", retrieved_at="2024-01-01T00:00:00Z")],
+            affiliations=["Affiliation 1"],
+            notable_works=["The Hitchhiker's Guide to the Galaxy"],
+            awards=["Award 1"],
+            identifiers=[Identifier(scheme="VIAF", id="12345")],
+            image=["https://example.com/image.jpg"],
+            updated_at="2024-01-01T00:00:00Z"
+        )
+        
+        assert figure.id == "Q42"
+        assert figure.name == "Douglas Adams"
+        assert len(figure.aliases) == 1
+        assert len(figure.nationalities) == 1
+        assert len(figure.professions) == 2
+        assert figure.gender == "male"
+    
+    def test_public_figure_empty_lists_default(self):
+        """Test that list fields default to empty lists."""
+        figure = PublicFigure(id="Q1")
+        
+        assert isinstance(figure.aliases, list)
+        assert isinstance(figure.nationalities, list)
+        assert isinstance(figure.professions, list)
+        assert isinstance(figure.website, list)
+        assert isinstance(figure.accounts, list)
+        assert len(figure.aliases) == 0
 
 
 class TestNormalizePublicFigure:

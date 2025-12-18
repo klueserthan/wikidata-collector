@@ -12,6 +12,7 @@ from .exceptions import (
     InvalidQIDError,
     EntityNotFoundError,
     QueryExecutionError,
+    InvalidFilterError,
 )
 
 __version__ = "1.0.0"
@@ -24,4 +25,5 @@ __all__ = [
     "InvalidQIDError",
     "EntityNotFoundError",
     "QueryExecutionError",
+    "InvalidFilterError",
 ]
