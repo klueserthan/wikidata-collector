@@ -1,51 +1,37 @@
 # Implementation Plan: Wikidata Public Entities ETL Package
 
-**Branch**: `001-wikidata-etl-package` | **Date**: 2025-12-17 | **Spec**: specs/001-wikidata-etl-package/spec.md
+**Branch**: `001-wikidata-etl-package` | **Date**: 2025-12-18 | **Spec**: specs/001-wikidata-etl-package/spec.md
 **Input**: Feature specification from `specs/001-wikidata-etl-package/spec.md`
 
-**Note**: This plan is generated via the `/speckit.plan` workflow and guides implementation and
-testing for the iterator-based ETL library.
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 
 ## Summary
 
-Build a small-scale production Python library that fetches public figures and public institutions
-from Wikidata via SPARQL, normalizes them into Pydantic v2 models, and exposes iterator-based
-APIs that yield individual entities matching a given filter set. Pagination, ordering, and
-proxy usage are handled internally; consuming ETL code only sees simple, filter-driven iterators
-and structured logging.
+Implement a pure-Python ETL library that streams public figures and public institutions from the
+Wikidata SPARQL endpoint via iterator-based APIs, normalizes results into Pydantic v2 models, and
+handles internal SPARQL pagination, logging, and error handling. As part of this plan, we will
+also define live, non-proxy integration tests that verify direct connectivity to the official
+Wikidata SPARQL endpoint, validate that our query templates execute successfully, and confirm that
+typical queries return data within an acceptable time budget.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: Python >= 3.13 (library code and tests written to target Python 3.13+).  
-**Primary Dependencies**: Pydantic v2 for data models; existing wikidata_collector SPARQL
-query builders and security helpers (extended to translate human-readable filter labels such as
-"US", "DE", or "public broadcaster" into appropriate SPARQL constraints); existing HTTP client
-stack used by wikidata_collector (e.g., requests or equivalent); Python standard logging for
-structured logs.  
-**Storage**: N/A (no persistent storage; only in-memory data and any short-lived pagination
-state within a single call).  
-**Testing**: pytest (unit tests around normalizers, query builders, iterators, and error
-handling; integration tests for end-to-end ETL-style flows where feasible).  
-**Target Platform**: Python library executed in ETL environments (e.g., scheduled batch jobs,
-Airflow workers, or containerized jobs) on typical Linux/macOS servers.  
-**Project Type**: Single Python package (`wikidata_collector/`) with corresponding test suite in
-`tests/`.  
-**Performance Goals**: Support fetching on the order of a few thousand public figures or
-institutions per ETL run via iterator-based APIs, within WDQS limits, without exhausting memory or
-requiring manual pagination by consumers.  
-**Constraints**: No long-running service processes; no persistent database; library-first design;
-respect Wikidata Query Service rate limits and timeouts; iterator-based public APIs (no bulk list
-returns) to keep memory usage bounded; structured logging required for operations.  
-**Scale/Scope**: Small-scale production ETL usage focused on public figures and institutions; the
-scope of this feature is limited to query construction, normalization, and iterator-based
-retrieval for these domains, with filters expressed as human-readable labels (e.g., country codes
-like "US"/"DE" or institution type labels like "public broadcaster").
+**Language/Version**: Python ≥ 3.13 (CPython)
+**Primary Dependencies**: Pydantic v2, requests, python-dotenv, pytest (+ pytest-mock, pytest-cov),
+ruff, pyright
+**Storage**: N/A (reads from Wikidata SPARQL endpoint only; no persistent storage)
+**Testing**: pytest test suite (`tests/unit`, `tests/integration`) with type checking via pyright
+and coverage via pytest-cov; live SPARQL connectivity tests marked separately as `live`
+**Target Platform**: Linux (CI: ubuntu-latest) and macOS for local development
+**Project Type**: Python library package (`wikidata_collector`) consumed by ETL jobs
+**Performance Goals**: Small-scale ETL workloads; iterator APIs should sustain typical Wikidata
+queries with internal page size ≈15 entities per page and end-to-end query times generally under
+~3 seconds per live query in the connectivity tests
+**Constraints**: Must be robust to upstream latency and intermittent failures, avoid excessive
+memory use by streaming results, and keep live endpoint tests optional (non-blocking for CI) due
+to network variability
+**Scale/Scope**: Library-scope project with one main package (`wikidata_collector`) and a focused
+test suite; intended for low-concurrency ETL pipelines rather than high-throughput services
 
 ## Constitution Check
 
@@ -54,86 +40,74 @@ like "US"/"DE" or institution type labels like "public broadcaster").
 For Wikidata Collector, every feature plan MUST explicitly state how it complies with the
 constitution in .specify/memory/constitution.md:
 
-- Library-first, ETL-oriented usage (no long-running services or hidden side-effects).
-- TDD workflow (tests defined and failing before implementation, including regression tests).
-- Public API and data contracts (inputs/outputs) stable or versioned per semantic versioning.
-- Reliability and observability for ETL usage (failure modes, logging, retries, caching impact).
-- Pythonic quality and simplicity (style, type hints, docstrings, minimal abstractions).
-
-**Assessment for this feature**:
-
-- Library-first: This feature refactors and improves the existing `wikidata_collector` Python package with
-  iterator-based APIs.
-- TDD workflow: New functionality (iterators, models, query sub-templates, proxy handling) will be
-  driven by pytest unit and integration tests, including regression tests for any discovered
-  issues.
-- Stable API & versioning: Public iterators and data models will be treated as public API;
-  changes that break existing signatures or result schemas will require a MAJOR version bump and
-  migration notes.
-- Reliability & observability: Internal pagination and proxy usage will surface structured logs
-  and well-typed errors so ETL callers can distinguish configuration issues, upstream failures,
-  and invalid filters.
-- Pythonic simplicity: Implementation will favor explicit, well-typed iterators built on top of
-  existing query builders and Pydantic models, avoiding unnecessary abstractions.
-
-No constitution violations are anticipated for this feature; the Complexity Tracking section
-remains empty.
+- **Library-first, ETL-oriented usage**: The public APIs (`WikidataClient` iterator methods) are
+  pure library calls with no long-running background processes. Live SPARQL tests drive these APIs
+  end-to-end but do not introduce new services or side-effects beyond read-only queries against
+  Wikidata.
+- **TDD workflow**: New behavior, including live connectivity checks, will be introduced by first
+  defining tests in `specs/001-wikidata-etl-package/tasks.md` and the pytest suite, then
+  implementing any required configuration or helper code. Each discovered defect must gain a
+  regression test.
+- **Stable public API & semantic versioning**: Live SPARQL tests exercise existing public APIs and
+  query builders; they do not add or change public signatures. Any future API changes must follow
+  semantic versioning rules and be documented in the spec and README.
+- **Reliability & observability**: Connectivity and template tests will validate that iterator
+  flows behave correctly with and without proxies, that errors are surfaced as documented
+  exceptions, and that structured logging fields (event, entity_kind, filters, result_count,
+  duration_ms, status) are populated for real queries.
+- **Pythonic quality & simplicity**: Test code will follow the same standards as library code
+  (type hints where appropriate, clear names, minimal abstractions) and reuse existing helpers in
+  `wikidata_collector/client.py` and the query builders rather than introducing bespoke HTTP
+  clients.
+- **CI gates**: Static type checking (pyright) and non-live pytest suites (unit + integration with
+  `-m "not live"`) remain mandatory CI gates. Live SPARQL tests will be marked (e.g.,
+  `@pytest.mark.live`) and excluded from default CI runs to avoid flakes, but can be invoked
+  manually or via a dedicated workflow when needed.
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/001-wikidata-etl-package/
+├── plan.md              # Implementation plan (this file)
+├── research.md          # Design decisions and rationales
+├── data-model.md        # Pydantic models for figures and institutions
+├── quickstart.md        # Usage examples for iterator APIs
+├── contracts/
+│   └── python-api.md    # Public Python API contracts
+└── tasks.md             # Task breakdown and test plan
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
 wikidata_collector/
-├── __init__.py
-├── client.py              # High-level client; iterator-based APIs will be added/refined here
-├── config.py
-├── constants.py
-├── exceptions.py
-├── models.py              # Pydantic v2 models for PublicFigure, PublicInstitution, etc.
-├── proxy.py
-├── security.py
+├── client.py                 # WikidataClient, iterator APIs, pagination, logging
+├── config.py                 # Configuration, including timeouts and proxy settings
+├── constants.py              # Shared constants (e.g., endpoint URLs)
+├── exceptions.py             # Library-specific exception types
+├── models.py                 # PublicFigure, PublicInstitution, and supporting models
+├── proxy.py                  # Optional proxy integration (not used in live connectivity tests)
 ├── query_builders/
-│   ├── __init__.py
 │   ├── figures_query_builder.py
 │   └── institutions_query_builder.py
 └── normalizers/
-  ├── __init__.py
-  ├── figure_normalizer.py
-  └── institution_normalizer.py
+    ├── figure_normalizer.py
+    └── institution_normalizer.py
 
 tests/
-├── unit/
-│   ├── test_normalizers.py
-│   ├── test_sparql_builders.py
-│   ├── test_sparql_security.py
-│   └── test_proxy_service.py
-└── integration/
-  └── (new iterator-focused integration tests to be added for this feature)
-
+├── unit/                     # Pure unit tests (models, normalizers, query builders)
+└── integration/              # Integration tests for iterator APIs and, later,
+    ├── test_iterate_public_figures.py
+    ├── test_iterate_public_institutions.py
+    └── test_live_sparql_endpoints.py   # New live connectivity + template tests (marked "live")
 ```
 
-**Structure Decision**: Take inspiration from the existing `wikidata_collector` and `tests` layout, but substantially refactor and improve it. New iterator-based public APIs will live in `wikidata_collector/client.py` (and, if needed, small
-helpers), using `query_builders` and `normalizers` internally. Tests will be added under
-`tests/unit` and `tests/integration` following the current conventions.
+**Structure Decision**: Single Python package (`wikidata_collector`) with a separate `tests/`
+tree split into `unit` and `integration`. Live Wikidata SPARQL tests will live under
+`tests/integration/test_live_sparql_endpoints.py` and be controlled via pytest markers so that
+they are opt-in and do not become hard CI gates.
 
 ## Complexity Tracking
 

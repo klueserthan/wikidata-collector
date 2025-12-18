@@ -39,8 +39,7 @@
 - [X] T011 [P] Ensure security and SPARQL safety checks reused for new queries in wikidata_collector/security.py
 - [X] T012 Add structured logging helper for queries and pages in wikidata_collector/client.py
 - [X] T013 Wire proxy configuration options into client construction in wikidata_collector/client.py and wikidata_collector/config.py
-
-**Checkpoint**: Foundation ready — models, normalizers, pagination helpers, logging, and proxy wiring exist and are testable, but user-story-specific iterators are not yet implemented.
+- [ ] T013a [US] Add live integration test to verify direct Wikidata SPARQL connectivity (no proxy) in tests/integration/test_live_sparql_endpoints.py, marked `@pytest.mark.live`. Include a minimal connectivity smoke test (SELECT 1 or equivalent) that asserts a response arrives within the configured timeout and the foundational HTTP stack is working correctly.
 
 ---
 
@@ -52,23 +51,22 @@
 
 ### Tests for User Story 1
 
-- [ ] T014 [P] [US1] Add unit tests for PublicFigure model and normalizer behavior in tests/unit/test_normalizers.py
-- [ ] T015 [P] [US1] Add unit tests for figures SPARQL query building with birthday/nationality filters and label inputs in tests/unit/test_sparql_builders.py
-- [ ] T016 [P] [US1] Add integration test for iterate_public_figures happy path in tests/integration/test_iterate_public_figures.py
-- [ ] T017 [P] [US1] Add integration test for empty results and invalid filters for figures in tests/integration/test_iterate_public_figures.py
+- [X] T014 [P] [US1] Add unit tests for PublicFigure model and normalizer behavior in tests/unit/test_normalizers.py
+- [X] T015 [P] [US1] Add unit tests for figures SPARQL query building with birthday/nationality filters and label inputs in tests/unit/test_sparql_builders.py
+- [X] T016 [P] [US1] Add integration test for iterate_public_figures happy path in tests/integration/test_iterate_public_figures.py
+- [X] T017 [P] [US1] Add integration test for empty results and invalid filters for figures in tests/integration/test_iterate_public_figures.py
 
 ### Implementation for User Story 1
 
-- [ ] T018 [P] [US1] Implement SPARQL sub-templates for public figures projections and filters in wikidata_collector/query_builders/figures_query_builder.py
-- [ ] T019 [P] [US1] Implement label-to-SPARQL translation for nationality filters in wikidata_collector/query_builders/figures_query_builder.py
-- [ ] T020 [US1] Implement internal pagination loop and stable ID ordering for figures in wikidata_collector/client.py
-- [ ] T021 [US1] Implement WikidataClient.iterate_public_figures iterator API in wikidata_collector/client.py
-- [ ] T022 [US1] Integrate figure_normalizer to map SPARQL rows to PublicFigure in wikidata_collector/client.py
-- [ ] T023 [US1] Add structured logging for figures queries, pages, and errors (using the agreed schema) in wikidata_collector/client.py
-- [ ] T024 [US1] Add figure-specific error handling for invalid filters and upstream failures in wikidata_collector/exceptions.py and wikidata_collector/client.py
-- [ ] T025 [US1] Update quickstart examples for figures usage and max_results in specs/001-wikidata-etl-package/quickstart.md
-
-**Checkpoint**: User Story 1 fully functional and testable independently via unit and integration tests.
+- [X] T018 [P] [US1] Implement SPARQL sub-templates for public figures projections and filters in wikidata_collector/query_builders/figures_query_builder.py
+- [X] T019 [P] [US1] Implement label-to-SPARQL translation for nationality filters in wikidata_collector/query_builders/figures_query_builder.py
+- [X] T020 [US1] Implement internal pagination loop and stable ID ordering for figures in wikidata_collector/client.py
+- [X] T021 [US1] Implement WikidataClient.iterate_public_figures iterator API in wikidata_collector/client.py
+- [X] T022 [US1] Integrate figure_normalizer to map SPARQL rows to PublicFigure in wikidata_collector/client.py
+- [X] T023 [US1] Add structured logging for figures queries, pages, and errors (using the agreed schema) in wikidata_collector/client.py
+- [X] T024 [US1] Add figure-specific error handling for invalid filters and upstream failures in wikidata_collector/exceptions.py and wikidata_collector/client.py
+- [X] T025 [US1] Update quickstart examples for figures usage and max_results in specs/001-wikidata-etl-package/quickstart.md
+- [ ] T025a [P] [US1] Add live integration test to verify figures SPARQL query template and iterate_public_figures iterator work end-to-end against live Wikidata endpoint in tests/integration/test_live_sparql_endpoints.py, marked `@pytest.mark.live`. Exercise the iterator with restrictive filters (recent birthday range + single nationality), assert at least one result is returned, and confirm end-to-end call duration is within the configured time budget (~3s).
 
 ---
 
@@ -80,23 +78,22 @@
 
 ### Tests for User Story 2
 
-- [ ] T026 [P] [US2] Add unit tests for PublicInstitution model and normalizer behavior in tests/unit/test_normalizers.py
-- [ ] T027 [P] [US2] Add unit tests for institutions SPARQL query building with founded/country/types/headquarter filters and label inputs in tests/unit/test_sparql_builders.py
-- [ ] T028 [P] [US2] Add integration test for iterate_public_institutions happy path in tests/integration/test_iterate_public_institutions.py
-- [ ] T029 [P] [US2] Add integration test for empty results and invalid filters for institutions in tests/integration/test_iterate_public_institutions.py
+- [X] T026 [P] [US2] Add unit tests for PublicInstitution model and normalizer behavior in tests/unit/test_normalizers.py
+- [X] T027 [P] [US2] Add unit tests for institutions SPARQL query building with founded/country/types/headquarter filters and label inputs in tests/unit/test_sparql_builders.py
+- [X] T028 [P] [US2] Add integration test for iterate_public_institutions happy path in tests/integration/test_iterate_public_institutions.py
+- [X] T029 [P] [US2] Add integration test for empty results and invalid filters for institutions in tests/integration/test_iterate_public_institutions.py
 
 ### Implementation for User Story 2
 
-- [ ] T030 [P] [US2] Implement SPARQL sub-templates for public institutions projections and filters in wikidata_collector/query_builders/institutions_query_builder.py
-- [ ] T031 [P] [US2] Implement label-to-SPARQL translation for country, types, and headquarter filters in wikidata_collector/query_builders/institutions_query_builder.py
-- [ ] T032 [US2] Implement internal pagination loop and stable ID ordering for institutions in wikidata_collector/client.py
-- [ ] T033 [US2] Implement WikidataClient.iterate_public_institutions iterator API in wikidata_collector/client.py
-- [ ] T034 [US2] Integrate institution_normalizer to map SPARQL rows to PublicInstitution in wikidata_collector/client.py
-- [ ] T035 [US2] Add structured logging for institutions queries, pages, and errors (using the agreed schema) in wikidata_collector/client.py
-- [ ] T036 [US2] Add institution-specific error handling for invalid filters and upstream failures in wikidata_collector/exceptions.py and wikidata_collector/client.py
-- [ ] T037 [US2] Update quickstart examples for institutions usage and filters in specs/001-wikidata-etl-package/quickstart.md
-
-**Checkpoint**: User Stories 1 and 2 both work independently and can be exercised via their own integration tests.
+- [X] T030 [P] [US2] Implement SPARQL sub-templates for public institutions projections and filters in wikidata_collector/query_builders/institutions_query_builder.py
+- [X] T031 [P] [US2] Implement label-to-SPARQL translation for country, types, and headquarter filters in wikidata_collector/query_builders/institutions_query_builder.py
+- [X] T032 [US2] Implement internal pagination loop and stable ID ordering for institutions in wikidata_collector/client.py
+- [X] T033 [US2] Implement WikidataClient.iterate_public_institutions iterator API in wikidata_collector/client.py
+- [X] T034 [US2] Integrate institution_normalizer to map SPARQL rows to PublicInstitution in wikidata_collector/client.py
+- [X] T035 [US2] Add structured logging for institutions queries, pages, and errors (using the agreed schema) in wikidata_collector/client.py
+- [X] T036 [US2] Add institution-specific error handling for invalid filters and upstream failures in wikidata_collector/exceptions.py and wikidata_collector/client.py
+- [X] T037 [US2] Update quickstart examples for institutions usage and filters in specs/001-wikidata-etl-package/quickstart.md
+- [ ] T037a [P] [US2] Add live integration test to verify institutions SPARQL query template and iterate_public_institutions iterator work end-to-end against live Wikidata endpoint in tests/integration/test_live_sparql_endpoints.py, marked `@pytest.mark.live`. Exercise the iterator with restrictive filters (one country + one type), assert at least one result is returned, and confirm end-to-end call duration is within the configured time budget.
 
 ---
 
@@ -111,14 +108,19 @@
 - [ ] T038 [P] [US3] Add unit tests for proxy configuration and fallback behavior in tests/unit/test_proxy_service.py
 - [ ] T039 [P] [US3] Add unit tests for structured logging payloads and log fields in tests/unit/test_normalizers.py or new tests/unit/test_logging.py
 - [ ] T040 [P] [US3] Add integration test simulating upstream timeouts and proxy failures for figures and institutions in tests/integration/test_resilience_and_logging.py
+- [ ] T041 [P] [US3] Add live integration tests that verify direct connectivity (no proxy) to the official Wikidata SPARQL endpoint, using a dedicated `test_live_sparql_endpoints.py` module in tests/integration/ (marked with `@pytest.mark.live`). At minimum, include:
+  - A smoke test that performs a simple SELECT 1-style query against the public endpoint and asserts that a response is returned within a configured timeout.
+  - A test that exercises the figures SPARQL query template end-to-end via the existing iterator API (e.g., `iterate_public_figures`) with very restrictive filters (such as a recent birthday range and a single nationality) and asserts that the call completes without errors and returns at least one result in under a configured time budget.
+  - A test that exercises the institutions SPARQL query template end-to-end via `iterate_public_institutions` with similarly restrictive filters and asserts that the call completes successfully within the timeout.
+  - All live tests MUST be skipped by default in CI (e.g., via `-m "not live"` in the default test command) and provide clear skip reasons when environment variables or network access are missing.
 
 ### Implementation for User Story 3
 
-- [ ] T041 [P] [US3] Implement proxy-aware HTTP request handling with fail-closed default in wikidata_collector/proxy.py
-- [ ] T042 [US3] Wire proxy handling into WikidataClient iterator flows in wikidata_collector/client.py
-- [ ] T043 [US3] Implement structured logging for retries, failures, and filter usage (using the agreed schema) in wikidata_collector/client.py
-- [ ] T044 [US3] Extend exceptions for proxy misconfiguration, upstream unavailability, and invalid filters in wikidata_collector/exceptions.py
-- [ ] T045 [US3] Document error categories and logging fields in specs/001-wikidata-etl-package/spec.md and specs/001-wikidata-etl-package/research.md
+- [ ] T042 [P] [US3] Implement proxy-aware HTTP request handling with fail-closed default in wikidata_collector/proxy.py
+- [ ] T043 [US3] Wire proxy handling into WikidataClient iterator flows in wikidata_collector/client.py
+- [ ] T044 [US3] Implement structured logging for retries, failures, and filter usage (using the agreed schema) in wikidata_collector/client.py
+- [ ] T045 [US3] Extend exceptions for proxy misconfiguration, upstream unavailability, and invalid filters in wikidata_collector/exceptions.py
+- [ ] T052 [US3] Document error categories, logging fields, and live SPARQL connectivity test strategy (including timeouts and markers) in specs/001-wikidata-etl-package/spec.md and specs/001-wikidata-etl-package/research.md
 
 **Checkpoint**: All three user stories are independently functional and observable, with proxy support and structured logging in place.
 
