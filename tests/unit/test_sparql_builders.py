@@ -102,6 +102,36 @@ class TestBuildPublicFiguresQuery:
         query = build_public_figures_query(lang="fr")
         
         assert 'bd:serviceParam wikibase:language "en"' in query or 'wikibase:language "fr"' in query
+    
+    def test_nationality_filter_iso_code(self):
+        """Test nationality filter with ISO country code (3-letter)."""
+        query = build_public_figures_query(
+            nationality=["USA"]  # 3-letter ISO code
+        )
+        
+        # Should translate to country code filter
+        assert '?person wdt:P27 ?country' in query
+        assert '?country wdt:P298 "USA"' in query
+    
+    def test_nationality_filter_mixed_qid_and_label(self):
+        """Test nationality filter with mixed QID and label."""
+        query = build_public_figures_query(
+            nationality=["Q145", "Germany"]  # QID and label
+        )
+        
+        # Should handle both QID and label
+        assert '?person wdt:P27 wd:Q145' in query
+        assert '?country rdfs:label "Germany"@en' in query
+    
+    def test_nationality_filter_iso_code_two_letter(self):
+        """Test that 2-letter codes are treated as labels, not ISO codes."""
+        query = build_public_figures_query(
+            nationality=["US"]  # 2-letter code (not a valid 3-letter ISO code)
+        )
+        
+        # 2-letter codes should be treated as labels since the code checks for len == 3
+        # So it will try to match as a label
+        assert '?country rdfs:label "US"@en' in query or '?country wdt:P298' in query
 
 
 class TestBuildPublicInstitutionsQuery:

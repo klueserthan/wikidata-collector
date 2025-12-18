@@ -14,9 +14,13 @@ import requests
 from .config import WikidataCollectorConfig
 from .exceptions import (
     EntityNotFoundError,
+    InvalidFilterError,
     InvalidQIDError,
     QueryExecutionError,
 )
+from .models import PublicFigure, PublicInstitution
+from .normalizers.figure_normalizer import normalize_public_figure
+from .normalizers.institution_normalizer import normalize_public_institution
 from .proxy import ProxyManager
 from .query_builders.figures_query_builder import build_public_figures_query
 from .query_builders.institutions_query_builder import build_public_institutions_query
@@ -498,3 +502,282 @@ class WikidataClient:
                     break
             else:
                 break
+    
+    def iterate_public_figures(
+        self,
+        *,
+        birthday_from: Optional[str] = None,
+        birthday_to: Optional[str] = None,
+        nationality: Optional[List[str]] = None,
+        max_results: Optional[int] = None,
+        lang: str = "en",
+    ) -> Iterator[PublicFigure]:
+        """Yield public figures matching the given filters.
+        
+        Applies filters on birthday and nationality as specified in the feature spec.
+        Expects human-readable nationality labels or codes (e.g., "US", "DE") rather than QIDs;
+        query builders translate these into appropriate SPARQL constraints.
+        Uses a stable internal ordering by entity ID.
+        Hides SPARQL pagination; callers simply iterate over results.
+        Respects `max_results` when provided; otherwise yields all matches subject to
+        environment and upstream constraints.
+        
+        Args:
+            birthday_from: Start date filter (ISO format, e.g., "1990-01-01")
+            birthday_to: End date filter (ISO format, e.g., "2000-12-31")
+            nationality: List of nationality filters (ISO codes like "US", "DE", or labels)
+            max_results: Maximum number of results to yield (None for unlimited)
+            lang: Language code for labels (default: "en")
+            
+        Yields:
+            PublicFigure: Normalized public figure objects
+            
+        Raises:
+            InvalidFilterError: If filter parameters are invalid or malformed
+            QueryExecutionError: If upstream query execution fails
+        """
+        # Validate date filters if provided
+        if birthday_from and not self._is_valid_date_format(birthday_from):
+            raise InvalidFilterError(f"Invalid birthday_from format: {birthday_from}. Expected ISO format (YYYY-MM-DD)")
+        if birthday_to and not self._is_valid_date_format(birthday_to):
+            raise InvalidFilterError(f"Invalid birthday_to format: {birthday_to}. Expected ISO format (YYYY-MM-DD)")
+        
+        # Validate max_results if provided
+        self._validate_max_results(max_results)
+        
+        count = 0
+        success = False
+        
+        # Log iteration start
+        logger.info(
+            f"Starting iterate_public_figures: birthday_from={birthday_from}, "
+            f"birthday_to={birthday_to}, nationality={nationality}, max_results={max_results}",
+            extra={
+                "event": "iteration_started",
+                "entity_kind": "public_figure",
+                "filters": {
+                    "birthday_from": birthday_from,
+                    "birthday_to": birthday_to,
+                    "nationality": nationality,
+                },
+                "max_results": max_results,
+            }
+        )
+        
+        start_time = time.time()
+        
+        try:
+            for sparql_result in self.iter_public_figures(
+                birthday_from=birthday_from,
+                birthday_to=birthday_to,
+                nationality=nationality,
+                lang=lang,
+            ):
+                # Normalize the SPARQL result to PublicFigure model
+                # Using None for expanded_data to rely on SPARQL bindings only
+                figure = normalize_public_figure(sparql_result, expanded_data=None)
+                
+                yield figure
+                count += 1
+                
+                # Check max_results limit
+                if max_results is not None and count >= max_results:
+                    logger.info(
+                        f"Reached max_results limit of {max_results}",
+                        extra={
+                            "event": "max_results_reached",
+                            "entity_kind": "public_figure",
+                            "result_count": count,
+                        }
+                    )
+                    break
+            
+            # Mark as successful if we completed iteration without exception
+            success = True
+        
+        except ValueError as e:
+            # Query builder or validation errors
+            logger.error(
+                f"Invalid filter parameters: {e}",
+                extra={
+                    "event": "iteration_failed",
+                    "entity_kind": "public_figure",
+                    "error_type": "invalid_filters",
+                }
+            )
+            raise InvalidFilterError(f"Invalid filter parameters: {e}")
+        except Exception as e:
+            # Log other errors
+            logger.error(
+                f"Iteration failed: {e}",
+                extra={
+                    "event": "iteration_failed",
+                    "entity_kind": "public_figure",
+                    "error_type": type(e).__name__,
+                }
+            )
+            raise
+        finally:
+            # Log iteration completion only if successful
+            if success:
+                duration_ms = (time.time() - start_time) * 1000
+                logger.info(
+                    f"Completed iterate_public_figures: yielded {count} results in {duration_ms:.2f}ms",
+                    extra={
+                        "event": "iteration_completed",
+                        "entity_kind": "public_figure",
+                        "result_count": count,
+                        "duration_ms": duration_ms,
+                        "status": "success",
+                    }
+                )
+    
+    def _validate_max_results(self, max_results: Optional[int]) -> None:
+        """Validate max_results parameter.
+        
+        Args:
+            max_results: Maximum number of results to yield
+            
+        Raises:
+            InvalidFilterError: If max_results is less than 1
+        """
+        if max_results is not None and max_results < 1:
+            raise InvalidFilterError(f"max_results must be >= 1, got {max_results}")
+    
+    def _is_valid_date_format(self, date_str: str) -> bool:
+        """Validate ISO date format (YYYY-MM-DD).
+        
+        Args:
+            date_str: Date string to validate
+            
+        Returns:
+            True if valid, False otherwise
+        """
+        if not date_str:
+            return False
+        
+        try:
+            # Use datetime.strptime for proper validation including leap years
+            datetime.strptime(date_str, "%Y-%m-%d")
+            return True
+        except ValueError:
+            return False
+    
+    def iterate_public_institutions(
+        self,
+        *,
+        country: Optional[str] = None,
+        types: Optional[List[str]] = None,
+        jurisdiction: Optional[str] = None,
+        max_results: Optional[int] = None,
+        lang: str = "en",
+    ) -> Iterator[PublicInstitution]:
+        """Yield public institutions matching the given filters.
+        
+        Note: This is a simplified implementation matching the underlying SPARQL support.
+        The full API contract (founded_from, founded_to, country list, headquarter) will be
+        implemented when the underlying query builder supports these filters.
+        
+        Args:
+            country: Country filter (single value: QID, ISO code, or label)
+            types: List of institution type filters (labels or codes)
+            jurisdiction: Jurisdiction filter (QID or label)
+            max_results: Maximum number of results to yield (None for unlimited)
+            lang: Language code for labels (default: "en")
+            
+        Yields:
+            PublicInstitution: Normalized public institution objects
+            
+        Raises:
+            InvalidFilterError: If filter parameters are invalid or malformed
+            QueryExecutionError: If upstream query execution fails
+        """
+        # Validate max_results if provided
+        self._validate_max_results(max_results)
+        
+        count = 0
+        success = False
+        
+        # Log iteration start
+        logger.info(
+            f"Starting iterate_public_institutions: country={country}, "
+            f"types={types}, jurisdiction={jurisdiction}, max_results={max_results}",
+            extra={
+                "event": "iteration_started",
+                "entity_kind": "public_institution",
+                "filters": {
+                    "country": country,
+                    "types": types,
+                    "jurisdiction": jurisdiction,
+                },
+                "max_results": max_results,
+            }
+        )
+        
+        start_time = time.time()
+        
+        try:
+            for sparql_result in self.iter_public_institutions(
+                country=country,
+                type=types,
+                jurisdiction=jurisdiction,
+                lang=lang,
+            ):
+                # Normalize the SPARQL result to PublicInstitution model
+                # Using None for expanded_data to rely on SPARQL bindings only
+                institution = normalize_public_institution(sparql_result, expanded_data=None)
+                
+                yield institution
+                count += 1
+                
+                # Check max_results limit
+                if max_results is not None and count >= max_results:
+                    logger.info(
+                        f"Reached max_results limit of {max_results}",
+                        extra={
+                            "event": "max_results_reached",
+                            "entity_kind": "public_institution",
+                            "result_count": count,
+                        }
+                    )
+                    break
+            
+            # Mark as successful if we completed iteration without exception
+            success = True
+        
+        except ValueError as e:
+            # Query builder or validation errors
+            logger.error(
+                f"Invalid filter parameters: {e}",
+                extra={
+                    "event": "iteration_failed",
+                    "entity_kind": "public_institution",
+                    "error_type": "invalid_filters",
+                }
+            )
+            raise InvalidFilterError(f"Invalid filter parameters: {e}")
+        except Exception as e:
+            # Log other errors
+            logger.error(
+                f"Iteration failed: {e}",
+                extra={
+                    "event": "iteration_failed",
+                    "entity_kind": "public_institution",
+                    "error_type": type(e).__name__,
+                }
+            )
+            raise
+        finally:
+            # Log iteration completion only if successful
+            if success:
+                duration_ms = (time.time() - start_time) * 1000
+                logger.info(
+                    f"Completed iterate_public_institutions: yielded {count} results in {duration_ms:.2f}ms",
+                    extra={
+                        "event": "iteration_completed",
+                        "entity_kind": "public_institution",
+                        "result_count": count,
+                        "duration_ms": duration_ms,
+                        "status": "success",
+                    }
+                )

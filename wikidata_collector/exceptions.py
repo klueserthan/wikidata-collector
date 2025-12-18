@@ -24,3 +24,8 @@ class QueryExecutionError(WikidataCollectorError):
 class ProxyError(WikidataCollectorError):
     """Raised when proxy validation or usage fails."""
     pass
+
+
+class InvalidFilterError(WikidataCollectorError):
+    """Raised when filter parameters are invalid or malformed."""
+    pass
