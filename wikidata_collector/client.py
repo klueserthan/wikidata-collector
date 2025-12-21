@@ -86,6 +86,60 @@ def _log_page_fetch(
     )
 
 
+def _log_retry_attempt(
+    attempt: int, max_retries: int, reason: str, wait_time: float, proxy: Optional[str] = None
+) -> None:
+    """Log structured information about retry attempts.
+
+    Args:
+        attempt: Current attempt number (1-indexed)
+        max_retries: Maximum number of retries configured
+        reason: Reason for retry (e.g., 'throttled', 'timeout', 'connection_error')
+        wait_time: Time to wait before retry in seconds
+        proxy: Proxy being retried (if any)
+    """
+    logger.warning(
+        f"Retry attempt {attempt}/{max_retries}: {reason}, waiting {wait_time:.2f}s",
+        extra={
+            "attempt": attempt,
+            "max_retries": max_retries,
+            "reason": reason,
+            "wait_time_seconds": wait_time,
+            "proxy": proxy,
+            "event": "retry",
+        },
+    )
+
+
+def _log_query_failure(
+    query_type: str,
+    error_category: str,
+    error_message: str,
+    attempts: int,
+    filters: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Log structured information about query failures.
+
+    Args:
+        query_type: Type of query that failed
+        error_category: Category of error (e.g., 'upstream_unavailable', 'timeout', 'invalid_filter')
+        error_message: Detailed error message
+        attempts: Number of attempts made before failure
+        filters: Filter parameters used in the query
+    """
+    logger.error(
+        f"Query failed: type={query_type}, category={error_category}, attempts={attempts}",
+        extra={
+            "query_type": query_type,
+            "error_category": error_category,
+            "error_message": error_message,
+            "attempts": attempts,
+            "filters": filters or {},
+            "event": "query_failure",
+        },
+    )
+
+
 class WikidataClient:
     """Client for fetching Wikidata entities via SPARQL and Entity API."""
 
@@ -159,14 +213,24 @@ class WikidataClient:
                     wait_s = (
                         int(retry_after) if retry_after and retry_after.isdigit() else 2**attempt
                     )
-                    logger.warning(f"WDQS 429 received. Waiting {wait_s}s before retry...")
+                    _log_retry_attempt(
+                        attempt=attempt + 1,
+                        max_retries=self.config.max_retries,
+                        reason="throttled_429",
+                        wait_time=wait_s,
+                        proxy=proxy,
+                    )
                     time.sleep(wait_s)
                     raise requests.exceptions.RequestException("Throttled 429")
 
                 if response.status_code in (502, 503, 504):
                     wait_s = min(10, 2**attempt)
-                    logger.warning(
-                        f"WDQS {response.status_code} transient error. Backing off {wait_s}s..."
+                    _log_retry_attempt(
+                        attempt=attempt + 1,
+                        max_retries=self.config.max_retries,
+                        reason=f"upstream_error_{response.status_code}",
+                        wait_time=wait_s,
+                        proxy=proxy,
                     )
                     time.sleep(wait_s)
                     raise requests.exceptions.RequestException(f"Transient {response.status_code}")
@@ -186,10 +250,19 @@ class WikidataClient:
                 return result, used_proxy
 
             except requests.exceptions.RequestException as e:
-                logger.error(
-                    f"SPARQL request failed (attempt {attempt + 1}/{self.config.max_retries}): {e}"
-                )
-
+                error_type = type(e).__name__
+                
+                # Log retry attempt with structured format
+                if attempt < self.config.max_retries - 1:
+                    wait_time = 0.5 + 0.2 * attempt
+                    _log_retry_attempt(
+                        attempt=attempt + 1,
+                        max_retries=self.config.max_retries,
+                        reason=f"request_exception_{error_type}",
+                        wait_time=wait_time,
+                        proxy=proxy,
+                    )
+                    
                 if proxy:
                     self.proxy_manager.mark_proxy_failed(proxy)
 
