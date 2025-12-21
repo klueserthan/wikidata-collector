@@ -13,7 +13,8 @@ A pure Python library for fetching public figures and institutions from Wikidata
 - **Caching**: TTL-based in-memory cache for SPARQL queries (configurable)
 - **Security**: Built-in SPARQL injection prevention with QID validation and literal escaping
 - **Data Models**: Pydantic models for type-safe data handling
-- **Testing**: Comprehensive test suite with 61 unit tests
+- **Structured Logging**: Comprehensive structured logging for observability and monitoring
+- **Testing**: Comprehensive test suite with 170 tests (125 unit, 42 integration, 3 live)
 
 ## Installation
 
@@ -210,23 +211,70 @@ result, proxy = client.execute_sparql_query(query)
 
 ## Error Handling
 
+The library provides specific exception types for different error categories:
+
 ```python
 from wikidata_collector.exceptions import (
     WikidataCollectorError,
     InvalidQIDError,
     EntityNotFoundError,
-    QueryExecutionError
+    QueryExecutionError,
+    ProxyMisconfigurationError,
+    UpstreamUnavailableError,
+    InvalidFilterError,
 )
 
 try:
-    entity, proxy = client.get_entity("INVALID")
-except InvalidQIDError as e:
-    print(f"Invalid QID format: {e}")
-except EntityNotFoundError as e:
-    print(f"Entity not found: {e}")
+    results = list(client.iterate_public_figures(
+        birthday_from="2000-01-01",
+        nationality=["United States"]
+    ))
+except InvalidFilterError as e:
+    print(f"Invalid filter configuration: {e}")
+except ProxyMisconfigurationError as e:
+    print(f"Proxy configuration issue: {e}")
+except UpstreamUnavailableError as e:
+    print(f"Wikidata service unavailable: {e}")
 except QueryExecutionError as e:
-    print(f"Query failed: {e}")
+    print(f"Query failed after retries: {e}")
 ```
+
+## Structured Logging
+
+The library emits structured logs for observability and monitoring:
+
+```python
+import logging
+import json
+
+# Configure structured logging handler
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(message)s'))
+
+logger = logging.getLogger('wikidata_collector')
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+# Now all operations will emit structured logs with extra fields:
+# - query_type: Type of query being executed
+# - result_count: Number of results returned
+# - latency_ms: Query execution time
+# - proxy_used: Proxy URL or "direct"
+# - event: Event type (e.g., "retry", "query_failure")
+# - attempt, max_retries, reason: For retry events
+# - error_category, error_message: For failure events
+
+results = list(client.iterate_public_figures(
+    birthday_from="2000-01-01",
+    nationality=["United States"],
+    max_results=100
+))
+```
+
+Structured log fields can be accessed via `LogRecord.extra` for parsing and monitoring:
+- Success logs include: `query_type`, `page`, `result_count`, `latency_ms`, `proxy_used`, `params`
+- Retry logs include: `event="retry"`, `attempt`, `max_retries`, `reason`, `wait_time_seconds`, `proxy`
+- Failure logs include: `event="query_failure"`, `error_category`, `error_message`, `attempts`, `filters`
 
 ## Development
 
