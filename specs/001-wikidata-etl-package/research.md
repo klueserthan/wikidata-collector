@@ -49,12 +49,49 @@
 
 - **Decision**: Use a stable, structured logging schema across the library, with fields such as
   `event`, `entity_kind`, `filters`, `page`, `result_count`, `duration_ms`, `status`, and
-  `error_type` for key events (query start/end, page fetches, retries, and failures).
+  `error_type` for key events (query start/end, page fetches, retries, and failures). The
+  implementation uses Python's standard `logging` module with structured data passed in the
+  `extra` parameter.
 - **Rationale**: A consistent schema makes it straightforward for ETL infrastructures to parse,
-  aggregate, and alert on logs without coupling to internal implementation details.
+  aggregate, and alert on logs without coupling to internal implementation details. The standard
+  logging module is widely supported and integrates with existing log aggregation systems.
+- **Implementation details**:
+  - Event types: `iteration_started`, `iteration_completed`, `iteration_failed`,
+    `max_results_reached`, `query_completed`, `query_failed`, `retry_scheduled`,
+    `proxy_marked_failed`, `proxy_failure`
+  - Error types: `invalid_filters`, `upstream_timeout`, `upstream_unavailable`,
+    `upstream_throttled`, `proxy_unreachable`, `all_proxies_failed`
+  - All log records include relevant context fields (attempt number, max retries, proxy used,
+    latency, etc.)
 - Alternatives considered:
   - Ad-hoc log messages per call-site: rejected because it would make automated analysis and
     monitoring brittle and increase the risk of missing important signals.
+  - Using a third-party structured logging library: rejected to minimize dependencies.
+
+### 8. Proxy Configuration and Fail-Closed Behavior
+
+- **Decision**: Implement fail-closed proxy behavior by default, where the package raises
+  `ProxyMisconfigurationError` when all configured proxies fail, rather than falling back to
+  direct access. Provide an explicit `proxy_fallback_to_direct` configuration option to enable
+  fallback when desired.
+- **Rationale**: Fail-closed prevents unintentional exposure of requests when proxy
+  infrastructure fails. Many environments require all requests to go through proxies for
+  compliance, monitoring, or security reasons. Making fallback explicit ensures intentional
+  decision-making.
+- **Implementation details**:
+  - `proxy_fallback_to_direct` configuration option (default: False)
+  - `PROXY_FALLBACK_TO_DIRECT` environment variable support
+  - `ProxyManager` validates all proxy URLs and blocks internal/private IPs (SSRF prevention)
+  - Round-robin proxy selection with per-proxy failure tracking
+  - Configurable cooldown period (default: 300 seconds) before retrying failed proxies
+  - Structured logging for all proxy failures and fallback events
+- **Alternatives considered**:
+  - Always falling back to direct: rejected because it defeats the purpose of proxy configuration
+    in many environments
+  - No fallback option: rejected because some environments may want automatic fallback for
+    resilience
+  - Fail-open by default: rejected because it's less secure and could violate compliance
+    requirements
 
 ### 4. Query Construction and Sub-Templates
 
@@ -84,9 +121,19 @@
 
 - **Decision**: Continue using and, where needed, extend the existing `exceptions` module to
   model invalid filters, upstream unavailability, and proxy configuration errors as distinct
-  exception types.
+  exception types. Specifically:
+  - `InvalidFilterError`: Raised when filter parameters are invalid or malformed
+  - `QueryExecutionError`: Raised when SPARQL query fails (legacy, replaced by more specific errors)
+  - `UpstreamUnavailableError`: Raised when upstream Wikidata service is temporarily unavailable
+    (timeouts, 5xx errors, rate limiting)
+  - `ProxyMisconfigurationError`: Raised when proxy configuration is invalid or all proxies fail
+    with fallback disabled (fail-closed mode)
+  - `EntityNotFoundError`: Raised when a Wikidata entity cannot be found
+  - `InvalidQIDError`: Raised when a QID is invalid or malformed
+  - `ProxyError`: Base exception for proxy-related errors
 - **Rationale**: ETL callers need to distinguish configuration errors from transient upstream
-  issues to implement correct retry and alerting behavior.
+  issues to implement correct retry and alerting behavior. Specific exception types enable
+  fine-grained error handling and better observability.
 - **Alternatives considered**:
   - Using only generic exceptions: rejected because it would make it harder for callers to
-    implement robust error handling.
+    implement robust error handling and differentiate between permanent and transient failures.

@@ -235,7 +235,9 @@ To satisfy FR-011 and SC-003, the package SHOULD emit structured log records for
 consistent schema that ETL infrastructure can parse. At minimum, log records SHOULD include:
 
 - `event`: a short machine-readable event name (e.g., `query_started`, `page_fetched`,
-  `iteration_completed`, `retry_scheduled`, `error_raised`).
+  `iteration_completed`, `retry_scheduled`, `error_raised`, `query_completed`, `query_failed`,
+  `iteration_started`, `max_results_reached`, `iteration_failed`, `proxy_marked_failed`,
+  `proxy_failure`).
 - `entity_kind`: `"public_figure"`, `"public_institution"`, or `null` when not applicable.
 - `filters`: a summarized representation of the filter set used (for example, date ranges and
   country/type labels), redacted as needed for privacy.
@@ -244,8 +246,42 @@ consistent schema that ETL infrastructure can parse. At minimum, log records SHO
 - `duration_ms`: elapsed time in milliseconds for the operation represented by the event.
 - `status`: high-level outcome such as `"success"`, `"retry"`, or `"failure"`.
 - `error_type`: a machine-readable error category when an error occurs (e.g.,
-  `"invalid_filters"`, `"upstream_timeout"`, `"proxy_unreachable"`).
+  `"invalid_filters"`, `"upstream_timeout"`, `"upstream_unavailable"`, `"upstream_throttled"`,
+  `"proxy_unreachable"`, `"all_proxies_failed"`).
 
 The exact mapping of these fields to the underlying logging framework is defined in the
 implementation plan and research notes, but the presence and semantics of these fields MUST remain
 stable for ETL consumers.
+
+### Error Categories (informative)
+
+The package distinguishes between the following error categories for better observability and
+handling:
+
+- **invalid_filters**: Filter parameters are malformed or unsupported (e.g., invalid date formats,
+  unknown country codes). These indicate client-side configuration issues.
+- **upstream_timeout**: Upstream Wikidata service did not respond within the configured timeout
+  period. May be transient and retriable.
+- **upstream_unavailable**: Upstream service returned a 5xx error (502, 503, 504) or other
+  temporary failure. May be transient and retriable.
+- **upstream_throttled**: Upstream service returned 429 (rate limiting). The package automatically
+  backs off based on Retry-After header or exponential backoff.
+- **proxy_unreachable**: Configured proxy cannot be reached or refuses connection.
+- **all_proxies_failed**: All configured proxies have failed and fallback to direct access is
+  disabled (fail-closed mode). Requires proxy configuration fix or enabling fallback.
+
+### Proxy Behavior (informative)
+
+The package supports optional proxy configuration for routing requests through external proxy
+services:
+
+- **Fail-closed by default**: When proxies are configured but all fail, the package raises
+  `ProxyMisconfigurationError` rather than falling back to direct access, preventing unintentional
+  exposure of requests.
+- **Optional fallback**: Set `proxy_fallback_to_direct=True` (or environment variable
+  `PROXY_FALLBACK_TO_DIRECT=true`) to allow direct access when all proxies fail.
+- **Proxy rotation**: Multiple proxies are used in round-robin fashion.
+- **Cooldown period**: Failed proxies are temporarily excluded (default 300 seconds) before being
+  retried.
+- **Security**: Only HTTP/HTTPS proxies are allowed; internal/private IP addresses are blocked to
+  prevent SSRF attacks.
