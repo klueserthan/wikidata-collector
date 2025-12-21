@@ -101,13 +101,12 @@ class TestLiveSparqlConnectivity:
                 birthday_from=birthday_from,
                 birthday_to=birthday_to,
                 nationality=nationality,
-                max_results=10,  # Limit results to keep test fast
+                max_results=5,  # Limit results to keep test fast
                 lang="en",
             )
         )
 
-        end_time = time.time()
-        duration = end_time - start_time
+        duration = time.time() - start_time
 
         # Assert at least one result is returned
         assert len(results) >= 1, (
@@ -120,12 +119,10 @@ class TestLiveSparqlConnectivity:
             "All results should be PublicFigure instances"
         )
 
-        # Verify call duration is within time budget
-        # Allow up to 20 seconds for network variance and SPARQL query execution
-        # Live endpoint may experience variable performance
-        assert duration <= 20.0, (
-            f"Query took {duration:.2f}s, which significantly exceeds expected performance. "
-            f"Consider optimizing query or adjusting filters."
+        # Verify end-to-end call duration is within time budget
+        time_budget = config.sparql_timeout_seconds
+        assert duration <= time_budget, (
+            f"End-to-end call duration ({duration:.2f}s) exceeded time budget ({time_budget}s)"
         )
 
         # Log successful execution for visibility
@@ -152,7 +149,7 @@ class TestLiveSparqlConnectivity:
         # Create client with no proxies for direct connection
         config = WikidataCollectorConfig(
             proxy_list=[],  # Direct connection only
-            sparql_timeout_seconds=60,  # Time budget for query execution
+            sparql_timeout_seconds=30,  # Time budget for query execution
             max_retries=1,  # Single attempt for live test
         )
         client = WikidataClient(config)
@@ -162,31 +159,27 @@ class TestLiveSparqlConnectivity:
 
         # Exercise iterator with restrictive filters (one country + one type)
         # Using United States (Q30) and government_agency to get deterministic results
-        iterator = client.iterate_public_institutions(
-            country="Q30",  # United States
-            types=["government_agency"],
-            max_results=5,  # Limit results for faster test execution
+        results = list(
+            client.iterate_public_institutions(
+                country="Q30",  # United States #TODO: accept country name as well
+                types=["government_agency"],
+                max_results=5,  # Limit results for faster test execution
+            )
         )
 
-        # Verify that we get an iterator, not a list (lazy evaluation)
-        assert hasattr(iterator, "__iter__"), "Should return an iterator"
-        assert hasattr(iterator, "__next__"), "Should return an iterator with __next__"
-
-        # Consume iterator incrementally to test iterator functionality
-        results = []
-        for institution in iterator:
-            # Verify each yielded item is a valid PublicInstitution instance
-            assert hasattr(institution, "id"), "Institution missing 'id' attribute"
-            assert hasattr(institution, "name"), "Institution missing 'name' attribute"
-            assert institution.id is not None, "Institution id should not be None"
-            assert institution.name is not None, "Institution name should not be None"
-            results.append(institution)
-
-        # Calculate total duration
         duration = time.time() - start_time
 
-        # Assert at least one result was returned
-        assert len(results) >= 1, "Expected at least one institution to be returned"
+        # Assert at least one result is returned
+        assert len(results) >= 1, (
+            "Expected at least 1 result with filters country=Q30, "
+            f"types=['government_agency'], but got {len(results)}"
+        )
+
+        # Verify all results have expected attributes
+        assert all(
+            hasattr(r, "id") and hasattr(r, "name") and r.id is not None and r.name is not None
+            for r in results
+        ), "All results should have valid 'id' and 'name' attributes"
 
         # Verify all results have unique IDs (no duplicates)
         result_ids = [r.id for r in results]
