@@ -66,7 +66,7 @@
 - [X] T023 [US1] Add structured logging for figures queries, pages, and errors (using the agreed schema) in wikidata_collector/client.py
 - [X] T024 [US1] Add figure-specific error handling for invalid filters and upstream failures in wikidata_collector/exceptions.py and wikidata_collector/client.py
 - [X] T025 [US1] Update quickstart examples for figures usage and max_results in specs/001-wikidata-etl-package/quickstart.md
-- [ ] T025a [P] [US1] Add live integration test to verify figures SPARQL query template and iterate_public_figures iterator work end-to-end against live Wikidata endpoint in tests/integration/test_live_sparql_endpoints.py, marked `@pytest.mark.live`. Exercise the iterator with restrictive filters (recent birthday range + single nationality), assert at least one result is returned, and confirm end-to-end call duration is within the configured time budget (~3s).
+- [X] T025a [P] [US1] Add live integration test to verify figures SPARQL query template and iterate_public_figures iterator work end-to-end against live Wikidata endpoint in tests/integration/test_live_sparql_endpoints.py, marked `@pytest.mark.live`. Exercise the iterator with restrictive filters (recent birthday range + single nationality), assert at least one result is returned, and confirm end-to-end call duration is within the configured time budget (~3s).
 
 ---
 
@@ -93,7 +93,7 @@
 - [X] T035 [US2] Add structured logging for institutions queries, pages, and errors (using the agreed schema) in wikidata_collector/client.py
 - [X] T036 [US2] Add institution-specific error handling for invalid filters and upstream failures in wikidata_collector/exceptions.py and wikidata_collector/client.py
 - [X] T037 [US2] Update quickstart examples for institutions usage and filters in specs/001-wikidata-etl-package/quickstart.md
-- [ ] T037a [P] [US2] Add live integration test to verify institutions SPARQL query template and iterate_public_institutions iterator work end-to-end against live Wikidata endpoint in tests/integration/test_live_sparql_endpoints.py, marked `@pytest.mark.live`. Exercise the iterator with restrictive filters (one country + one type), assert at least one result is returned, and confirm end-to-end call duration is within the configured time budget.
+- [X] T037a [P] [US2] Add live integration test to verify institutions SPARQL query template and iterate_public_institutions iterator work end-to-end against live Wikidata endpoint in tests/integration/test_live_sparql_endpoints.py, marked `@pytest.mark.live`. Exercise the iterator with restrictive filters (one country + one type), assert at least one result is returned, and confirm end-to-end call duration is within the configured time budget.
 
 ---
 
