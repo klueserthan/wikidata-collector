@@ -100,6 +100,7 @@ class WikidataClient:
             proxy_list=self.config.proxy_list,
             timeout_per_hop=self.config.sparql_timeout_seconds,
             cooldown_period=self.config.proxy_cooldown_seconds,
+            fallback_to_direct=self.config.proxy_fallback_to_direct,
         )
 
         logger.info(f"Initialized WikidataClient with {len(self.config.proxy_list)} proxies")
@@ -159,14 +160,33 @@ class WikidataClient:
                     wait_s = (
                         int(retry_after) if retry_after and retry_after.isdigit() else 2**attempt
                     )
-                    logger.warning(f"WDQS 429 received. Waiting {wait_s}s before retry...")
+                    logger.warning(
+                        f"WDQS 429 received. Waiting {wait_s}s before retry...",
+                        extra={
+                            "event": "retry_scheduled",
+                            "error_type": "upstream_throttled",
+                            "attempt": attempt + 1,
+                            "max_retries": self.config.max_retries,
+                            "retry_after_seconds": wait_s,
+                            "status": "retry",
+                        },
+                    )
                     time.sleep(wait_s)
                     raise requests.exceptions.RequestException("Throttled 429")
 
                 if response.status_code in (502, 503, 504):
                     wait_s = min(10, 2**attempt)
                     logger.warning(
-                        f"WDQS {response.status_code} transient error. Backing off {wait_s}s..."
+                        f"WDQS {response.status_code} transient error. Backing off {wait_s}s...",
+                        extra={
+                            "event": "retry_scheduled",
+                            "error_type": "upstream_unavailable",
+                            "status_code": response.status_code,
+                            "attempt": attempt + 1,
+                            "max_retries": self.config.max_retries,
+                            "retry_after_seconds": wait_s,
+                            "status": "retry",
+                        },
                     )
                     time.sleep(wait_s)
                     raise requests.exceptions.RequestException(f"Transient {response.status_code}")
@@ -180,14 +200,31 @@ class WikidataClient:
 
                 logger.info(
                     f"SPARQL query executed successfully "
-                    f"(latency: {sparql_latency_ms:.2f}ms, proxy: {used_proxy})"
+                    f"(latency: {sparql_latency_ms:.2f}ms, proxy: {used_proxy})",
+                    extra={
+                        "event": "query_completed",
+                        "duration_ms": sparql_latency_ms,
+                        "proxy_used": used_proxy,
+                        "status": "success",
+                        "attempt": attempt + 1,
+                    },
                 )
 
                 return result, used_proxy
 
             except requests.exceptions.RequestException as e:
                 logger.error(
-                    f"SPARQL request failed (attempt {attempt + 1}/{self.config.max_retries}): {e}"
+                    f"SPARQL request failed (attempt {attempt + 1}/{self.config.max_retries}): {e}",
+                    extra={
+                        "event": "query_failed",
+                        "error_type": "upstream_timeout"
+                        if "timeout" in str(e).lower()
+                        else "upstream_unavailable",
+                        "attempt": attempt + 1,
+                        "max_retries": self.config.max_retries,
+                        "proxy_used": proxy or "direct",
+                        "status": "failure" if attempt == self.config.max_retries - 1 else "retry",
+                    },
                 )
 
                 if proxy:
@@ -195,7 +232,9 @@ class WikidataClient:
 
                 # If this was the last attempt, raise
                 if attempt == self.config.max_retries - 1:
-                    raise QueryExecutionError(
+                    from .exceptions import UpstreamUnavailableError
+
+                    raise UpstreamUnavailableError(
                         f"Failed to execute SPARQL query after {self.config.max_retries} attempts: {e}"
                     )
 
@@ -203,7 +242,9 @@ class WikidataClient:
                 time.sleep(0.5 + 0.2 * attempt)
 
         # Should never reach here
-        raise QueryExecutionError("Failed to execute SPARQL query")
+        from .exceptions import UpstreamUnavailableError
+
+        raise UpstreamUnavailableError("Failed to execute SPARQL query")
 
     def get_public_figures(
         self,

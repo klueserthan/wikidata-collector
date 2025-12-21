@@ -16,6 +16,7 @@ class WikidataCollectorConfig:
         sparql_timeout_seconds: int = 60,
         max_retries: int = 3,
         proxy_cooldown_seconds: int = 300,
+        proxy_fallback_to_direct: bool = False,
     ):
         """Initialize configuration.
 
@@ -27,6 +28,7 @@ class WikidataCollectorConfig:
             sparql_timeout_seconds: Timeout for SPARQL requests
             max_retries: Maximum retry attempts
             proxy_cooldown_seconds: Cooldown period for failed proxies
+            proxy_fallback_to_direct: Allow fallback to direct access when proxies fail (default: False)
         """
         self.contact_email = contact_email or os.getenv("CONTACT_EMAIL", "not-provided")
         self.wikidata_sparql_url = wikidata_sparql_url or os.getenv(
@@ -49,6 +51,12 @@ class WikidataCollectorConfig:
         self.max_retries = max_retries
         self.proxy_cooldown_seconds = int(
             os.getenv("PROXY_COOLDOWN_SECONDS", proxy_cooldown_seconds)
+        )
+        # Fail-closed by default: do not fallback to direct access unless explicitly enabled
+        self.proxy_fallback_to_direct = (
+            os.getenv("PROXY_FALLBACK_TO_DIRECT", "false").lower() in ("true", "1", "yes")
+            if proxy_fallback_to_direct is None
+            else proxy_fallback_to_direct
         )
 
     def get_user_agent(self) -> str:

@@ -69,6 +69,7 @@ class ProxyManager:
         proxy_list: Optional[List[str]] = None,
         timeout_per_hop: int = 60,
         cooldown_period: int = 300,
+        fallback_to_direct: bool = False,
     ):
         """Initialize proxy manager.
 
@@ -76,15 +77,20 @@ class ProxyManager:
             proxy_list: List of proxy URLs to use
             timeout_per_hop: Timeout in seconds for each request
             cooldown_period: Cooldown period in seconds for failed proxies
+            fallback_to_direct: Allow fallback to direct access when all proxies fail (default: False)
         """
         self.proxies = validate_proxy_list(proxy_list) if proxy_list else []
         self.failed_proxies: Dict[str, float] = {}  # proxy -> failure_time
         self.current_index = 0
         self.cooldown_period = cooldown_period
         self.timeout_per_hop = timeout_per_hop
+        self.fallback_to_direct = fallback_to_direct
 
         if self.proxies:
-            logger.info(f"Loaded {len(self.proxies)} validated proxies")
+            logger.info(
+                f"Loaded {len(self.proxies)} validated proxies "
+                f"(fallback_to_direct={self.fallback_to_direct})"
+            )
 
     def get_available_proxies(self, override_proxies: Optional[List[str]] = None) -> List[str]:
         """Get list of available proxies, filtering out failed ones.
@@ -122,10 +128,30 @@ class ProxyManager:
 
         Returns:
             Proxy URL or None if no proxies available
+
+        Raises:
+            ProxyMisconfigurationError: When proxies are configured but all failed and fallback is disabled
         """
         available_proxies = self.get_available_proxies(override_proxies)
 
         if not available_proxies:
+            # If proxies were configured but all failed, check fallback policy
+            if self.proxies and not self.fallback_to_direct:
+                from .exceptions import ProxyMisconfigurationError
+
+                logger.error(
+                    "All configured proxies failed and fallback_to_direct is False",
+                    extra={
+                        "event": "proxy_failure",
+                        "error_type": "all_proxies_failed",
+                        "configured_proxies": len(self.proxies),
+                        "fallback_to_direct": self.fallback_to_direct,
+                    },
+                )
+                raise ProxyMisconfigurationError(
+                    "All configured proxies failed and fallback_to_direct is disabled. "
+                    "Enable fallback_to_direct or fix proxy configuration."
+                )
             return None
 
         # Round-robin selection
@@ -136,7 +162,14 @@ class ProxyManager:
     def mark_proxy_failed(self, proxy: str):
         """Mark a proxy as failed and record the failure time."""
         self.failed_proxies[proxy] = time.time()
-        logger.warning(f"Marked proxy {proxy} as failed")
+        logger.warning(
+            f"Marked proxy {proxy} as failed",
+            extra={
+                "event": "proxy_marked_failed",
+                "proxy": proxy,
+                "cooldown_period": self.cooldown_period,
+            },
+        )
 
     def get_proxy_dict(self, proxy: str) -> Dict[str, str]:
         """Convert proxy URL to requests proxy dict."""
