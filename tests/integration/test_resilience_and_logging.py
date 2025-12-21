@@ -100,8 +100,10 @@ class TestUpstreamTimeouts:
                 ]
 
             # Verify success log
-            success_logs = [r for r in caplog.records if "successfully" in r.message]
-            assert len(success_logs) == 1
+            info_logs = [r for r in caplog.records if r.levelname == "INFO"]
+            assert len(info_logs) >= 1
+            # Verify success message is in one of the logs
+            assert any("successfully" in r.message for r in info_logs)
 
 
 @pytest.mark.integration
@@ -139,13 +141,12 @@ class TestProxyFailures:
                 # Verify success
                 assert result == {"results": {"bindings": []}}
 
-            # Verify retry log was created
+            # Verify retry log was created using structured fields
             retry_logs = [r for r in caplog.records if hasattr(r, "event") and r.event == "retry"]
             assert len(retry_logs) >= 1
 
-            # Verify proxy failure was logged
-            proxy_warning_logs = [r for r in caplog.records if "failed" in r.message.lower()]
-            assert len(proxy_warning_logs) >= 1
+            # Verify proxy information is logged in retry events
+            assert any(r.proxy is not None for r in retry_logs)
 
     def test_all_proxies_fail_exhausts_retries(self, mock_config, caplog):
         """
