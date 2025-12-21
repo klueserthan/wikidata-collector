@@ -90,3 +90,43 @@
 - **Alternatives considered**:
   - Using only generic exceptions: rejected because it would make it harder for callers to
     implement robust error handling.
+
+### 8. Live SPARQL Connectivity Testing Strategy
+
+- **Decision**: Implement live integration tests that connect directly to the official Wikidata
+  SPARQL endpoint (without proxies) to verify basic connectivity and foundational HTTP stack
+  functionality. These tests are marked with `@pytest.mark.live` and skipped by default in CI using
+  `-m "not live"` in the test command.
+- **Rationale**: Live tests provide confidence that the package works against the actual Wikidata
+  infrastructure and can detect breaking changes in the SPARQL endpoint or query templates. However,
+  they depend on external network access and may be slow or flaky, so they must be opt-in and not
+  block regular CI runs.
+- **Test Coverage**:
+  - **Basic connectivity smoke test**: Executes a minimal SPARQL query (equivalent to `SELECT 1`)
+    against the Wikidata endpoint to verify HTTP connectivity, endpoint availability, and response
+    parsing. This test validates that the HTTP stack can reach the endpoint and receive valid JSON
+    responses within the configured timeout (60 seconds).
+  - **Public figures iterator test**: Exercises `iterate_public_figures` with very restrictive
+    filters (narrow birthday range + single nationality) to minimize result set size and ensure fast
+    execution (within 30 seconds). Verifies that the SPARQL query template for figures works
+    end-to-end and returns at least one valid `PublicFigure` instance.
+  - **Public institutions iterator test**: Exercises `iterate_public_institutions` with restrictive
+    filters (single country + single type) and a small `max_results` limit to ensure fast execution.
+    Verifies that the SPARQL query template for institutions works end-to-end and returns at least
+    one valid result with expected attributes.
+- **Timeout Configuration**: All live tests use generous timeout settings (30-60 seconds) to
+  accommodate potential network latency and Wikidata query processing time. Tests measure actual
+  execution duration and assert that it stays within the configured time budget.
+- **Skip Behavior**: Live tests provide clear skip reasons when run in environments without network
+  access or when the `live` marker is not selected. This ensures that developers can run the full
+  test suite locally without requiring internet access, while still having the option to validate
+  against the live endpoint when needed.
+- **CI Integration**: Live tests are explicitly excluded from default CI runs to avoid external
+  dependencies and ensure fast, reliable CI feedback. They can be run manually or in dedicated
+  nightly/weekly test runs that are allowed to fail without blocking merges.
+- **Alternatives considered**:
+  - Always run live tests in CI: rejected because external dependencies make CI unreliable and slow.
+  - Only use mocked/stubbed tests: rejected because we need confidence that the package works
+    against the real Wikidata endpoint, especially after changes to query templates or HTTP handling.
+  - Use a dedicated test Wikidata instance: rejected due to infrastructure complexity and the fact
+    that the official endpoint is the actual integration target.
