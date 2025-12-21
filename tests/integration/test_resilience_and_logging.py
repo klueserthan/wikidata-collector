@@ -13,7 +13,11 @@ import requests
 
 from wikidata_collector.client import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
-from wikidata_collector.exceptions import QueryExecutionError
+from wikidata_collector.exceptions import (
+    ProxyMisconfigurationError,
+    QueryExecutionError,
+    UpstreamUnavailableError,
+)
 
 
 @pytest.fixture
@@ -38,7 +42,7 @@ class TestUpstreamTimeouts:
         Verifies:
         - Retries are attempted on timeout
         - Structured logs include retry attempts
-        - QueryExecutionError is raised after max retries
+        - ProxyMisconfigurationError is raised after max retries when proxies are configured
         """
         client = WikidataClient(mock_config)
 
@@ -47,7 +51,7 @@ class TestUpstreamTimeouts:
             mock_get.side_effect = requests.exceptions.Timeout("Connection timeout")
 
             with caplog.at_level(logging.WARNING):
-                with pytest.raises(QueryExecutionError) as exc_info:
+                with pytest.raises(ProxyMisconfigurationError) as exc_info:
                     client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
 
                 # Verify error message mentions retries
@@ -154,7 +158,7 @@ class TestProxyFailures:
 
         Verifies:
         - All proxies are tried across retry attempts
-        - QueryExecutionError is raised after exhausting retries
+        - ProxyMisconfigurationError is raised after exhausting retries
         - Structured logs capture all retry attempts
         """
         client = WikidataClient(mock_config)
@@ -164,7 +168,7 @@ class TestProxyFailures:
             mock_get.side_effect = requests.exceptions.ConnectionError("Proxy connection failed")
 
             with caplog.at_level(logging.WARNING):
-                with pytest.raises(QueryExecutionError):
+                with pytest.raises(ProxyMisconfigurationError):
                     client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
 
             # Verify multiple retry attempts
@@ -178,7 +182,7 @@ class TestProxyFailures:
         Verifies:
         - When proxies are configured, they are used exclusively
         - No automatic fallback to direct connection occurs
-        - This is the default fail-closed behavior
+        - ProxyMisconfigurationError is raised when all proxies fail
         """
         # Configure client with proxies
         config = WikidataCollectorConfig(
@@ -193,7 +197,7 @@ class TestProxyFailures:
             mock_get.side_effect = requests.exceptions.ConnectionError("Proxy failed")
 
             with caplog.at_level(logging.WARNING):
-                with pytest.raises(QueryExecutionError):
+                with pytest.raises(ProxyMisconfigurationError):
                     client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
 
             # Verify all requests used proxy (no direct fallback)
@@ -249,6 +253,33 @@ class TestUpstreamErrors:
     def test_503_service_unavailable_retry(self, mock_config, caplog):
         """
         Test handling of 503 (Service Unavailable) errors.
+
+        Verifies:
+        - 503 triggers retry with backoff
+        - Structured logging captures upstream error
+        - UpstreamUnavailableError raised after all retries exhausted
+        """
+        client = WikidataClient(mock_config)
+
+        with patch("requests.get") as mock_get, patch("time.sleep"):
+            # All calls return 503
+            mock_503_response = MagicMock()
+            mock_503_response.status_code = 503
+
+            mock_get.return_value = mock_503_response
+
+            with caplog.at_level(logging.WARNING):
+                with pytest.raises(UpstreamUnavailableError):
+                    client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
+
+            # Verify retry log with upstream error reason
+            retry_logs = [r for r in caplog.records if hasattr(r, "event") and r.event == "retry"]
+            assert len(retry_logs) >= 1
+            assert any("upstream_error_503" in r.reason for r in retry_logs)
+
+    def test_503_service_unavailable_then_success(self, mock_config, caplog):
+        """
+        Test successful recovery after 503 error.
 
         Verifies:
         - 503 triggers retry with backoff

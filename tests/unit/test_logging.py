@@ -5,7 +5,6 @@ Tests validate structured logging payloads and log field consistency.
 """
 
 import logging
-from typing import Any, Dict
 
 import pytest
 

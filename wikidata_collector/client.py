@@ -16,7 +16,9 @@ from .exceptions import (
     EntityNotFoundError,
     InvalidFilterError,
     InvalidQIDError,
+    ProxyMisconfigurationError,
     QueryExecutionError,
+    UpstreamUnavailableError,
 )
 from .models import PublicFigure, PublicInstitution
 from .normalizers.figure_normalizer import normalize_public_figure
@@ -251,7 +253,7 @@ class WikidataClient:
 
             except requests.exceptions.RequestException as e:
                 error_type = type(e).__name__
-                
+
                 # Log retry attempt with structured format
                 if attempt < self.config.max_retries - 1:
                     wait_time = 0.5 + 0.2 * attempt
@@ -262,20 +264,59 @@ class WikidataClient:
                         wait_time=wait_time,
                         proxy=proxy,
                     )
-                    
+
                 if proxy:
                     self.proxy_manager.mark_proxy_failed(proxy)
 
-                # If this was the last attempt, raise
+                # If this was the last attempt, determine error type and raise
                 if attempt == self.config.max_retries - 1:
-                    raise QueryExecutionError(
-                        f"Failed to execute SPARQL query after {self.config.max_retries} attempts: {e}"
-                    )
+                    # Check for upstream errors first (503, 504, etc.) based on error message
+                    if "503" in str(e) or "504" in str(e) or "502" in str(e):
+                        _log_query_failure(
+                            query_type="sparql_query",
+                            error_category="upstream_unavailable",
+                            error_message=str(e),
+                            attempts=self.config.max_retries,
+                        )
+                        raise UpstreamUnavailableError(
+                            f"Upstream Wikidata service unavailable after {self.config.max_retries} attempts: {e}"
+                        )
+                    # Check if we were using proxies and all failed (proxy misconfiguration)
+                    elif (
+                        self.config.proxy_list
+                        and len(self.config.proxy_list) > 0
+                        and len(self.proxy_manager.get_available_proxies()) == 0
+                    ):
+                        _log_query_failure(
+                            query_type="sparql_query",
+                            error_category="proxy_misconfiguration",
+                            error_message=str(e),
+                            attempts=self.config.max_retries,
+                        )
+                        raise ProxyMisconfigurationError(
+                            f"All configured proxies failed after {self.config.max_retries} attempts: {e}"
+                        )
+                    else:
+                        _log_query_failure(
+                            query_type="sparql_query",
+                            error_category="query_execution_error",
+                            error_message=str(e),
+                            attempts=self.config.max_retries,
+                        )
+                        raise QueryExecutionError(
+                            f"Failed to execute SPARQL query after {self.config.max_retries} attempts: {e}"
+                        )
 
                 # Short jitter before retry
                 time.sleep(0.5 + 0.2 * attempt)
 
         # Should never reach here
+        _log_query_failure(
+            query_type="sparql_query",
+            error_category="query_execution_error",
+            error_message="Failed to execute query after all retries",
+            attempts=self.config.max_retries,
+        )
         raise QueryExecutionError("Failed to execute SPARQL query")
 
     def get_public_figures(
