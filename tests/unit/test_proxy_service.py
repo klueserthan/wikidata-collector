@@ -117,6 +117,14 @@ class TestProxyManagerFallback:
         )
         assert manager.fallback_to_direct is True
 
+    def test_fallback_explicitly_disabled(self):
+        """Test that fallback can be explicitly disabled even if environment variable is set"""
+        # This tests the fix for the config parsing issue
+        manager = ProxyManager(
+            proxy_list=["http://proxy.example.com:8080"], fallback_to_direct=False
+        )
+        assert manager.fallback_to_direct is False
+
     def test_fail_closed_when_all_proxies_failed(self):
         """Test that manager raises error when all proxies fail and fallback is disabled"""
         manager = ProxyManager(

@@ -53,11 +53,14 @@ class WikidataCollectorConfig:
             os.getenv("PROXY_COOLDOWN_SECONDS", proxy_cooldown_seconds)
         )
         # Fail-closed by default: do not fallback to direct access unless explicitly enabled
-        self.proxy_fallback_to_direct = (
-            os.getenv("PROXY_FALLBACK_TO_DIRECT", "false").lower() in ("true", "1", "yes")
-            if proxy_fallback_to_direct is None
-            else proxy_fallback_to_direct
-        )
+        self.proxy_fallback_to_direct = proxy_fallback_to_direct
+        if self.proxy_fallback_to_direct is None:
+            # Only check environment if not explicitly set
+            self.proxy_fallback_to_direct = os.getenv("PROXY_FALLBACK_TO_DIRECT", "false").lower() in (
+                "true",
+                "1",
+                "yes",
+            )
 
     def get_user_agent(self) -> str:
         """Get User-Agent string for Wikidata requests."""
