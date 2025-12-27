@@ -284,3 +284,79 @@ class TestBuildPublicInstitutionsQuery:
 
         # Should be stripped and matched to mapping
         assert "wdt:P31 wd:Q7278" in query
+
+
+class TestQueryBuilderEdgeCases:
+    """Test edge cases for query builders."""
+
+    def test_figures_with_limit_one(self):
+        """Test query with limit=1 (minimum valid limit)."""
+        query = build_public_figures_query(limit=1)
+
+        # Should generate LIMIT 2 (limit + 1 for has_more detection)
+        assert "LIMIT 2" in query
+
+    def test_figures_with_large_limit(self):
+        """Test query with very large limit."""
+        query = build_public_figures_query(limit=1000)
+
+        # Should generate LIMIT 1001
+        assert "LIMIT 1001" in query
+
+    def test_figures_with_all_filters_combined(self):
+        """Test query with all possible filters at once."""
+        query = build_public_figures_query(
+            birthday_from="1990-01-01",
+            birthday_to="2000-12-31",
+            nationality=["Q30", "Q145"],
+            profession=["Q36180", "writer"],
+            lang="fr",
+            limit=25,
+        )
+
+        # Verify all filters are present
+        assert "1990-01-01" in query
+        assert "2000-12-31" in query
+        assert "wdt:P27 wd:Q30" in query
+        assert "wdt:P27 wd:Q145" in query
+        assert "wdt:P106 wd:Q36180" in query
+        assert 'rdfs:label "writer"' in query
+        assert "LIMIT 26" in query
+
+    def test_institutions_with_limit_one(self):
+        """Test query with limit=1 (minimum valid limit)."""
+        query = build_public_institutions_query(limit=1)
+
+        # Should generate LIMIT 2 (limit + 1 for has_more detection)
+        assert "LIMIT 2" in query
+
+    def test_institutions_with_all_filters_combined(self):
+        """Test query with all possible filters at once."""
+        query = build_public_institutions_query(
+            country="Q30",
+            type=["Q327333", "university"],
+            jurisdiction="Q30",
+            lang="es",
+            limit=50,
+        )
+
+        # Verify all filters are present
+        assert "wdt:P17 wd:Q30" in query
+        assert "wdt:P31 wd:Q327333" in query
+        assert 'rdfs:label "university"' in query
+        assert "wdt:P1001" in query  # jurisdiction property
+        assert "LIMIT 51" in query
+
+    def test_figures_empty_nationality_list(self):
+        """Test query with empty nationality list."""
+        query = build_public_figures_query(nationality=[])
+
+        # Should have OPTIONAL clause for country
+        assert "OPTIONAL { ?person wdt:P27 ?country. }" in query
+
+    def test_institutions_empty_type_list(self):
+        """Test query with empty type list."""
+        query = build_public_institutions_query(type=[])
+
+        # Should still have basic structure
+        assert "?institution wdt:P31 ?type" in query
