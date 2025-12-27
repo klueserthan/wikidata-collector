@@ -726,4 +726,3 @@ class TestNormalizerEdgeCases:
         assert len(result.website) == 3
         assert len(result.accounts) == 2
         # Note: PublicInstitution doesn't have 'identifiers' field in the model
-

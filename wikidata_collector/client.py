@@ -7,7 +7,7 @@ This client has no FastAPI dependencies and can be used standalone.
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import requests
 
