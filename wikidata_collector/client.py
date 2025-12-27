@@ -307,8 +307,18 @@ class WikidataClient:
                         )
 
                 # Short jitter before retry
-                time.sleep(0.5 + 0.2 * attempt)
+                sleep_time = 0.5 + 0.2 * attempt
+                should_skip_sleep = False
 
+                # Avoid double-sleep for specific HTTP status codes where a prior handler
+                # has already applied a delay (e.g., 429, 502, 503, 504).
+                if isinstance(e, requests.exceptions.HTTPError):
+                    response = getattr(e, "response", None)
+                    if response is not None and response.status_code in {429, 502, 503, 504}:
+                        should_skip_sleep = True
+
+                if not should_skip_sleep:
+                    time.sleep(sleep_time)
         # This point should be unreachable: every loop iteration should either
         # return a result or raise on the final attempt. If we get here, it
         # indicates a logic error in the retry loop implementation.
