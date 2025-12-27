@@ -188,9 +188,14 @@ class WikidataClient:
 
         params = {"query": query}
         used_proxy = "direct"
+        # Track the last status code to properly categorize errors
+        last_status_code = None
 
         for attempt in range(self.config.max_retries):
             proxy = None
+            # Track if we already logged retry for this attempt (to avoid duplicates)
+            already_logged_retry = False
+
             try:
                 # Get proxy for this attempt
                 proxy = self.proxy_manager.get_next_proxy(override_proxies)
@@ -211,31 +216,39 @@ class WikidataClient:
 
                 # Handle throttling gracefully
                 if response.status_code == 429:
+                    last_status_code = 429
                     retry_after = response.headers.get("Retry-After")
                     wait_s = (
                         int(retry_after) if retry_after and retry_after.isdigit() else 2**attempt
                     )
-                    _log_retry_attempt(
-                        attempt=attempt + 1,
-                        max_retries=self.config.max_retries,
-                        reason="throttled_429",
-                        wait_time=wait_s,
-                        proxy=proxy,
-                    )
+                    if attempt < self.config.max_retries - 1:
+                        _log_retry_attempt(
+                            attempt=attempt + 1,
+                            max_retries=self.config.max_retries,
+                            reason="throttled_429",
+                            wait_time=wait_s,
+                            proxy=proxy,
+                        )
+                        already_logged_retry = True
                     time.sleep(wait_s)
-                    raise requests.exceptions.RequestException("Throttled 429")
+                    raise requests.exceptions.HTTPError("429 Too Many Requests", response=response)
 
                 if response.status_code in (502, 503, 504):
+                    last_status_code = response.status_code
                     wait_s = min(10, 2**attempt)
-                    _log_retry_attempt(
-                        attempt=attempt + 1,
-                        max_retries=self.config.max_retries,
-                        reason=f"upstream_error_{response.status_code}",
-                        wait_time=wait_s,
-                        proxy=proxy,
-                    )
+                    if attempt < self.config.max_retries - 1:
+                        _log_retry_attempt(
+                            attempt=attempt + 1,
+                            max_retries=self.config.max_retries,
+                            reason=f"upstream_error_{response.status_code}",
+                            wait_time=wait_s,
+                            proxy=proxy,
+                        )
+                        already_logged_retry = True
                     time.sleep(wait_s)
-                    raise requests.exceptions.RequestException(f"Transient {response.status_code}")
+                    raise requests.exceptions.HTTPError(
+                        f"{response.status_code} Service Unavailable", response=response
+                    )
 
                 response.raise_for_status()
 
@@ -254,8 +267,11 @@ class WikidataClient:
             except requests.exceptions.RequestException as e:
                 error_type = type(e).__name__
 
-                # Log retry attempt with structured format
-                if attempt < self.config.max_retries - 1:
+                if proxy:
+                    self.proxy_manager.mark_proxy_failed(proxy)
+
+                # Log retry attempt with structured format (only if not already logged)
+                if attempt < self.config.max_retries - 1 and not already_logged_retry:
                     wait_time = 0.5 + 0.2 * attempt
                     _log_retry_attempt(
                         attempt=attempt + 1,
@@ -265,13 +281,10 @@ class WikidataClient:
                         proxy=proxy,
                     )
 
-                if proxy:
-                    self.proxy_manager.mark_proxy_failed(proxy)
-
                 # If this was the last attempt, determine error type and raise
                 if attempt == self.config.max_retries - 1:
-                    # Check for upstream errors first (503, 504, etc.) based on error message
-                    if "503" in str(e) or "504" in str(e) or "502" in str(e):
+                    # Check for upstream errors based on tracked status code (not string matching)
+                    if last_status_code in (502, 503, 504):
                         _log_query_failure(
                             query_type="sparql_query",
                             error_category="upstream_unavailable",
@@ -306,19 +319,9 @@ class WikidataClient:
                             f"Failed to execute SPARQL query after {self.config.max_retries} attempts: {e}"
                         )
 
-                # Short jitter before retry
-                sleep_time = 0.5 + 0.2 * attempt
-                should_skip_sleep = False
-
-                # Avoid double-sleep for specific HTTP status codes where a prior handler
-                # has already applied a delay (e.g., 429, 502, 503, 504).
-                if isinstance(e, requests.exceptions.HTTPError):
-                    response = getattr(e, "response", None)
-                    if response is not None and response.status_code in {429, 502, 503, 504}:
-                        should_skip_sleep = True
-
-                if not should_skip_sleep:
-                    time.sleep(sleep_time)
+                # Short jitter before retry (skip if already slept for status codes)
+                if not already_logged_retry:
+                    time.sleep(0.5 + 0.2 * attempt)
         # This point should be unreachable: every loop iteration should either
         # return a result or raise on the final attempt. If we get here, it
         # indicates a logic error in the retry loop implementation.

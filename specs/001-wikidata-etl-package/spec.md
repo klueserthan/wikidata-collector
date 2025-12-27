@@ -265,8 +265,9 @@ appropriately. These exception types provide clear categorization of failure mod
   requests do not automatically fall back to direct connections.
   
 - **`UpstreamUnavailableError`**: Raised when the upstream Wikidata service is unavailable after
-  retries (e.g., persistent 503 errors, timeouts, or connection failures). ETL jobs may choose to
-  retry the entire job later or alert operators.
+  retries due to persistent HTTP 5xx gateway/service-unavailable responses (specifically repeated
+  502, 503, or 504 status codes). ETL jobs may choose to retry the entire job later or alert
+  operators.
   
 - **`QueryExecutionError`**: A general-purpose exception raised when a SPARQL query fails after
   retries for reasons not covered by more specific exception types. Includes the underlying error

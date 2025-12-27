@@ -15,6 +15,7 @@ from wikidata_collector.client import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.exceptions import (
     ProxyMisconfigurationError,
+    QueryExecutionError,
     UpstreamUnavailableError,
 )
 
@@ -41,7 +42,7 @@ class TestUpstreamTimeouts:
         Verifies:
         - Retries are attempted on timeout
         - Structured logs include retry attempts
-        - ProxyMisconfigurationError is raised after max retries when proxies are configured
+        - ProxyMisconfigurationError is raised when all proxies fail due to timeout
         """
         client = WikidataClient(mock_config)
 
@@ -50,6 +51,7 @@ class TestUpstreamTimeouts:
             mock_get.side_effect = requests.exceptions.Timeout("Connection timeout")
 
             with caplog.at_level(logging.WARNING):
+                # With proxies configured and all failing, should raise ProxyMisconfigurationError
                 with pytest.raises(ProxyMisconfigurationError) as exc_info:
                     client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
 
@@ -67,6 +69,34 @@ class TestUpstreamTimeouts:
                 assert hasattr(retry_log, "reason")
                 assert hasattr(retry_log, "wait_time_seconds")
                 assert "request_exception" in retry_log.reason
+
+    def test_timeout_without_proxy_raises_query_execution_error(self, caplog):
+        """
+        Test that timeout errors without proxies raise QueryExecutionError.
+
+        Verifies:
+        - Timeouts without proxies don't imply proxy misconfiguration
+        - QueryExecutionError is raised for general query failures
+        """
+        # Create client without proxies
+        config = WikidataCollectorConfig(
+            proxy_list=[],
+            sparql_timeout_seconds=5,
+            max_retries=3,
+        )
+        client = WikidataClient(config)
+
+        with patch("requests.get") as mock_get:
+            # Simulate timeout on all attempts
+            mock_get.side_effect = requests.exceptions.Timeout("Connection timeout")
+
+            with caplog.at_level(logging.WARNING):
+                # Without proxies, should raise QueryExecutionError
+                with pytest.raises(QueryExecutionError) as exc_info:
+                    client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
+
+                # Verify error message mentions retries
+                assert "after 3 attempts" in str(exc_info.value)
 
     def test_timeout_recovery_on_subsequent_attempt(self, mock_config, caplog):
         """
