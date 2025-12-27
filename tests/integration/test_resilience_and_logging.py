@@ -264,7 +264,9 @@ class TestUpstreamErrors:
             mock_get.side_effect = [mock_429_response, mock_success_response]
 
             with caplog.at_level(logging.WARNING):
-                result, _ = client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
+                result, _ = client.execute_sparql_query(
+                    "SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }"
+                )
 
                 # Verify success
                 assert result == {"results": {"bindings": []}}
@@ -329,7 +331,9 @@ class TestUpstreamErrors:
             mock_get.side_effect = [mock_503_response, mock_success_response]
 
             with caplog.at_level(logging.WARNING):
-                result, _ = client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
+                result, _ = client.execute_sparql_query(
+                    "SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }"
+                )
 
                 # Verify success
                 assert result == {"results": {"bindings": []}}
