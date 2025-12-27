@@ -7,6 +7,7 @@ A pure Python library for fetching public figures and institutions from Wikidata
 - **Pure Python Module**: No FastAPI or web framework dependencies - use in any Python project
 - **SPARQL Query Builder**: Type-safe query construction with security validation
 - **Keyset Pagination**: Deterministic QID-based cursor pagination (no OFFSET drift)
+- **Iterator API**: High-level iterators that handle pagination automatically (internal page size: 15 entities)
 - **Multi-Valued Fields**: Correctly returns all professions, awards, nationalities, etc.
 - **Proxy Rotation**: Round-robin with failure detection, retry/backoff, and Retry-After handling
 - **Comprehensive Filtering**: Birth dates, nationality, profession, institution types, country, jurisdiction
@@ -41,25 +42,35 @@ config = WikidataCollectorConfig(
 )
 client = WikidataClient(config)
 
-# Query public figures
+# Iterator API (Recommended) - Returns normalized PublicFigure objects
+for figure in client.iterate_public_figures(
+    birthday_from="1990-01-01",
+    nationality=["US"],  # United States (ISO code or label)
+    max_results=50,
+    lang="en"
+):
+    print(f"{figure.id}: {figure.name}")
+    print(f"  Birthday: {figure.birthday}")
+    print(f"  Nationalities: {', '.join(figure.nationalities)}")
+    print(f"  Professions: {', '.join(figure.professions)}")
+
+# Iterator API for institutions - Returns normalized PublicInstitution objects
+for institution in client.iterate_public_institutions(
+    country="US",  # Single country (ISO code or label)
+    types=["public broadcaster"],  # Institution types
+    max_results=50,
+    lang="en"
+):
+    print(f"{institution.id}: {institution.name}")
+    print(f"  Founded: {institution.founded}")
+    print(f"  Country: {', '.join(institution.country)}")
+    print(f"  Types: {', '.join(institution.types)}")
+
+# Lower-level API - For advanced use cases, returns raw SPARQL bindings
 results, proxy_used = client.get_public_figures(
     birthday_from="1990-01-01",
-    nationality=["Q30"],  # United States (QID preferred for performance)
+    nationality=["Q30"],  # QID preferred for performance
     profession=["Q33999"],  # Actor
-    lang="en",
-    limit=50
-)
-
-# Process results
-for item in results:
-    qid = item["person"]["value"].split("/")[-1]
-    name = item.get("personLabel", {}).get("value")
-    print(f"{qid}: {name}")
-
-# Query institutions
-results, proxy_used = client.get_public_institutions(
-    type=["Q327333"],  # Government agency (use QID for better performance)
-    country="Q30",  # United States
     lang="en",
     limit=50
 )
@@ -112,7 +123,29 @@ client = WikidataClient(config)
 
 ## Pagination
 
-### Keyset Pagination (Recommended)
+### Iterator API (Recommended)
+
+The iterator API handles pagination automatically and returns normalized objects:
+
+```python
+# Automatically paginates through all results
+for figure in client.iterate_public_figures(
+    nationality=["US"],
+    max_results=100  # Optional limit
+):
+    print(f"{figure.name}")
+
+# Without max_results, yields all matching entities
+for institution in client.iterate_public_institutions(
+    country="US",
+    types=["university"]
+):
+    print(f"{institution.name}")
+```
+
+### Manual Keyset Pagination (Advanced)
+
+For lower-level control, use keyset pagination:
 
 ```python
 # First page
@@ -322,7 +355,21 @@ tests/                       # Test suite
 
 ## Best Practices
 
-### Use QIDs for Better Performance
+### Use Iterator API for ETL Workflows
+
+```python
+# ✓ Recommended - handles pagination automatically, returns typed objects
+for figure in client.iterate_public_figures(
+    nationality=["US"],
+    max_results=1000
+):
+    process(figure)
+
+# ✗ Manual pagination - more code, raw SPARQL bindings
+results, _ = client.get_public_figures(nationality=["Q30"], limit=50)
+```
+
+### Use QIDs for Better Performance (Lower-level API)
 
 ```python
 # ✓ Fast - uses direct QID matching
@@ -330,9 +377,11 @@ client.get_public_figures(nationality=["Q30"])  # United States
 
 # ✗ Slow - requires label joins in SPARQL
 client.get_public_figures(nationality=["United States"])
+
+# Note: Iterator API accepts both and handles translation
 ```
 
-### Prefer Keyset Pagination
+### Prefer Keyset Pagination (Lower-level API)
 
 ```python
 # ✓ Deterministic and efficient
@@ -351,14 +400,16 @@ config = WikidataCollectorConfig(
 )
 ```
 
-### Use Smaller Page Sizes
+### Use Appropriate Result Limits
 
 ```python
-# ✓ Recommended - avoids WDQS timeouts
-results, _ = client.get_public_figures(limit=50)
+# ✓ Recommended - internal page size is 15, max_results controls total
+for figure in client.iterate_public_figures(max_results=100):
+    process(figure)
 
-# ✗ May timeout for complex queries
-results, _ = client.get_public_figures(limit=500)
+# ✓ Also good - no limit, yields all matches
+for figure in client.iterate_public_figures(nationality=["US"]):
+    process(figure)
 ```
 
 ## Common Use Cases
@@ -366,6 +417,17 @@ results, _ = client.get_public_figures(limit=500)
 ### Finding All Actors Born After 1990
 
 ```python
+# Using iterator API (recommended)
+for figure in client.iterate_public_figures(
+    birthday_from="1990-01-01",
+    max_results=100,
+    lang="en"
+):
+    # Filter by profession in your code or add profession filter
+    if "actor" in [p.lower() for p in figure.professions]:
+        print(f"{figure.name} - {figure.birthday}")
+
+# Using lower-level API with QID
 results, _ = client.get_public_figures(
     birthday_from="1990-01-01",
     profession=["Q33999"],  # Actor QID
@@ -377,6 +439,16 @@ results, _ = client.get_public_figures(
 ### Finding US Government Agencies
 
 ```python
+# Using iterator API (recommended)
+for institution in client.iterate_public_institutions(
+    country="US",  # ISO code
+    types=["government agency"],
+    max_results=100,
+    lang="en"
+):
+    print(f"{institution.name} - Founded: {institution.founded}")
+
+# Using lower-level API with QID
 results, _ = client.get_public_institutions(
     type=["Q327333"],  # Government agency QID
     country="Q30",  # United States QID
