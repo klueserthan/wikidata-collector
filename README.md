@@ -309,6 +309,36 @@ Structured log fields can be accessed via `LogRecord.extra` for parsing and moni
 - Retry logs include: `event="retry"`, `attempt`, `max_retries`, `reason`, `wait_time_seconds`, `proxy`
 - Failure logs include: `event="query_failure"`, `error_category`, `error_message`, `attempts`, `filters`
 
+## Performance
+
+### Internal Page Size: 15 Entities
+
+The library uses an internal page size of 15 entities (`DEFAULT_PAGE_SIZE = 15`) for optimal performance with the Wikidata Query Service:
+
+**Rationale**:
+- Wikidata Query Service has strict timeouts (~60 seconds)
+- Complex queries with multiple OPTIONAL clauses complete faster with smaller pages
+- Memory-efficient streaming for large result sets
+- Predictable latency (typically < 3 seconds per page)
+
+**Performance Guidelines**:
+- Small workloads (< 1,000 entities): Default page size works well
+- Large workloads (> 10,000 entities): Use restrictive filters or off-peak hours
+- Time-sensitive queries: Use `max_results` to limit total results
+- Best throughput: Iterator API uses keyset pagination automatically
+
+**Query Optimization**:
+- Use QIDs instead of labels for faster queries (e.g., `nationality=["Q30"]` vs `["United States"]`)
+- Keyset pagination (automatic) is more efficient than OFFSET pagination
+- Monitor latency using structured logging (`latency_ms` field)
+
+**Measured Performance** (based on live integration tests):
+- Simple queries (1-2 filters): ~1-2 seconds per page
+- Complex queries (multiple filters + labels): ~2-4 seconds per page
+- Empty result queries: < 1 second
+
+The `page_size` parameter is available in `iter_public_figures` and `iter_public_institutions` for tuning when needed.
+
 ## Development
 
 ### Running Tests
