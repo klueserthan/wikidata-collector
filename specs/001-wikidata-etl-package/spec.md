@@ -249,3 +249,87 @@ consistent schema that ETL infrastructure can parse. At minimum, log records SHO
 The exact mapping of these fields to the underlying logging framework is defined in the
 implementation plan and research notes, but the presence and semantics of these fields MUST remain
 stable for ETL consumers.
+
+### Error Categories and Exception Types
+
+To satisfy FR-013, the system defines distinct exception types that ETL jobs can catch and handle
+appropriately. These exception types provide clear categorization of failure modes:
+
+- **`InvalidFilterError`**: Raised when filter parameters are invalid or malformed (e.g., invalid
+  date formats, unknown country codes, or unsupported filter combinations). ETL jobs should treat
+  this as a configuration error and fail fast.
+  
+- **`ProxyMisconfigurationError`**: Raised when proxy configuration is invalid or a configured
+  proxy is unreachable. This indicates a deployment or infrastructure issue that requires operator
+  intervention. The system follows a fail-closed policy: when proxies are configured but all fail,
+  requests do not automatically fall back to direct connections.
+  
+- **`UpstreamUnavailableError`**: Raised when the upstream Wikidata service is unavailable after
+  retries due to persistent HTTP 5xx gateway/service-unavailable responses (specifically repeated
+  502, 503, or 504 status codes). ETL jobs may choose to retry the entire job later or alert
+  operators.
+  
+- **`QueryExecutionError`**: A general-purpose exception raised when a SPARQL query fails after
+  retries for reasons not covered by more specific exception types. Includes the underlying error
+  details for debugging.
+  
+- **`EntityNotFoundError`**: Raised when a requested entity (by QID) cannot be found in Wikidata.
+  This is typically not a system error but indicates that the requested entity does not exist.
+  
+- **`InvalidQIDError`**: Raised when a QID parameter is malformed or fails validation. This is a
+  security-focused exception that prevents SPARQL injection attacks.
+
+All exception types inherit from the base `WikidataCollectorError` class, allowing ETL jobs to
+catch all package-specific errors with a single exception handler if desired.
+
+### Structured Logging Implementation
+
+The system implements structured logging using Python's standard `logging` module with structured
+extra fields. All log records for key events include machine-readable fields accessible via the
+`LogRecord.extra` attribute. The following logging functions are used consistently across the
+codebase:
+
+- **`_log_query_execution(query_type, params, page_num, result_count, latency_ms, proxy_used)`**:
+  Logs successful SPARQL query execution with structured fields:
+  - `query_type`: Type of query (e.g., "public_figures", "public_institutions")
+  - `params`: Filter parameters used in the query (dict)
+  - `page`: Page number (1-indexed, int)
+  - `result_count`: Number of results returned (int)
+  - `latency_ms`: Query execution time in milliseconds (float)
+  - `proxy_used`: Proxy URL or "direct" (str)
+  
+- **`_log_page_fetch(query_type, page_num, after_qid, result_count)`**:
+  Logs internal page fetch operations for iterators with structured fields:
+  - `query_type`: Type of query (str)
+  - `page`: Page number being fetched (int)
+  - `after_qid`: QID cursor for keyset pagination, or None (str or None)
+  - `result_count`: Number of results in this page (int)
+  
+- **`_log_retry_attempt(attempt, max_retries, reason, wait_time, proxy)`**:
+  Logs retry attempts with detailed context:
+  - `attempt`: Current attempt number, 1-indexed (int)
+  - `max_retries`: Maximum configured retries (int)
+  - `reason`: Machine-readable retry reason (str), e.g., "throttled_429", "upstream_error_503",
+    "request_exception_Timeout"
+  - `wait_time_seconds`: Wait time before retry in seconds (float)
+  - `proxy`: Proxy URL being retried, or None (str or None)
+  - `event`: Always "retry" (str)
+  
+- **`_log_query_failure(query_type, error_category, error_message, attempts, filters)`**:
+  Logs query failures after all retries with structured fields:
+  - `query_type`: Type of query that failed (str)
+  - `error_category`: Machine-readable error category (str), e.g., "upstream_unavailable",
+    "timeout", "invalid_filter", "proxy_misconfiguration"
+  - `error_message`: Detailed human-readable error message (str)
+  - `attempts`: Number of attempts made before failure (int)
+  - `filters`: Filter parameters used in the query (dict)
+  - `event`: Always "query_failure" (str)
+
+Log levels are assigned as follows:
+- `INFO`: Successful query execution, successful operations
+- `DEBUG`: Internal pagination details, page fetches
+- `WARNING`: Retry attempts, transient errors
+- `ERROR`: Query failures after retries, unrecoverable errors
+
+ETL infrastructure can parse these structured log records to implement alerting, monitoring, and
+debugging workflows without relying on log message text parsing.

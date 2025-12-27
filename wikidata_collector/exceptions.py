@@ -35,3 +35,15 @@ class InvalidFilterError(WikidataCollectorError):
     """Raised when filter parameters are invalid or malformed."""
 
     pass
+
+
+class ProxyMisconfigurationError(WikidataCollectorError):
+    """Raised when proxy configuration is invalid or unreachable."""
+
+    pass
+
+
+class UpstreamUnavailableError(WikidataCollectorError):
+    """Raised when the upstream Wikidata service is unavailable."""
+
+    pass

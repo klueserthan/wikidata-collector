@@ -16,7 +16,9 @@ from .exceptions import (
     EntityNotFoundError,
     InvalidFilterError,
     InvalidQIDError,
+    ProxyMisconfigurationError,
     QueryExecutionError,
+    UpstreamUnavailableError,
 )
 from .models import PublicFigure, PublicInstitution
 from .normalizers.figure_normalizer import normalize_public_figure
@@ -86,6 +88,60 @@ def _log_page_fetch(
     )
 
 
+def _log_retry_attempt(
+    attempt: int, max_retries: int, reason: str, wait_time: float, proxy: Optional[str] = None
+) -> None:
+    """Log structured information about retry attempts.
+
+    Args:
+        attempt: Current attempt number (1-indexed)
+        max_retries: Maximum number of retries configured
+        reason: Reason for retry (e.g., 'throttled', 'timeout', 'connection_error')
+        wait_time: Time to wait before retry in seconds
+        proxy: Proxy being retried (if any)
+    """
+    logger.warning(
+        f"Retry attempt {attempt}/{max_retries}: {reason}, waiting {wait_time:.2f}s",
+        extra={
+            "attempt": attempt,
+            "max_retries": max_retries,
+            "reason": reason,
+            "wait_time_seconds": wait_time,
+            "proxy": proxy,
+            "event": "retry",
+        },
+    )
+
+
+def _log_query_failure(
+    query_type: str,
+    error_category: str,
+    error_message: str,
+    attempts: int,
+    filters: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Log structured information about query failures.
+
+    Args:
+        query_type: Type of query that failed
+        error_category: Category of error (e.g., 'upstream_unavailable', 'timeout', 'invalid_filter')
+        error_message: Detailed error message
+        attempts: Number of attempts made before failure
+        filters: Filter parameters used in the query
+    """
+    logger.error(
+        f"Query failed: type={query_type}, category={error_category}, attempts={attempts}",
+        extra={
+            "query_type": query_type,
+            "error_category": error_category,
+            "error_message": error_message,
+            "attempts": attempts,
+            "filters": filters or {},
+            "event": "query_failure",
+        },
+    )
+
+
 class WikidataClient:
     """Client for fetching Wikidata entities via SPARQL and Entity API."""
 
@@ -132,9 +188,14 @@ class WikidataClient:
 
         params = {"query": query}
         used_proxy = "direct"
+        # Track the last status code to properly categorize errors
+        last_status_code = None
 
         for attempt in range(self.config.max_retries):
             proxy = None
+            # Track if we already logged retry for this attempt (to avoid duplicates)
+            already_logged_retry = False
+
             try:
                 # Get proxy for this attempt
                 proxy = self.proxy_manager.get_next_proxy(override_proxies)
@@ -155,21 +216,39 @@ class WikidataClient:
 
                 # Handle throttling gracefully
                 if response.status_code == 429:
+                    last_status_code = 429
                     retry_after = response.headers.get("Retry-After")
                     wait_s = (
                         int(retry_after) if retry_after and retry_after.isdigit() else 2**attempt
                     )
-                    logger.warning(f"WDQS 429 received. Waiting {wait_s}s before retry...")
+                    if attempt < self.config.max_retries - 1:
+                        _log_retry_attempt(
+                            attempt=attempt + 1,
+                            max_retries=self.config.max_retries,
+                            reason="throttled_429",
+                            wait_time=wait_s,
+                            proxy=proxy,
+                        )
+                        already_logged_retry = True
                     time.sleep(wait_s)
-                    raise requests.exceptions.RequestException("Throttled 429")
+                    raise requests.exceptions.HTTPError("429 Too Many Requests", response=response)
 
                 if response.status_code in (502, 503, 504):
+                    last_status_code = response.status_code
                     wait_s = min(10, 2**attempt)
-                    logger.warning(
-                        f"WDQS {response.status_code} transient error. Backing off {wait_s}s..."
-                    )
+                    if attempt < self.config.max_retries - 1:
+                        _log_retry_attempt(
+                            attempt=attempt + 1,
+                            max_retries=self.config.max_retries,
+                            reason=f"upstream_error_{response.status_code}",
+                            wait_time=wait_s,
+                            proxy=proxy,
+                        )
+                        already_logged_retry = True
                     time.sleep(wait_s)
-                    raise requests.exceptions.RequestException(f"Transient {response.status_code}")
+                    raise requests.exceptions.HTTPError(
+                        f"{response.status_code} Service Unavailable", response=response
+                    )
 
                 response.raise_for_status()
 
@@ -186,24 +265,77 @@ class WikidataClient:
                 return result, used_proxy
 
             except requests.exceptions.RequestException as e:
-                logger.error(
-                    f"SPARQL request failed (attempt {attempt + 1}/{self.config.max_retries}): {e}"
-                )
+                error_type = type(e).__name__
 
                 if proxy:
                     self.proxy_manager.mark_proxy_failed(proxy)
 
-                # If this was the last attempt, raise
-                if attempt == self.config.max_retries - 1:
-                    raise QueryExecutionError(
-                        f"Failed to execute SPARQL query after {self.config.max_retries} attempts: {e}"
+                # Log retry attempt with structured format (only if not already logged)
+                if attempt < self.config.max_retries - 1 and not already_logged_retry:
+                    wait_time = 0.5 + 0.2 * attempt
+                    _log_retry_attempt(
+                        attempt=attempt + 1,
+                        max_retries=self.config.max_retries,
+                        reason=f"request_exception_{error_type}",
+                        wait_time=wait_time,
+                        proxy=proxy,
                     )
 
-                # Short jitter before retry
-                time.sleep(0.5 + 0.2 * attempt)
+                # If this was the last attempt, determine error type and raise
+                if attempt == self.config.max_retries - 1:
+                    # Check for upstream errors based on tracked status code (not string matching)
+                    if last_status_code in (502, 503, 504):
+                        _log_query_failure(
+                            query_type="sparql_query",
+                            error_category="upstream_unavailable",
+                            error_message=str(e),
+                            attempts=self.config.max_retries,
+                        )
+                        raise UpstreamUnavailableError(
+                            f"Upstream Wikidata service unavailable after {self.config.max_retries} attempts: {e}"
+                        )
+                    # Check if we were using proxies and all failed (proxy misconfiguration)
+                    elif (
+                        self.config.proxy_list
+                        and len(self.proxy_manager.get_available_proxies()) == 0
+                    ):
+                        _log_query_failure(
+                            query_type="sparql_query",
+                            error_category="proxy_misconfiguration",
+                            error_message=str(e),
+                            attempts=self.config.max_retries,
+                        )
+                        raise ProxyMisconfigurationError(
+                            f"All configured proxies failed after {self.config.max_retries} attempts: {e}"
+                        )
+                    else:
+                        _log_query_failure(
+                            query_type="sparql_query",
+                            error_category="query_execution_error",
+                            error_message=str(e),
+                            attempts=self.config.max_retries,
+                        )
+                        raise QueryExecutionError(
+                            f"Failed to execute SPARQL query after {self.config.max_retries} attempts: {e}"
+                        )
 
-        # Should never reach here
-        raise QueryExecutionError("Failed to execute SPARQL query")
+                # Short jitter before retry (skip if already slept for status codes)
+                if not already_logged_retry:
+                    time.sleep(0.5 + 0.2 * attempt)
+        # This point should be unreachable: every loop iteration should either
+        # return a result or raise on the final attempt. If we get here, it
+        # indicates a logic error in the retry loop implementation.
+        logger.critical(
+            "Unreachable code reached in execute_sparql_query: "
+            "retry loop exited without returning or raising. "
+            "max_retries=%d, used_proxy=%s",
+            self.config.max_retries,
+            used_proxy,
+        )
+        raise QueryExecutionError(
+            "Internal error: retry loop exited without returning or raising; "
+            "this indicates a bug in execute_sparql_query."
+        )
 
     def get_public_figures(
         self,
