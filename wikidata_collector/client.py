@@ -7,7 +7,7 @@ This client has no FastAPI dependencies and can be used standalone.
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import requests
 
@@ -488,6 +488,70 @@ class WikidataClient:
 
         raise QueryExecutionError(f"Failed to fetch entity {qid} from Wikidata")
 
+    def _paginate_sparql_results(
+        self,
+        query_type: str,
+        entity_uri_key: str,
+        fetch_page_fn,
+        params: Dict[str, Any],
+        page_size: int,
+    ) -> Iterator[Dict[str, Any]]:
+        """Generic helper for paginating SPARQL results with keyset pagination.
+
+        Args:
+            query_type: Type of query (e.g., 'public_figures', 'public_institutions')
+            entity_uri_key: Key name in results dict containing entity URI (e.g., 'person', 'institution')
+            fetch_page_fn: Function to fetch a page of results, must accept after_qid parameter
+            params: Query parameters for logging
+            page_size: Number of results per page
+
+        Yields:
+            Individual SPARQL result bindings
+        """
+        after_qid = None
+        page_num = 0
+
+        while True:
+            page_num += 1
+            start_time = time.time()
+
+            # Fetch page using provided function
+            results, proxy = fetch_page_fn(after_qid=after_qid)
+            latency_ms = (time.time() - start_time) * 1000
+
+            # Log page fetch
+            _log_page_fetch(query_type, page_num, after_qid, len(results))
+            _log_query_execution(
+                query_type,
+                params,
+                page_num,
+                len(results),
+                latency_ms,
+                proxy,
+            )
+
+            if not results:
+                break
+
+            for result in results:
+                yield result
+
+            # Set up next page using keyset pagination
+            if len(results) < page_size:
+                # Last page
+                break
+
+            # Get QID from last result for next page
+            entity_uri = results[-1].get(entity_uri_key, {}).get("value", "")
+            if entity_uri and "/" in entity_uri:
+                last_qid = entity_uri.rsplit("/", 1)[-1]
+                if last_qid:
+                    after_qid = last_qid
+                else:
+                    break
+            else:
+                break
+
     def iter_public_figures(
         self,
         birthday_from: Optional[str] = None,
@@ -515,14 +579,9 @@ class WikidataClient:
         Yields:
             Individual public figure results (SPARQL bindings)
         """
-        after_qid = None
-        page_num = 0
 
-        while True:
-            page_num += 1
-            start_time = time.time()
-
-            results, proxy = self.get_public_figures(
+        def fetch_page(after_qid: Optional[str]) -> Tuple[List[Dict[str, Any]], str]:
+            return self.get_public_figures(
                 birthday_from=birthday_from,
                 birthday_to=birthday_to,
                 nationality=nationality,
@@ -533,46 +592,19 @@ class WikidataClient:
                 override_proxies=override_proxies,
             )
 
-            latency_ms = (time.time() - start_time) * 1000
-
-            # Log page fetch
-            _log_page_fetch("public_figures", page_num, after_qid, len(results))
-            _log_query_execution(
-                "public_figures",
-                {
-                    "birthday_from": birthday_from,
-                    "birthday_to": birthday_to,
-                    "nationality": nationality,
-                    "profession": profession,
-                    "lang": lang,
-                },
-                page_num,
-                len(results),
-                latency_ms,
-                proxy,
-            )
-
-            if not results:
-                break
-
-            for result in results:
-                yield result
-
-            # Set up next page using keyset pagination
-            if len(results) < page_size:
-                # Last page
-                break
-
-            # Get QID from last result for next page
-            person_uri = results[-1].get("person", {}).get("value", "")
-            if person_uri and "/" in person_uri:
-                last_qid = person_uri.rsplit("/", 1)[-1]
-                if last_qid:
-                    after_qid = last_qid
-                else:
-                    break
-            else:
-                break
+        yield from self._paginate_sparql_results(
+            query_type="public_figures",
+            entity_uri_key="person",
+            fetch_page_fn=fetch_page,
+            params={
+                "birthday_from": birthday_from,
+                "birthday_to": birthday_to,
+                "nationality": nationality,
+                "profession": profession,
+                "lang": lang,
+            },
+            page_size=page_size,
+        )
 
     def iter_public_institutions(
         self,
@@ -599,14 +631,9 @@ class WikidataClient:
         Yields:
             Individual public institution results (SPARQL bindings)
         """
-        after_qid = None
-        page_num = 0
 
-        while True:
-            page_num += 1
-            start_time = time.time()
-
-            results, proxy = self.get_public_institutions(
+        def fetch_page(after_qid: Optional[str]) -> Tuple[List[Dict[str, Any]], str]:
+            return self.get_public_institutions(
                 country=country,
                 type=type,
                 jurisdiction=jurisdiction,
@@ -616,40 +643,13 @@ class WikidataClient:
                 override_proxies=override_proxies,
             )
 
-            latency_ms = (time.time() - start_time) * 1000
-
-            # Log page fetch
-            _log_page_fetch("public_institutions", page_num, after_qid, len(results))
-            _log_query_execution(
-                "public_institutions",
-                {"country": country, "type": type, "jurisdiction": jurisdiction, "lang": lang},
-                page_num,
-                len(results),
-                latency_ms,
-                proxy,
-            )
-
-            if not results:
-                break
-
-            for result in results:
-                yield result
-
-            # Set up next page using keyset pagination
-            if len(results) < page_size:
-                # Last page
-                break
-
-            # Get QID from last result for next page
-            institution_uri = results[-1].get("institution", {}).get("value", "")
-            if institution_uri and "/" in institution_uri:
-                last_qid = institution_uri.rsplit("/", 1)[-1]
-                if last_qid:
-                    after_qid = last_qid
-                else:
-                    break
-            else:
-                break
+        yield from self._paginate_sparql_results(
+            query_type="public_institutions",
+            entity_uri_key="institution",
+            fetch_page_fn=fetch_page,
+            params={"country": country, "type": type, "jurisdiction": jurisdiction, "lang": lang},
+            page_size=page_size,
+        )
 
     def iterate_public_figures(
         self,
