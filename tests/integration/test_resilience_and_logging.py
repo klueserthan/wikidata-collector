@@ -15,7 +15,6 @@ from wikidata_collector.client import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.exceptions import (
     ProxyMisconfigurationError,
-    QueryExecutionError,
     UpstreamUnavailableError,
 )
 
