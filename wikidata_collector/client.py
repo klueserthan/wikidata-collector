@@ -284,7 +284,6 @@ class WikidataClient:
                     # Check if we were using proxies and all failed (proxy misconfiguration)
                     elif (
                         self.config.proxy_list
-                        and len(self.config.proxy_list) > 0
                         and len(self.proxy_manager.get_available_proxies()) == 0
                     ):
                         _log_query_failure(
