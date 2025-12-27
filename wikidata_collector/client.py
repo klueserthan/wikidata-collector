@@ -309,14 +309,20 @@ class WikidataClient:
                 # Short jitter before retry
                 time.sleep(0.5 + 0.2 * attempt)
 
-        # Should never reach here
-        _log_query_failure(
-            query_type="sparql_query",
-            error_category="query_execution_error",
-            error_message="Failed to execute query after all retries",
-            attempts=self.config.max_retries,
+        # This point should be unreachable: every loop iteration should either
+        # return a result or raise on the final attempt. If we get here, it
+        # indicates a logic error in the retry loop implementation.
+        logger.critical(
+            "Unreachable code reached in execute_sparql_query: "
+            "retry loop exited without returning or raising. "
+            "max_retries=%d, used_proxy=%s",
+            self.config.max_retries,
+            used_proxy,
         )
-        raise QueryExecutionError("Failed to execute SPARQL query")
+        raise QueryExecutionError(
+            "Internal error: retry loop exited without returning or raising; "
+            "this indicates a bug in execute_sparql_query."
+        )
 
     def get_public_figures(
         self,
