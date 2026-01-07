@@ -57,3 +57,4 @@ metrics.json
 
 .copilot-tracking/
 *.pdf
+*.rq

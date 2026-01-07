@@ -558,3 +558,171 @@ class TestNormalizePublicInstitution:
 
         # All invalid coords should be filtered out
         assert len(result.headquarters_coords) == 0
+
+
+class TestNormalizerEdgeCases:
+    """Test edge cases for normalizers."""
+
+    def test_figure_with_missing_optional_fields(self):
+        """Test figure normalization with all optional fields missing."""
+        item = {
+            "person": {"value": "http://www.wikidata.org/entity/Q999"},
+            "personLabel": {"value": "Minimal Person"},
+        }
+
+        result = normalize_public_figure(item, expanded_data=None)
+
+        assert result.id == "Q999"
+        assert result.name == "Minimal Person"
+        assert result.entity_kind == "public_figure"
+        # All optional fields should have sensible defaults
+        assert result.aliases == []
+        assert result.nationalities == []
+        assert result.professions == []
+        assert result.website == []
+        assert result.accounts == []
+        assert result.identifiers == []
+        assert result.birthday is None
+        assert result.deathday is None
+        assert result.gender is None
+
+    def test_institution_with_missing_optional_fields(self):
+        """Test institution normalization with all optional fields missing."""
+        item = {
+            "institution": {"value": "http://www.wikidata.org/entity/Q888"},
+            "institutionLabel": {"value": "Minimal Institution"},
+        }
+
+        result = normalize_public_institution(item, expanded_data=None)
+
+        assert result.id == "Q888"
+        assert result.name == "Minimal Institution"
+        assert result.entity_kind == "public_institution"
+        # All optional fields should have sensible defaults
+        assert result.aliases == []
+        assert result.types == []
+        assert result.country == []
+        assert result.website == []
+        assert result.accounts == []
+        assert result.founded is None
+        # Note: PublicInstitution doesn't have 'dissolved' field in the model
+
+    def test_figure_with_multiple_values_in_each_field(self):
+        """Test figure with many values in multi-valued fields."""
+        expanded_data = {
+            "aliases": ["Alias 1", "Alias 2", "Alias 3"],
+            "nationalities": ["Country 1", "Country 2", "Country 3"],
+            "gender": "non-binary",
+            "professions": ["Prof 1", "Prof 2", "Prof 3", "Prof 4"],
+            "place_of_birth": ["City 1"],
+            "place_of_death": ["City 2"],
+            "residence": ["Res 1", "Res 2"],
+            "website": [
+                {"url": "https://site1.com", "source": "wikidata", "retrieved_at": "2024-01-01"},
+                {"url": "https://site2.com", "source": "wikidata", "retrieved_at": "2024-01-01"},
+            ],
+            "accounts": [
+                {
+                    "platform": "twitter",
+                    "handle": "@user1",
+                    "source": "wikidata",
+                    "retrieved_at": "2024-01-01",
+                },
+                {
+                    "platform": "instagram",
+                    "handle": "@user2",
+                    "source": "wikidata",
+                    "retrieved_at": "2024-01-01",
+                },
+                {
+                    "platform": "facebook",
+                    "handle": "user3",
+                    "source": "wikidata",
+                    "retrieved_at": "2024-01-01",
+                },
+            ],
+            "affiliations": ["Org 1", "Org 2", "Org 3"],
+            "notable_works": ["Work 1", "Work 2", "Work 3", "Work 4", "Work 5"],
+            "awards": ["Award 1", "Award 2"],
+            "identifiers": [
+                {"scheme": "VIAF", "id": "12345"},
+                {"scheme": "GND", "id": "67890"},
+                {"scheme": "ISNI", "id": "11111"},
+            ],
+        }
+
+        item = {
+            "person": {"value": "http://www.wikidata.org/entity/Q777"},
+            "personLabel": {"value": "Multi-value Person"},
+        }
+
+        result = normalize_public_figure(item, expanded_data)
+
+        # Verify all multi-valued fields are properly populated
+        assert len(result.aliases) == 3
+        assert len(result.nationalities) == 3
+        assert len(result.professions) == 4
+        assert len(result.residence) == 2
+        assert len(result.website) == 2
+        assert len(result.accounts) == 3
+        assert len(result.affiliations) == 3
+        assert len(result.notable_works) == 5
+        assert len(result.awards) == 2
+        assert len(result.identifiers) == 3
+
+    def test_institution_with_multiple_types_and_countries(self):
+        """Test institution with multiple types and countries."""
+        expanded_data = {
+            "aliases": ["Alt Name 1", "Alt Name 2"],
+            "types": ["Type 1", "Type 2", "Type 3"],
+            "country": ["Country 1", "Country 2"],
+            "country_code": ["C1", "C2"],
+            "jurisdiction": ["Jurisdiction 1"],
+            "founded": ["2000-01-01"],
+            "legal_form": ["Form 1"],
+            "headquarters": ["HQ 1", "HQ 2"],
+            "headquarters_coords": [
+                {"lat": 40.0, "lon": -74.0},
+                {"lat": 51.0, "lon": -0.1},
+            ],
+            "website": [
+                {"url": "https://org1.com", "source": "wikidata", "retrieved_at": "2024-01-01"},
+                {"url": "https://org2.com", "source": "wikidata", "retrieved_at": "2024-01-01"},
+                {"url": "https://org3.com", "source": "wikidata", "retrieved_at": "2024-01-01"},
+            ],
+            "accounts": [
+                {
+                    "platform": "twitter",
+                    "handle": "@org",
+                    "source": "wikidata",
+                    "retrieved_at": "2024-01-01",
+                },
+                {
+                    "platform": "instagram",
+                    "handle": "@org_insta",
+                    "source": "wikidata",
+                    "retrieved_at": "2024-01-01",
+                },
+            ],
+            "identifiers": [
+                {"scheme": "LEI", "id": "ABC123"},
+                {"scheme": "GRID", "id": "XYZ789"},
+            ],
+        }
+
+        item = {
+            "institution": {"value": "http://www.wikidata.org/entity/Q666"},
+            "institutionLabel": {"value": "Multi-value Institution"},
+        }
+
+        result = normalize_public_institution(item, expanded_data)
+
+        # Verify all multi-valued fields are properly populated
+        assert len(result.aliases) == 2
+        assert len(result.types) == 3
+        assert len(result.country) == 2
+        assert len(result.headquarters) == 2
+        assert len(result.headquarters_coords) == 2
+        assert len(result.website) == 3
+        assert len(result.accounts) == 2
+        # Note: PublicInstitution doesn't have 'identifiers' field in the model
