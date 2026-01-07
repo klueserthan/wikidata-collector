@@ -341,7 +341,7 @@ class WikidataClient:
         self,
         birthday_from: Optional[str] = None,
         birthday_to: Optional[str] = None,
-        nationality: Optional[List[str]] = None,
+        nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
         limit: int = 100,
@@ -556,7 +556,7 @@ class WikidataClient:
         self,
         birthday_from: Optional[str] = None,
         birthday_to: Optional[str] = None,
-        nationality: Optional[List[str]] = None,
+        nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
         page_size: int = DEFAULT_PAGE_SIZE,
@@ -656,14 +656,14 @@ class WikidataClient:
         *,
         birthday_from: Optional[str] = None,
         birthday_to: Optional[str] = None,
-        nationality: Optional[List[str]] = None,
+        nationality: Optional[str] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
     ) -> Iterator[PublicFigure]:
         """Yield public figures matching the given filters.
 
         Applies filters on birthday and nationality as specified in the feature spec.
-        Expects human-readable nationality labels or codes (e.g., "US", "DE") rather than QIDs;
+        Expects human-readable nationality label (e.g., "US", "Germany") or QID;
         query builders translate these into appropriate SPARQL constraints.
         Uses a stable internal ordering by entity ID.
         Hides SPARQL pagination; callers simply iterate over results.
@@ -673,7 +673,7 @@ class WikidataClient:
         Args:
             birthday_from: Start date filter (ISO format, e.g., "1990-01-01")
             birthday_to: End date filter (ISO format, e.g., "2000-12-31")
-            nationality: List of nationality filters (ISO codes like "US", "DE", or labels)
+            nationality: Nationality filter (country name like "Germany" or QID)
             max_results: Maximum number of results to yield (None for unlimited)
             lang: Language code for labels (default: "en")
 

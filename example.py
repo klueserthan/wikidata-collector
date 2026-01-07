@@ -30,8 +30,8 @@ def main():
     try:
         results, proxy_used = client.get_public_figures(
             birthday_from="1990-01-01",
-            profession=["Q33999"],  # Actor QID
-            lang="en",
+            birthday_to="1990-01-02",
+            lang="de",
             limit=5,
         )
 

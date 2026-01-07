@@ -19,7 +19,7 @@ class TestIterPublicFigures:
         with patch.object(
             wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
         ):
-            results = list(wikidata_client.iter_public_figures(nationality=["Q30"]))
+            results = list(wikidata_client.iter_public_figures(nationality="Q30"))
 
             assert len(results) == 2
             assert results[0] == mock_results[0]
@@ -47,7 +47,7 @@ class TestIterPublicFigures:
                 return (page2_results, "direct")
 
         with patch.object(wikidata_client, "get_public_figures", side_effect=mock_get_figures):
-            results = list(wikidata_client.iter_public_figures(nationality=["Q30"]))
+            results = list(wikidata_client.iter_public_figures(nationality="Q30"))
 
             assert len(results) == DEFAULT_PAGE_SIZE + 1
             assert call_count == 2
@@ -55,7 +55,7 @@ class TestIterPublicFigures:
     def test_iter_empty_results(self, wikidata_client):
         """Test iteration with no results."""
         with patch.object(wikidata_client, "get_public_figures", return_value=([], "direct")):
-            results = list(wikidata_client.iter_public_figures(nationality=["Q30"]))
+            results = list(wikidata_client.iter_public_figures(nationality="Q30"))
 
             assert len(results) == 0
 
@@ -70,7 +70,7 @@ class TestIterPublicFigures:
         with patch.object(
             wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
         ) as mock:
-            results = list(wikidata_client.iter_public_figures(nationality=["Q30"], page_size=5))
+            results = list(wikidata_client.iter_public_figures(nationality="Q30", page_size=5))
 
             # Verify it was called with the custom page size
             mock.assert_called_once()
@@ -88,7 +88,7 @@ class TestIterPublicFigures:
                 wikidata_client.iter_public_figures(
                     birthday_from="1990-01-01",
                     birthday_to="2000-12-31",
-                    nationality=["Q30"],
+                    nationality="Q30",
                     profession=["Q33999"],
                 )
             )
@@ -97,7 +97,7 @@ class TestIterPublicFigures:
             call_kwargs = mock.call_args[1]
             assert call_kwargs["birthday_from"] == "1990-01-01"
             assert call_kwargs["birthday_to"] == "2000-12-31"
-            assert call_kwargs["nationality"] == ["Q30"]
+            assert call_kwargs["nationality"] == "Q30"
             assert call_kwargs["profession"] == ["Q33999"]
 
 

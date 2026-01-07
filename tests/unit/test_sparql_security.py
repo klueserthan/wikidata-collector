@@ -119,19 +119,14 @@ class TestFiguresQueryInjectionPrevention:
     def test_nationality_qid_injection_prevented(self):
         """Test that malicious QID in nationality is rejected."""
         with pytest.raises(ValueError, match="Invalid QID format"):
-            build_public_figures_query(nationality=["Q42; DROP TABLE"])
+            build_public_figures_query(nationality="Q42; DROP TABLE")
 
     def test_nationality_label_injection_escaped(self):
-        """Test that malicious label in nationality is escaped."""
+        """Test that malicious label in nationality is rejected (not in mappings)."""
         malicious_input = '" . } DROP GRAPH <urn:wikidata> ; { #'
-        query = build_public_figures_query(nationality=[malicious_input])
-        # The escaped version should be in the query
-        assert '\\"' in query
-        # Verify DROP GRAPH is safely escaped within the string literal, not executable
-        # The malicious input should appear within quotes, not as executable SPARQL
-        assert 'rdfs:label "' in query
-        # The key security property: ensure the malicious pattern is within a string literal
-        assert '" . } DROP GRAPH <urn:wikidata> ; { #"' in query or '\\" . } DROP GRAPH' in query
+        # This input is not a valid country name or QID, so it should raise an error
+        with pytest.raises(ValueError, match="Unknown country"):
+            build_public_figures_query(nationality=malicious_input)
 
     def test_profession_qid_injection_prevented(self):
         """Test that malicious QID in profession is rejected."""
@@ -139,11 +134,11 @@ class TestFiguresQueryInjectionPrevention:
             build_public_figures_query(profession=["Q42; DROP"])
 
     def test_profession_label_injection_escaped(self):
-        """Test that malicious label in profession is escaped."""
+        """Test that malicious label in profession is rejected (not in mappings)."""
         malicious_input = '"; } FILTER(?x = "evil'
-        query = build_public_figures_query(profession=[malicious_input])
-        # Verify escaping occurred
-        assert '\\"' in query or '"; }' not in query
+        # This input is not a valid profession in PROFESSION_MAPPINGS
+        with pytest.raises(ValueError, match="Unknown profession"):
+            build_public_figures_query(profession=[malicious_input])
 
 
 class TestInstitutionsQueryInjectionPrevention:
@@ -189,15 +184,15 @@ class TestInstitutionsQueryInjectionPrevention:
 class TestCountryCodeEscaping:
     """Test that country code escaping works correctly."""
 
-    def test_valid_country_code_escaped(self):
-        """Test that valid country codes are still escaped."""
-        query = build_public_figures_query(nationality=["USA"])
-        assert 'P298 "USA"' in query
+    def test_valid_country_code_mapped(self):
+        """Test that valid country codes in the mapping are used."""
+        query = build_public_figures_query(nationality="US")
+        # US is mapped to Q30 in COUNTRY_MAPPINGS
+        assert "wdt:P27 wd:Q30" in query
 
-    def test_malicious_country_code_escaped(self):
-        """Test that malicious country code-like input is escaped."""
-        # Even though this looks like a country code, if it contains quotes it's escaped
+    def test_malicious_country_not_in_mapping(self):
+        """Test that malicious country codes not in mapping are rejected."""
+        # This is not in COUNTRY_MAPPINGS, so it should raise an error
         malicious_input = 'US"'
-        query = build_public_figures_query(nationality=[malicious_input])
-        # Should be escaped
-        assert 'US\\"' in query or 'US"' not in query
+        with pytest.raises(ValueError, match="Unknown country"):
+            build_public_figures_query(nationality=malicious_input)

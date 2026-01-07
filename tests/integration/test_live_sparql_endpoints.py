@@ -90,7 +90,7 @@ class TestLiveSparqlConnectivity:
         # This ensures query is fast and returns manageable result set
         birthday_from = "2000-06-15"
         birthday_to = "2000-06-20"
-        nationality = ["United States"]
+        nationality = "United States"
 
         # Measure end-to-end execution time
         start_time = time.time()

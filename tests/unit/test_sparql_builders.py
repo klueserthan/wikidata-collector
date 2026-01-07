@@ -15,11 +15,12 @@ class TestBuildPublicFiguresQuery:
         """Test basic query without filters."""
         query = build_public_figures_query()
 
-        assert "SELECT DISTINCT" in query
+        assert "SELECT ?person" in query
         assert "?person wdt:P31 wd:Q5" in query  # instance of human
         assert "wdt:P569" in query  # date of birth
         assert "ORDER BY ?person" in query
         assert "LIMIT" in query
+        assert "OPTIONAL" in query  # Should have optional clauses for outer query
 
     def test_birthday_filters(self):
         """Test query with birthday filters."""
@@ -31,17 +32,17 @@ class TestBuildPublicFiguresQuery:
     def test_nationality_filter_qid(self):
         """Test nationality filter with QID."""
         query = build_public_figures_query(
-            nationality=["Q145"]  # United Kingdom QID
+            nationality="Q145"  # United Kingdom QID
         )
 
-        assert "?person wdt:P27 wd:Q145" in query
+        assert "wdt:P27 wd:Q145" in query
 
     def test_nationality_filter_name(self):
-        """Test nationality filter with name."""
-        query = build_public_figures_query(nationality=["United Kingdom"], lang="en")
+        """Test nationality filter with mapped name."""
+        query = build_public_figures_query(nationality="United Kingdom", lang="en")
 
-        assert "?person wdt:P27 ?country" in query
-        assert '?country rdfs:label "United Kingdom"@en' in query
+        # United Kingdom is mapped to Q145 in constants
+        assert "wdt:P27 wd:Q145" in query
 
     def test_profession_filter_qid(self):
         """Test profession filter with QID."""
@@ -49,23 +50,23 @@ class TestBuildPublicFiguresQuery:
             profession=["Q36180"]  # Writer QID
         )
 
-        assert "?person wdt:P106 wd:Q36180" in query
+        assert "wdt:P106 wd:Q36180" in query
 
     def test_profession_filter_name(self):
-        """Test profession filter with name."""
+        """Test profession filter with mapped name."""
         query = build_public_figures_query(profession=["writer"], lang="en")
 
-        assert "?person wdt:P106 ?occupation" in query
-        assert '?occupation rdfs:label "writer"@en' in query
+        # writer is mapped to Q36180 in constants
+        assert "wdt:P106 wd:Q36180" in query
 
-    def test_multiple_nationalities(self):
-        """Test multiple nationality filters."""
+    def test_multiple_professions(self):
+        """Test multiple profession filters."""
         query = build_public_figures_query(
-            nationality=["Q145", "Q30"]  # UK and USA
+            profession=["Q36180", "Q33999"]  # Writer and Actor
         )
 
-        assert "wdt:P27 wd:Q145" in query
-        assert "wdt:P27 wd:Q30" in query
+        assert "wdt:P106 wd:Q36180" in query
+        assert "wdt:P106 wd:Q33999" in query
 
     def test_keyset_pagination(self):
         """Test keyset pagination with QID."""
@@ -94,35 +95,23 @@ class TestBuildPublicFiguresQuery:
             'bd:serviceParam wikibase:language "en"' in query or 'wikibase:language "fr"' in query
         )
 
-    def test_nationality_filter_iso_code(self):
-        """Test nationality filter with ISO country code (3-letter)."""
+    def test_nationality_filter_mapped_name(self):
+        """Test nationality filter with mapped country name."""
         query = build_public_figures_query(
-            nationality=["USA"]  # 3-letter ISO code
+            nationality="Germany"  # Maps to Q183
         )
 
-        # Should translate to country code filter
-        assert "?person wdt:P27 ?country" in query
-        assert '?country wdt:P298 "USA"' in query
+        # Should translate to mapped QID
+        assert "wdt:P27 wd:Q183" in query
 
-    def test_nationality_filter_mixed_qid_and_label(self):
-        """Test nationality filter with mixed QID and label."""
+    def test_nationality_filter_short_code(self):
+        """Test nationality filter with short country code."""
         query = build_public_figures_query(
-            nationality=["Q145", "Germany"]  # QID and label
+            nationality="US"  # Maps to Q30
         )
 
-        # Should handle both QID and label
-        assert "?person wdt:P27 wd:Q145" in query
-        assert '?country rdfs:label "Germany"@en' in query
-
-    def test_nationality_filter_iso_code_two_letter(self):
-        """Test that 2-letter codes are treated as labels, not ISO codes."""
-        query = build_public_figures_query(
-            nationality=["US"]  # 2-letter code (not a valid 3-letter ISO code)
-        )
-
-        # 2-letter codes should be treated as labels since the code checks for len == 3
-        # So it will try to match as a label
-        assert '?country rdfs:label "US"@en' in query or "?country wdt:P298" in query
+        # Should handle US code mapping
+        assert "wdt:P27 wd:Q30" in query
 
 
 class TestBuildPublicInstitutionsQuery:
@@ -308,7 +297,7 @@ class TestQueryBuilderEdgeCases:
         query = build_public_figures_query(
             birthday_from="1990-01-01",
             birthday_to="2000-12-31",
-            nationality=["Q30", "Q145"],
+            nationality="United States",
             profession=["Q36180", "writer"],
             lang="fr",
             limit=25,
@@ -317,10 +306,9 @@ class TestQueryBuilderEdgeCases:
         # Verify all filters are present
         assert "1990-01-01" in query
         assert "2000-12-31" in query
-        assert "wdt:P27 wd:Q30" in query
-        assert "wdt:P27 wd:Q145" in query
+        assert "wdt:P27 wd:Q30" in query  # United States mapped to Q30
         assert "wdt:P106 wd:Q36180" in query
-        assert 'rdfs:label "writer"' in query
+        assert "wdt:P106 wd:Q36180" in query  # writer also maps to Q36180
         assert "LIMIT 26" in query
 
     def test_institutions_with_limit_one(self):
@@ -347,12 +335,12 @@ class TestQueryBuilderEdgeCases:
         assert "wdt:P1001" in query  # jurisdiction property
         assert "LIMIT 51" in query
 
-    def test_figures_empty_nationality_list(self):
-        """Test query with empty nationality list."""
-        query = build_public_figures_query(nationality=[])
+    def test_figures_none_nationality(self):
+        """Test query with None nationality (no filter)."""
+        query = build_public_figures_query(nationality=None)
 
         # Should have OPTIONAL clause for country
-        assert "OPTIONAL { ?person wdt:P27 ?country. }" in query
+        assert "OPTIONAL { ?person wdt:P27  ?country. }" in query
 
     def test_institutions_empty_type_list(self):
         """Test query with empty type list."""
