@@ -2,14 +2,13 @@
 
 from typing import List, Optional
 
-from ..constants import TYPE_MAPPINGS
-from ..security import escape_sparql_literal, validate_qid
+from ..constants import COUNTRY_MAPPINGS, TYPE_MAPPINGS
+from ..security import validate_qid
 
 
 def build_public_institutions_query(
     country: Optional[str] = None,
     type: Optional[List[str]] = None,
-    jurisdiction: Optional[str] = None,
     lang: str = "en",
     limit: int = 100,
     cursor: int = 0,
@@ -18,9 +17,8 @@ def build_public_institutions_query(
     """Build SPARQL query for public institutions with optional filters.
 
     Args:
-        country: Country filter (QID, ISO code, or label)
+        country: Country filter (QID or label)
         type: List of institution type filters (mapped keys, QIDs, or labels)
-        jurisdiction: Jurisdiction filter (QID or label)
         lang: Language code for labels
         limit: Maximum results to return
         cursor: Offset for pagination
@@ -32,110 +30,115 @@ def build_public_institutions_query(
     Raises:
         ValueError: If QID validation fails
     """
-    query = """
-    SELECT DISTINCT ?institution ?institutionLabel ?description ?type ?countryLabel ?jurisdictionLabel ?foundedDate ?dissolvedDate ?image ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle  WHERE {
-    ?institution wdt:P31 ?type.
-    """
+    # Build efficient subquery with core filters
+    subquery = """
+  {
+    SELECT ?institution WHERE {"""
 
+    # Build the WHERE clause conditions
+    conditions = []
+
+    # Add type filters to subquery if provided
     if type:
-        type_conditions = []
         for value in type:
             value = value.strip()
             if value in TYPE_MAPPINGS:
                 # Use mapped QID
                 mapped_qid = TYPE_MAPPINGS[value]
-                type_conditions.append(f"?institution wdt:P31 wd:{mapped_qid}.")
+                conditions.append(f"wdt:P31 wd:{mapped_qid}")
             elif value.startswith("Q"):
                 # Validate QID format
                 validated_qid = validate_qid(value)
-                type_conditions.append(f"?institution wdt:P31 wd:{validated_qid}.")
+                conditions.append(f"wdt:P31 wd:{validated_qid}")
             else:
-                # Label filter - escape to prevent injection
-                escaped_label = escape_sparql_literal(value)
-                type_conditions.append(
-                    f'?institution wdt:P31 ?type. ?type rdfs:label "{escaped_label}"@{lang}.'
+                # Unknown type - skip or raise error
+                raise ValueError(
+                    f"Unknown institution type '{value}'. "
+                    f"Supported types: {', '.join(sorted(TYPE_MAPPINGS.keys()))}"
                 )
-        query += "  " + " ".join(type_conditions) + "\n"
 
-    country_filter_applied = False
+    # Add country filter to subquery if provided
     if country:
         country_value = country.strip()
         if country_value.startswith("Q"):
-            # Validate QID format
+            # Direct QID - validate it
             validated_qid = validate_qid(country_value)
-            query += f"  ?institution wdt:P17 wd:{validated_qid}.\n"
-            country_filter_applied = True
-        elif len(country_value) == 3 and country_value.isalpha():
-            # ISO country code
-            code = escape_sparql_literal(country_value.upper())
-            query += "  ?institution wdt:P17 ?country.\n"
-            query += f'  ?country wdt:P298 "{code}".\n'
-            country_filter_applied = True
+            conditions.append(f"wdt:P17 wd:{validated_qid}")
+
+        elif country_value in COUNTRY_MAPPINGS:
+            # Map country name to QID
+            country_qid = COUNTRY_MAPPINGS[country_value]
+            conditions.append(f"wdt:P17 wd:{country_qid}")
         else:
-            # Label filter - escape to prevent injection
-            escaped_label = escape_sparql_literal(country_value)
-            query += (
-                f'  ?institution wdt:P17 ?country. ?country rdfs:label "{escaped_label}"@{lang}.\n'
+            raise ValueError(
+                f"Country filter must be a QID (starting with Q), got: {country_value}"
             )
-            country_filter_applied = True
 
-    jurisdiction_filter_applied = False
-    if jurisdiction:
-        jurisdiction_value = jurisdiction.strip()
-        if jurisdiction_value.startswith("Q"):
-            # Validate QID format
-            validated_qid = validate_qid(jurisdiction_value)
-            query += f"  ?institution wdt:P1001 wd:{validated_qid}.\n"
-            jurisdiction_filter_applied = True
-        else:
-            # Label filter - escape to prevent injection
-            escaped_label = escape_sparql_literal(jurisdiction_value)
-            query += f'  ?institution wdt:P1001 ?jurisdiction. ?jurisdiction rdfs:label "{escaped_label}"@{lang}.\n'
-            jurisdiction_filter_applied = True
+    # Build the triple pattern
+    if conditions:
+        subquery += "\n      ?institution " + conditions[0]
+        for condition in conditions[1:]:
+            subquery += " ;\n                   " + condition
+        subquery += " .\n"
+    else:
+        # If no filters, just match any institution with a type
+        subquery += "\n      ?institution wdt:P31 ?type .\n"
 
-    if not country_filter_applied:
-        query += "        OPTIONAL { ?institution wdt:P17 ?country. }\n"
+    # Add quidNum for keyset pagination and outer ordering
+    subquery += '      BIND(xsd:integer(STRAFTER(STR(?institution), "/entity/Q")) AS ?qidNum)\n'
 
-    if not jurisdiction_filter_applied:
-        query += "        OPTIONAL { ?institution wdt:P1001 ?jurisdiction. }\n"
-
-    query += """
-    OPTIONAL { ?institution wdt:P571 ?foundedDate. }
-    OPTIONAL { ?institution wdt:P576 ?dissolvedDate. }
-    OPTIONAL { ?institution wdt:P18 ?image. }
-    OPTIONAL { ?institution wdt:P2003 ?instagramHandle. }
-    OPTIONAL { ?institution wdt:P2002 ?twitterHandle. }
-    OPTIONAL { ?institution wdt:P2013 ?facebookHandle. }
-    OPTIONAL { ?institution wdt:P2397 ?youtubeHandle. }
-    SERVICE wikibase:label {
-        bd:serviceParam wikibase:language "en".
-        ?institution rdfs:label ?institutionLabel.
-        ?type rdfs:label ?typeLabel.
-        ?country rdfs:label ?countryLabel.
-        ?jurisdiction rdfs:label ?jurisdictionLabel.
-        ?institution schema:description ?description.
-    }
-    """
-
+    # Add keyset pagination to subquery if provided
     if after_qid and after_qid.startswith("Q"):
-        # Validate and use keyset pagination
         validated_qid = validate_qid(after_qid)
         try:
             after_qnum = int(validated_qid[1:])
-            query += (
-                '\nBIND(xsd:integer(STRAFTER(STR(?institution), "Q")) AS ?qidNum)\n'
-                f"FILTER(?qidNum > {after_qnum})\n"
-            )
+            subquery += f"      FILTER(?qidNum > {after_qnum})\n"
         except ValueError:
             pass
 
-    query += "}"
-
-    query += "\nORDER BY ?institution"
-    page_limit = max(1, int(limit) + 1)
-    query += f"\nLIMIT {page_limit}"
+    # Close subquery with ordering and pagination
+    subquery += "    }\n    ORDER BY ?institution\n"
+    subquery += f"    LIMIT {limit}\n"
 
     if (not after_qid) and cursor > 0:
-        query += f"\nOFFSET {cursor}"
+        subquery += f"    OFFSET {cursor}\n"
+
+    subquery += "  }\n"
+
+    # Build outer query with optional properties
+    query = (
+        "SELECT ?institution ?institutionLabel ?description\n"
+        "       ?typeLabel ?countryLabel\n"
+        "       ?foundedDate ?dissolvedDate\n"
+        "       ?image\n"
+        "       ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle\n"
+        "WHERE {\n"
+    )
+    query += subquery
+    query += """
+  OPTIONAL { ?institution wdt:P31 ?type. }
+  OPTIONAL { ?institution wdt:P17 ?country. }
+  OPTIONAL { ?institution wdt:P571 ?foundedDate. }
+  OPTIONAL { ?institution wdt:P576 ?dissolvedDate. }
+  OPTIONAL { ?institution wdt:P18 ?image. }
+
+  OPTIONAL { ?institution wdt:P2003 ?instagramHandle. }
+  OPTIONAL { ?institution wdt:P2002 ?twitterHandle. }
+  OPTIONAL { ?institution wdt:P2013 ?facebookHandle. }
+  OPTIONAL { ?institution wdt:P2397 ?youtubeHandle. }
+
+  OPTIONAL {
+    ?institution schema:description ?description.
+    FILTER(LANG(?description) = "%s")
+  }
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "%s". }
+}
+ORDER BY ?qidNum
+""" % (lang, lang)
+
+    # Write query to query.rq file for debugging
+    with open("query_institution.rq", "w", encoding="utf-8") as f:
+        f.write(query)
 
     return query

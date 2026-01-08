@@ -299,7 +299,7 @@ logger.setLevel(logging.INFO)
 
 results = list(client.iterate_public_figures(
     birthday_from="2000-01-01",
-    nationality=["United States"],
+    nationality="United States",
     max_results=100
 ))
 ```
@@ -311,9 +311,9 @@ Structured log fields can be accessed via `LogRecord.extra` for parsing and moni
 
 ## Performance
 
-### Internal Page Size: 15 Entities
+### Internal Per-Page Limit: 15 Entities
 
-The library uses an internal page size of 15 entities (`DEFAULT_PAGE_SIZE = 15`) for optimal performance with the Wikidata Query Service:
+The library uses an internal per-page limit of 15 entities (`DEFAULT_PAGE_SIZE = 15`) for optimal performance with the Wikidata Query Service:
 
 **Rationale**:
 - Wikidata Query Service has strict timeouts (~60 seconds)
@@ -322,7 +322,7 @@ The library uses an internal page size of 15 entities (`DEFAULT_PAGE_SIZE = 15`)
 - Predictable latency (typically < 3 seconds per page)
 
 **Performance Guidelines**:
-- Small workloads (< 1,000 entities): Default page size works well
+- Small workloads (< 1,000 entities): Default per-page limit works well
 - Large workloads (> 10,000 entities): Use restrictive filters or off-peak hours
 - Time-sensitive queries: Use `max_results` to limit total results
 - Best throughput: Iterator API uses keyset pagination automatically
@@ -337,7 +337,7 @@ The library uses an internal page size of 15 entities (`DEFAULT_PAGE_SIZE = 15`)
 - Complex queries (multiple filters + labels): ~2-4 seconds per page
 - Empty result queries: < 1 second
 
-The `page_size` parameter is available in `iter_public_figures` and `iter_public_institutions` for tuning when needed.
+The `limit` parameter is available in `iter_public_figures` and `iter_public_institutions` for tuning when needed.
 
 ## Development
 

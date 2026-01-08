@@ -1,15 +1,17 @@
 """Setup script for wikidata_collector package."""
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
+requirements = []
+
 setup(
     name="wikidata-collector",
     version="1.0.0",
-    author="Your Name",
-    author_email="your-email@example.com",
+    author="Jonathan Klüser",
+    author_email="jonathan.klueser@live.de",
     description="A pure Python library for fetching public figures and institutions from Wikidata",
     long_description=long_description,
     long_description_content_type="text/markdown",

@@ -43,9 +43,7 @@ class TestIteratePublicFiguresHappyPath:
 
         # Call the iterator API
         results = list(
-            client.iterate_public_figures(
-                birthday_from="1700-01-01", nationality=["United Kingdom"]
-            )
+            client.iterate_public_figures(birthday_from="1700-01-01", nationality="United Kingdom")
         )
 
         # Verify results
@@ -125,14 +123,12 @@ class TestIteratePublicFiguresHappyPath:
         )
 
         # Call with nationality filter
-        results = list(
-            client.iterate_public_figures(nationality=["US", "United States"], lang="en")
-        )
+        results = list(client.iterate_public_figures(nationality="United States", lang="en"))
 
         # Verify the underlying iterator was called with correct parameters
         mock_iter.assert_called_once()
         call_args = mock_iter.call_args
-        assert call_args.kwargs["nationality"] == ["US", "United States"]
+        assert call_args.kwargs["nationality"] == "United States"
 
         assert len(results) == 1
         assert results[0].nationalities == ["United States"]
@@ -152,7 +148,7 @@ class TestIteratePublicFiguresEdgeCases:
         results = list(
             client.iterate_public_figures(
                 birthday_from="3000-01-01",  # Future date
-                nationality=["NonexistentCountry"],
+                nationality="NonexistentCountry",
             )
         )
 
@@ -264,7 +260,7 @@ class TestIteratePublicFiguresEdgeCases:
         )
 
         with pytest.raises(InvalidFilterError) as exc_info:
-            list(client.iterate_public_figures(nationality=["Q!!!invalid"]))
+            list(client.iterate_public_figures(nationality="Q!!!invalid"))
 
         assert "Invalid filter parameters" in str(exc_info.value)
 

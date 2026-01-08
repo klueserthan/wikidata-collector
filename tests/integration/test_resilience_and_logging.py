@@ -388,7 +388,7 @@ class TestStructuredLoggingInIterators:
                     client.iterate_public_figures(
                         birthday_from="2000-01-01",
                         birthday_to="2000-12-31",
-                        nationality=["United States"],
+                        nationality="United States",
                         max_results=20,
                     )
                 )

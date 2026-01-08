@@ -100,9 +100,7 @@ class TestIteratePublicInstitutionsHappyPath:
         results = list(client.iterate_public_institutions(country="Germany", lang="en"))
 
         # Verify the underlying iterator was called with correct parameters
-        mock_iter.assert_called_once_with(
-            country="Germany", type=None, jurisdiction=None, lang="en"
-        )
+        mock_iter.assert_called_once_with(country="Germany", type=None, lang="en")
 
         assert len(results) == 1
 
@@ -135,31 +133,6 @@ class TestIteratePublicInstitutionsHappyPath:
 
         assert len(results) == 1
 
-    def test_iterate_with_jurisdiction_filter(self, mocker):
-        """Test iteration with jurisdiction filter."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q300"},
-                "institutionLabel": {"value": "State Agency"},
-                "jurisdictionLabel": {"value": "California"},
-            }
-        ]
-
-        client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
-        )
-
-        # Call with jurisdiction filter
-        results = list(client.iterate_public_institutions(jurisdiction="California", lang="en"))
-
-        # Verify the underlying iterator was called with correct parameters
-        mock_iter.assert_called_once_with(
-            country=None, type=None, jurisdiction="California", lang="en"
-        )
-
-        assert len(results) == 1
-
     def test_iterate_with_combined_filters(self, mocker):
         """Test iteration with multiple filters combined."""
         sample_sparql_results = [
@@ -169,7 +142,6 @@ class TestIteratePublicInstitutionsHappyPath:
                 "description": {"value": "Federal agency"},
                 "countryLabel": {"value": "United States"},
                 "typeLabel": {"value": "government agency"},
-                "jurisdictionLabel": {"value": "United States"},
             }
         ]
 
@@ -180,15 +152,11 @@ class TestIteratePublicInstitutionsHappyPath:
 
         # Call with combined filters
         results = list(
-            client.iterate_public_institutions(
-                country="US", types=["government_agency"], jurisdiction="Q30", lang="en"
-            )
+            client.iterate_public_institutions(country="US", types=["government_agency"], lang="en")
         )
 
         # Verify the underlying iterator was called with all filters
-        mock_iter.assert_called_once_with(
-            country="US", type=["government_agency"], jurisdiction="Q30", lang="en"
-        )
+        mock_iter.assert_called_once_with(country="US", type=["government_agency"], lang="en")
 
         assert len(results) == 1
         assert results[0].name == "US Government Agency"

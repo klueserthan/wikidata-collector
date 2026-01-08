@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: ['[0-9]*-*' ]
   pull_request:
     branches: [ main, 001-wikidata-etl-package ]
 

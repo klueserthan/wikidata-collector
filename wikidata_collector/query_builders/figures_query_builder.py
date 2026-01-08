@@ -2,13 +2,14 @@
 
 from typing import List, Optional
 
-from ..security import escape_sparql_literal, validate_qid
+from ..constants import COUNTRY_MAPPINGS, PROFESSION_MAPPINGS
+from ..security import validate_qid
 
 
 def build_public_figures_query(
     birthday_from: Optional[str] = None,
     birthday_to: Optional[str] = None,
-    nationality: Optional[List[str]] = None,
+    nationality: Optional[str] = None,
     profession: Optional[List[str]] = None,
     lang: str = "en",
     limit: int = 100,
@@ -20,8 +21,8 @@ def build_public_figures_query(
     Args:
         birthday_from: Start date filter (ISO format)
         birthday_to: End date filter (ISO format)
-        nationality: List of nationality filters (QIDs, ISO codes, or labels)
-        profession: List of profession filters (QIDs or labels)
+        nationality: Nationality filter (country name or QID)
+        profession: List of profession filters (mapped keys or QIDs)
         lang: Language code for labels
         limit: Maximum results to return
         cursor: Offset for pagination
@@ -33,109 +34,115 @@ def build_public_figures_query(
     Raises:
         ValueError: If QID validation fails
     """
-    query = """
-    SELECT DISTINCT ?person ?personLabel ?description ?birthDate ?deathDate ?genderLabel ?countryLabel ?occupationLabel ?image ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle WHERE {
-    ?person wdt:P31 wd:Q5;
-            wdt:P569 ?birthDate.
-    """
+    # Build efficient subquery with core filters
+    subquery = """
+  {
+    SELECT ?person ?birthDate WHERE {
+      ?person wdt:P31 wd:Q5 ;
+              wdt:P569 ?birthDate"""
 
-    if birthday_from:
-        query += f'  FILTER(?birthDate >= "{birthday_from}T00:00:00Z"^^xsd:dateTime)\n'
-    if birthday_to:
-        query += f'  FILTER(?birthDate <= "{birthday_to}T23:59:59Z"^^xsd:dateTime)\n'
-
-    nationality_filter_applied = False
+    # Add nationality filter to subquery if provided
     if nationality:
-        nationality_conditions = []
-        for nat in nationality:
-            nat_value = nat.strip()
-            if nat_value.startswith("Q"):
-                # Validate QID format
-                validated_qid = validate_qid(nat_value)
-                nationality_conditions.append(f"?person wdt:P27 wd:{validated_qid}.")
-            elif len(nat_value) == 3 and nat_value.isalpha():
-                # ISO country code
-                code = escape_sparql_literal(nat_value.upper())
-                nationality_conditions.append(
-                    f'?person wdt:P27 ?country. ?country wdt:P298 "{code}".'
-                )
-            else:
-                # Label filter - escape to prevent injection
-                escaped_label = escape_sparql_literal(nat_value)
-                nationality_conditions.append(
-                    f'?person wdt:P27 ?country. ?country rdfs:label "{escaped_label}"@{lang}.'
-                )
-        query += "  " + " ".join(nationality_conditions) + "\n"
-        nationality_filter_applied = True
+        nationality_value = nationality.strip()
+        if nationality_value.startswith("Q"):
+            # Direct QID - validate it
+            validated_qid = validate_qid(nationality_value)
+            subquery += f" ;\n              wdt:P27 wd:{validated_qid}"
+        elif nationality_value in COUNTRY_MAPPINGS:
+            # Map country name to QID
+            country_qid = COUNTRY_MAPPINGS[nationality_value]
+            subquery += f" ;\n              wdt:P27 wd:{country_qid}"
+        else:
+            # Unknown country - skip filter or raise error
+            raise ValueError(
+                f"Unknown country '{nationality_value}'. "
+                f"Supported countries: {', '.join(sorted(COUNTRY_MAPPINGS.keys()))}"
+            )
 
-    profession_filter_applied = False
+    # Add profession filters to subquery if provided
     if profession:
-        profession_conditions = []
         for prof in profession:
             prof_value = prof.strip()
             if prof_value.startswith("Q"):
-                # Validate QID format
+                # Direct QID - validate it
                 validated_qid = validate_qid(prof_value)
-                profession_conditions.append(f"?person wdt:P106 wd:{validated_qid}.")
+                subquery += f" ;\n              wdt:P106 wd:{validated_qid}"
+            elif prof_value in PROFESSION_MAPPINGS:
+                # Map profession name to QID
+                profession_qid = PROFESSION_MAPPINGS[prof_value]
+                subquery += f" ;\n              wdt:P106 wd:{profession_qid}"
             else:
-                # Label filter - escape to prevent injection
-                escaped_label = escape_sparql_literal(prof_value)
-                profession_conditions.append(
-                    f'?person wdt:P106 ?occupation. ?occupation rdfs:label "{escaped_label}"@{lang}.'
+                # Unknown profession - skip filter or raise error
+                raise ValueError(
+                    f"Unknown profession '{prof_value}'. "
+                    f"Supported professions: {', '.join(sorted(PROFESSION_MAPPINGS.keys()))}"
                 )
-        query += "  " + " ".join(profession_conditions) + "\n"
-        profession_filter_applied = True
 
-    query += """
-    OPTIONAL { ?person wdt:P570 ?deathDate. }
-    OPTIONAL { ?person wdt:P21 ?gender. }
-    """
+    subquery += " .\n"
 
-    if not nationality_filter_applied:
-        query += """
-    OPTIONAL { ?person wdt:P27 ?country. }
-    """
+    # Add date filters to subquery
+    if birthday_from:
+        subquery += f'      FILTER(?birthDate >= "{birthday_from}T00:00:00Z"^^xsd:dateTime)\n'
+    if birthday_to:
+        subquery += f'      FILTER(?birthDate <= "{birthday_to}T23:59:59Z"^^xsd:dateTime)\n'
 
-    if not profession_filter_applied:
-        query += """
-    OPTIONAL { ?person wdt:P106 ?occupation. }
-    """
+    # Add quidNum for keyset pagination and outer ordering
+    subquery += '      BIND(xsd:integer(STRAFTER(STR(?person), "/entity/Q")) AS ?qidNum)\n'
 
-    query += """
-    OPTIONAL { ?person wdt:P18 ?image. }
-    OPTIONAL { ?person wdt:P2003 ?instagramHandle. }
-    OPTIONAL { ?person wdt:P2002 ?twitterHandle. }
-    OPTIONAL { ?person wdt:P2013 ?facebookHandle. }
-    OPTIONAL { ?person wdt:P2397 ?youtubeHandle. }
-    SERVICE wikibase:label {
-        bd:serviceParam wikibase:language "en".
-        ?person rdfs:label ?personLabel.
-        ?gender rdfs:label ?genderLabel.
-        ?country rdfs:label ?countryLabel.
-        ?occupation rdfs:label ?occupationLabel.
-        ?person schema:description ?description.
-    }
-    """
-
+    # Add keyset pagination to subquery if provided
     if after_qid and after_qid.startswith("Q"):
-        # Validate and use keyset pagination
         validated_qid = validate_qid(after_qid)
         try:
             after_qnum = int(validated_qid[1:])
-            query += (
-                '\nBIND(xsd:integer(STRAFTER(STR(?person), "Q")) AS ?qidNum)\n'
-                f"FILTER(?qidNum > {after_qnum})\n"
-            )
+            subquery += f"      FILTER(?qidNum > {after_qnum})\n"
         except ValueError:
             pass
 
-    query += "}"
-
-    query += "\nORDER BY ?person"
-    page_limit = max(1, int(limit) + 1)
-    query += f"\nLIMIT {page_limit}"
+    # Close subquery with ordering and pagination
+    subquery += "    }\n    ORDER BY ?person\n"
+    subquery += f"    LIMIT {limit}\n"
 
     if (not after_qid) and cursor > 0:
-        query += f"\nOFFSET {cursor}"
+        subquery += f"    OFFSET {cursor}\n"
 
+    subquery += "  }\n"
+
+    # Build outer query with optional properties
+    query = (
+        "SELECT ?person ?personLabel ?description\n"
+        "       ?birthDate ?deathDate\n"
+        "       ?genderLabel\n"
+        "       ?countryLabel\n"
+        "       ?occupationLabel\n"
+        "       ?image\n"
+        "       ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle\n"
+        "WHERE {\n"
+    )
+    query += subquery
+    query += """
+  OPTIONAL { ?person wdt:P570 ?deathDate. }
+  OPTIONAL { ?person wdt:P21  ?gender. }
+  OPTIONAL { ?person wdt:P27  ?country. }
+  OPTIONAL { ?person wdt:P18  ?image. }
+
+  OPTIONAL { ?person wdt:P106 ?occupation. }
+
+  OPTIONAL { ?person wdt:P2003 ?instagramHandle. }
+  OPTIONAL { ?person wdt:P2002 ?twitterHandle. }
+  OPTIONAL { ?person wdt:P2013 ?facebookHandle. }
+  OPTIONAL { ?person wdt:P2397 ?youtubeHandle. }
+
+  OPTIONAL {
+    ?person schema:description ?description.
+    FILTER(LANG(?description) = "%s")
+  }
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "%s". }
+}
+ORDER BY ?qidNum
+""" % (lang, lang)
+
+    # Write query to query.rq file for debugging
+    # with open("query_person.rq", "w", encoding="utf-8") as f:
+    #     f.write(query)
     return query

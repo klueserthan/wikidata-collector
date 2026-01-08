@@ -31,7 +31,7 @@ from .security import validate_qid
 logger = logging.getLogger(__name__)
 
 # Default page size for iterator-friendly pagination
-DEFAULT_PAGE_SIZE = 15
+DEFAULT_LIMIT = 15
 
 
 def _log_query_execution(
@@ -341,10 +341,10 @@ class WikidataClient:
         self,
         birthday_from: Optional[str] = None,
         birthday_to: Optional[str] = None,
-        nationality: Optional[List[str]] = None,
+        nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = 100,
+        limit: int = DEFAULT_LIMIT,
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
@@ -385,9 +385,8 @@ class WikidataClient:
         self,
         country: Optional[str] = None,
         type: Optional[List[str]] = None,
-        jurisdiction: Optional[str] = None,
         lang: str = "en",
-        limit: int = 100,
+        limit: int = DEFAULT_LIMIT,
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
@@ -397,7 +396,6 @@ class WikidataClient:
         Args:
             country: Country filter (QID, ISO code, or label)
             type: List of institution type filters (mapped keys, QIDs, or labels)
-            jurisdiction: Jurisdiction filter (QID or label)
             lang: Language code for labels
             limit: Maximum results to return
             cursor: Offset for pagination
@@ -410,7 +408,6 @@ class WikidataClient:
         query = build_public_institutions_query(
             country=country,
             type=type,
-            jurisdiction=jurisdiction,
             lang=lang,
             limit=limit,
             cursor=cursor,
@@ -494,7 +491,7 @@ class WikidataClient:
         entity_uri_key: str,
         fetch_page_fn,
         params: Dict[str, Any],
-        page_size: int,
+        limit: int,
     ) -> Iterator[Dict[str, Any]]:
         """Generic helper for paginating SPARQL results with keyset pagination.
 
@@ -503,7 +500,7 @@ class WikidataClient:
             entity_uri_key: Key name in results dict containing entity URI (e.g., 'person', 'institution')
             fetch_page_fn: Function to fetch a page of results, must accept after_qid parameter
             params: Query parameters for logging
-            page_size: Number of results per page
+            limit: Number of results per page
 
         Yields:
             Individual SPARQL result bindings
@@ -536,19 +533,22 @@ class WikidataClient:
             for result in results:
                 yield result
 
-            # Set up next page using keyset pagination
-            if len(results) < page_size:
-                # Last page
+            # Extract distinct QIDs from results to check if we've reached the end
+            distinct_qids = set()
+            for result in results:
+                entity_uri = result.get(entity_uri_key, {}).get("value", "")
+                if entity_uri and "/" in entity_uri:
+                    qid = entity_uri.rsplit("/", 1)[-1]
+                    if qid:
+                        distinct_qids.add(qid)
+
+            # If we got fewer distinct IDs than limit, we've reached the end
+            if len(distinct_qids) < limit:
                 break
 
-            # Get QID from last result for next page
-            entity_uri = results[-1].get(entity_uri_key, {}).get("value", "")
-            if entity_uri and "/" in entity_uri:
-                last_qid = entity_uri.rsplit("/", 1)[-1]
-                if last_qid:
-                    after_qid = last_qid
-                else:
-                    break
+            # Get highest QID for next page keyset pagination
+            if distinct_qids:
+                after_qid = sorted(distinct_qids)[-1]
             else:
                 break
 
@@ -556,10 +556,10 @@ class WikidataClient:
         self,
         birthday_from: Optional[str] = None,
         birthday_to: Optional[str] = None,
-        nationality: Optional[List[str]] = None,
+        nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
-        page_size: int = DEFAULT_PAGE_SIZE,
+        limit: int = DEFAULT_LIMIT,
         override_proxies: Optional[List[str]] = None,
     ) -> Iterator[Dict[str, Any]]:
         """Iterate over public figures with automatic pagination.
@@ -573,7 +573,7 @@ class WikidataClient:
             nationality: List of nationality filters (QIDs, ISO codes, or labels)
             profession: List of profession filters (QIDs or labels)
             lang: Language code for labels
-            page_size: Results per page (default: 15)
+            limit: Results per page (default: 15)
             override_proxies: Optional list of proxy URLs
 
         Yields:
@@ -587,7 +587,7 @@ class WikidataClient:
                 nationality=nationality,
                 profession=profession,
                 lang=lang,
-                limit=page_size,
+                limit=limit,
                 after_qid=after_qid,
                 override_proxies=override_proxies,
             )
@@ -603,16 +603,15 @@ class WikidataClient:
                 "profession": profession,
                 "lang": lang,
             },
-            page_size=page_size,
+            limit=limit,
         )
 
     def iter_public_institutions(
         self,
         country: Optional[str] = None,
         type: Optional[List[str]] = None,
-        jurisdiction: Optional[str] = None,
         lang: str = "en",
-        page_size: int = DEFAULT_PAGE_SIZE,
+        limit: int = DEFAULT_LIMIT,
         override_proxies: Optional[List[str]] = None,
     ) -> Iterator[Dict[str, Any]]:
         """Iterate over public institutions with automatic pagination.
@@ -625,7 +624,7 @@ class WikidataClient:
             type: List of institution type filters (mapped keys, QIDs, or labels)
             jurisdiction: Jurisdiction filter (QID or label)
             lang: Language code for labels
-            page_size: Results per page (default: 15)
+            limit: Results per page (default: 15)
             override_proxies: Optional list of proxy URLs
 
         Yields:
@@ -636,9 +635,8 @@ class WikidataClient:
             return self.get_public_institutions(
                 country=country,
                 type=type,
-                jurisdiction=jurisdiction,
                 lang=lang,
-                limit=page_size,
+                limit=limit,
                 after_qid=after_qid,
                 override_proxies=override_proxies,
             )
@@ -647,8 +645,8 @@ class WikidataClient:
             query_type="public_institutions",
             entity_uri_key="institution",
             fetch_page_fn=fetch_page,
-            params={"country": country, "type": type, "jurisdiction": jurisdiction, "lang": lang},
-            page_size=page_size,
+            params={"country": country, "type": type, "lang": lang},
+            limit=limit,
         )
 
     def iterate_public_figures(
@@ -656,14 +654,14 @@ class WikidataClient:
         *,
         birthday_from: Optional[str] = None,
         birthday_to: Optional[str] = None,
-        nationality: Optional[List[str]] = None,
+        nationality: Optional[str] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
     ) -> Iterator[PublicFigure]:
         """Yield public figures matching the given filters.
 
         Applies filters on birthday and nationality as specified in the feature spec.
-        Expects human-readable nationality labels or codes (e.g., "US", "DE") rather than QIDs;
+        Expects human-readable nationality label (e.g., "US", "Germany") or QID;
         query builders translate these into appropriate SPARQL constraints.
         Uses a stable internal ordering by entity ID.
         Hides SPARQL pagination; callers simply iterate over results.
@@ -673,7 +671,7 @@ class WikidataClient:
         Args:
             birthday_from: Start date filter (ISO format, e.g., "1990-01-01")
             birthday_to: End date filter (ISO format, e.g., "2000-12-31")
-            nationality: List of nationality filters (ISO codes like "US", "DE", or labels)
+            nationality: Nationality filter (country name like "Germany" or QID)
             max_results: Maximum number of results to yield (None for unlimited)
             lang: Language code for labels (default: "en")
 
@@ -872,7 +870,6 @@ class WikidataClient:
             for sparql_result in self.iter_public_institutions(
                 country=country,
                 type=types,
-                jurisdiction=jurisdiction,
                 lang=lang,
             ):
                 # Normalize the SPARQL result to PublicInstitution model
