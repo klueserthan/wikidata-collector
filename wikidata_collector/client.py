@@ -533,19 +533,22 @@ class WikidataClient:
             for result in results:
                 yield result
 
-            # Set up next page using keyset pagination
-            if len(results) < limit:
-                # Last page
+            # Extract distinct QIDs from results to check if we've reached the end
+            distinct_qids = set()
+            for result in results:
+                entity_uri = result.get(entity_uri_key, {}).get("value", "")
+                if entity_uri and "/" in entity_uri:
+                    qid = entity_uri.rsplit("/", 1)[-1]
+                    if qid:
+                        distinct_qids.add(qid)
+
+            # If we got fewer distinct IDs than limit, we've reached the end
+            if len(distinct_qids) < limit:
                 break
 
-            # Get QID from last result for next page
-            entity_uri = results[-1].get(entity_uri_key, {}).get("value", "")
-            if entity_uri and "/" in entity_uri:
-                last_qid = entity_uri.rsplit("/", 1)[-1]
-                if last_qid:
-                    after_qid = last_qid
-                else:
-                    break
+            # Get highest QID for next page keyset pagination
+            if distinct_qids:
+                after_qid = sorted(distinct_qids)[-1]
             else:
                 break
 

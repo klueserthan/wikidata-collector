@@ -87,7 +87,7 @@ class TestBuildPublicFiguresQuery:
         """Test limit parameter."""
         query = build_public_figures_query(limit=200)
 
-        assert "LIMIT 201" in query  # limit + 1 for has_more detection
+        assert "LIMIT 200" in query  # Pagination now checks distinct QIDs
 
     def test_language_parameter(self):
         """Test language parameter in SERVICE block."""
@@ -218,7 +218,7 @@ class TestBuildPublicInstitutionsQuery:
         """Test limit parameter."""
         query = build_public_institutions_query(limit=50)
 
-        assert "LIMIT 51" in query  # limit + 1 for has_more detection
+        assert "LIMIT 50" in query  # Pagination now checks distinct QIDs
 
     def test_optional_fields_without_filters(self):
         """Test that optional fields are included when no filters applied."""
@@ -270,15 +270,15 @@ class TestQueryBuilderEdgeCases:
         """Test query with limit=1 (minimum valid limit)."""
         query = build_public_figures_query(limit=1)
 
-        # Should generate LIMIT 2 (limit + 1 for has_more detection)
-        assert "LIMIT 2" in query
+        # Pagination now checks distinct QIDs, so LIMIT matches requested limit
+        assert "LIMIT 1" in query
 
     def test_figures_with_large_limit(self):
         """Test query with very large limit."""
         query = build_public_figures_query(limit=1000)
 
-        # Should generate LIMIT 1001
-        assert "LIMIT 1001" in query
+        # Pagination now checks distinct QIDs, so LIMIT matches requested limit
+        assert "LIMIT 1000" in query
 
     def test_figures_with_all_filters_combined(self):
         """Test query with all possible filters at once."""
@@ -297,14 +297,14 @@ class TestQueryBuilderEdgeCases:
         assert "wdt:P27 wd:Q30" in query  # United States mapped to Q30
         assert "wdt:P106 wd:Q36180" in query
         assert "wdt:P106 wd:Q36180" in query  # writer also maps to Q36180
-        assert "LIMIT 26" in query
+        assert "LIMIT 25" in query
 
     def test_institutions_with_limit_one(self):
         """Test query with limit=1 (minimum valid limit)."""
         query = build_public_institutions_query(limit=1)
 
-        # Should generate LIMIT 2 (limit + 1 for has_more detection)
-        assert "LIMIT 2" in query
+        # Pagination now checks distinct QIDs, so LIMIT matches requested limit
+        assert "LIMIT 1" in query
 
     def test_institutions_with_all_filters_combined(self):
         """Test query with all possible filters at once."""
@@ -319,7 +319,7 @@ class TestQueryBuilderEdgeCases:
         assert "wdt:P17 wd:Q30" in query
         assert "wdt:P31 wd:Q327333" in query
         assert "wdt:P31 wd:Q7278" in query  # political_party mapping
-        assert "LIMIT 51" in query
+        assert "LIMIT 50" in query
 
     def test_figures_none_nationality(self):
         """Test query with None nationality (no filter)."""

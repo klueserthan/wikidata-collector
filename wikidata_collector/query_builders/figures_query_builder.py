@@ -86,22 +86,21 @@ def build_public_figures_query(
     if birthday_to:
         subquery += f'      FILTER(?birthDate <= "{birthday_to}T23:59:59Z"^^xsd:dateTime)\n'
 
+    # Add quidNum for keyset pagination and outer ordering
+    subquery += '      BIND(xsd:integer(STRAFTER(STR(?person), "/entity/Q")) AS ?qidNum)\n'
+
     # Add keyset pagination to subquery if provided
     if after_qid and after_qid.startswith("Q"):
         validated_qid = validate_qid(after_qid)
         try:
             after_qnum = int(validated_qid[1:])
-            subquery += (
-                '      BIND(xsd:integer(STRAFTER(STR(?person), "Q")) AS ?qidNum)\n'
-                f"      FILTER(?qidNum > {after_qnum})\n"
-            )
+            subquery += f"      FILTER(?qidNum > {after_qnum})\n"
         except ValueError:
             pass
 
     # Close subquery with ordering and pagination
     subquery += "    }\n    ORDER BY ?person\n"
-    page_limit = max(1, int(limit) + 1)
-    subquery += f"    LIMIT {page_limit}\n"
+    subquery += f"    LIMIT {limit}\n"
 
     if (not after_qid) and cursor > 0:
         subquery += f"    OFFSET {cursor}\n"
@@ -140,6 +139,7 @@ def build_public_figures_query(
 
   SERVICE wikibase:label { bd:serviceParam wikibase:language "%s". }
 }
+ORDER BY ?qidNum
 """ % (lang, lang)
 
     # Write query to query.rq file for debugging
