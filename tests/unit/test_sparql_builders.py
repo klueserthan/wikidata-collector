@@ -74,7 +74,7 @@ class TestBuildPublicFiguresQuery:
         """Test keyset pagination with QID."""
         query = build_public_figures_query(after_qid="Q100")
 
-        assert 'BIND(xsd:integer(STRAFTER(STR(?person), "Q")) AS ?qidNum)' in query
+        assert 'BIND(xsd:integer(STRAFTER(STR(?person), "/entity/Q")) AS ?qidNum)' in query
         assert "FILTER(?qidNum > 100)" in query
 
     def test_offset_pagination(self):
@@ -166,7 +166,7 @@ class TestBuildPublicInstitutionsQuery:
         """Test keyset pagination with QID."""
         query = build_public_institutions_query(after_qid="Q1000")
 
-        assert 'BIND(xsd:integer(STRAFTER(STR(?institution), "Q")) AS ?qidNum)' in query
+        assert 'BIND(xsd:integer(STRAFTER(STR(?institution), "/entity/Q")) AS ?qidNum)' in query
         assert "FILTER(?qidNum > 1000)" in query
 
     def test_country_filter_iso_code_mapped(self):
