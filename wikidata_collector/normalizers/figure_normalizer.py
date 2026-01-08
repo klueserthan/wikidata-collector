@@ -1,51 +1,21 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from ..models import AccountEntry, Identifier, PublicFigure, WebsiteEntry
+from ..models import PublicFigureWikiRecord
 
 
 def normalize_public_figure(
     item: Dict[str, Any],
     expanded_data: Optional[Dict[str, Any]],
-) -> PublicFigure:
+) -> PublicFigureWikiRecord:
     """Normalize Wikidata result to the public figure schema."""
 
     qid = item["person"]["value"].split("/")[-1]
     current_time = datetime.now(timezone.utc).isoformat()
 
+    # Expanded data is optional; only keys we may use are gender/nationalities/professions
     if expanded_data is None:
-        expanded_data = {
-            "aliases": [],
-            "gender": None,
-            "nationalities": [],
-            "professions": [],
-            "place_of_birth": [],
-            "place_of_death": [],
-            "residence": [],
-            "website": [],
-            "accounts": [],
-            "affiliations": [],
-            "notable_works": [],
-            "awards": [],
-            "identifiers": [],
-        }
-
-    for key in [
-        "aliases",
-        "nationalities",
-        "professions",
-        "place_of_birth",
-        "place_of_death",
-        "residence",
-        "website",
-        "accounts",
-        "affiliations",
-        "notable_works",
-        "awards",
-        "identifiers",
-    ]:
-        if key not in expanded_data or expanded_data[key] is None:
-            expanded_data[key] = []
+        expanded_data = {}
 
     name_value = item.get("personLabel", {}).get("value")
 
@@ -57,74 +27,38 @@ def normalize_public_figure(
         if gender_label:
             gender_value = gender_label.lower()
 
-    birthday_value = item.get("birthDate", {}).get("value")
-    deathday_value = item.get("deathDate", {}).get("value")
+    birth_date = item.get("birthDate", {}).get("value")
+    death_date = item.get("deathDate", {}).get("value")
 
-    image_list = []
-    if item.get("image", {}).get("value"):
-        image_list.append(item["image"]["value"])
+    image_value = item.get("image", {}).get("value")
 
-    website_list = [WebsiteEntry(**w) for w in expanded_data.get("website", [])]
-    accounts_list = [AccountEntry(**a) for a in expanded_data.get("accounts", [])]
-    identifiers_list = [Identifier(**i) for i in expanded_data.get("identifiers", [])]
-
-    def add_account(platform: str, handle: Optional[str]):
-        if not handle:
-            return
-        if not any(acc.platform == platform and acc.handle == handle for acc in accounts_list):
-            accounts_list.append(
-                AccountEntry(
-                    platform=platform,
-                    handle=handle,
-                    source="wikidata",
-                    retrieved_at=current_time,
-                )
-            )
-
-    add_account("twitter", item.get("twitterHandle", {}).get("value"))
-    add_account("instagram", item.get("instagramHandle", {}).get("value"))
-    add_account("facebook", item.get("facebookHandle", {}).get("value"))
-    add_account("youtube", item.get("youtubeHandle", {}).get("value"))
-    add_account("tiktok", item.get("tiktokHandle", {}).get("value"))
-
-    nationalities = expanded_data.get("nationalities", []) or []
-    if not nationalities:
+    countries = expanded_data.get("nationalities", []) or []
+    if not countries:
         country_label = item.get("countryLabel", {}).get("value")
         if country_label:
-            nationalities = [country_label]
+            countries = [country_label]
 
-    professions = expanded_data.get("professions", []) or []
-    if not professions:
+    occupations = expanded_data.get("professions", []) or []
+    if not occupations:
         occupation_label = item.get("occupationLabel", {}).get("value")
         if occupation_label:
-            professions = [occupation_label]
+            occupations = [occupation_label]
 
-    place_of_birth_list = expanded_data.get("place_of_birth", []) or []
-    place_of_birth_value = place_of_birth_list[0] if place_of_birth_list else None
-
-    place_of_death_list = expanded_data.get("place_of_death", []) or []
-    place_of_death_value = place_of_death_list[0] if place_of_death_list else None
-
-    return PublicFigure(
+    return PublicFigureWikiRecord(
         id=qid,
         entity_kind="public_figure",
         name=name_value,
-        aliases=expanded_data.get("aliases", []) or [],
+        # aliases not part of the current query/model surface
         description=description_value,
-        birthday=birthday_value,
-        deathday=deathday_value,
+        birth_date=birth_date,
+        death_date=death_date,
         gender=gender_value,
-        nationalities=nationalities,
-        professions=professions,
-        place_of_birth=place_of_birth_value,
-        place_of_death=place_of_death_value,
-        residence=expanded_data.get("residence", []) or [],
-        website=website_list,
-        accounts=accounts_list,
-        affiliations=expanded_data.get("affiliations", []) or [],
-        notable_works=expanded_data.get("notable_works", []) or [],
-        awards=expanded_data.get("awards", []) or [],
-        identifiers=identifiers_list,
-        image=image_list,
+        countries=countries,
+        occupations=occupations,
+        image=image_value,
+        instagram_handle=item.get("instagramHandle", {}).get("value"),
+        twitter_handle=item.get("twitterHandle", {}).get("value"),
+        facebook_handle=item.get("facebookHandle", {}).get("value"),
+        youtube_handle=item.get("youtubeHandle", {}).get("value"),
         updated_at=current_time,
     )

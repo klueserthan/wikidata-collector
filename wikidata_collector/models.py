@@ -34,53 +34,41 @@ class SubInstitution(BaseModel):
     image: Optional[str] = None
 
 
-class PublicFigure(BaseModel):
-    id: Optional[str] = None
+class PublicFigureWikiRecord(BaseModel):
+    """Normalized view of fields returned by build_public_figures_query."""
+
+    qid: str  # QID, derived from ?person URI
     entity_kind: Optional[str] = "public_figure"
-    name: Optional[str] = None
-    aliases: List[str] = []
-    description: Optional[str] = None
-    birthday: Optional[str] = None
-    deathday: Optional[str] = None
-    gender: Optional[str] = None
-    nationalities: List[str] = []
-    professions: List[str] = []
-    place_of_birth: Optional[str] = None
-    place_of_death: Optional[str] = None
-    residence: List[str] = []
-    website: List[WebsiteEntry] = []
-    accounts: List[AccountEntry] = []
-    affiliations: List[str] = []
-    notable_works: List[str] = []
-    awards: List[str] = []
-    identifiers: List[Identifier] = []
-    image: List[str] = []
-    updated_at: Optional[str] = None
+    name: Optional[str] = None  # ?personLabel
+    description: Optional[str] = None  # ?description
+    birth_date: Optional[str] = None  # ?birthDate
+    death_date: Optional[str] = None  # ?deathDate
+    gender: Optional[str] = None  # ?genderLabel
+    countries: Optional[str] = None  # ?countryLabel
+    occupations: Optional[str] = None  # ?occupationLabel
+    image: Optional[str] = None  # ?image
+    instagram_handle: Optional[str] = None  # ?instagramHandle
+    twitter_handle: Optional[str] = None  # ?twitterHandle
+    facebook_handle: Optional[str] = None  # ?facebookHandle
+    youtube_handle: Optional[str] = None  # ?youtubeHandle
 
 
-class PublicInstitution(BaseModel):
-    id: str
+class PublicInstitutionWikiRecord(BaseModel):
+    """Normalized view of fields returned by build_public_institutions_query."""
+
+    qid: str  # QID, derived from ?institution URI
     entity_kind: Optional[str] = "public_institution"
-    name: Optional[str] = None
-    aliases: List[str] = []
-    description: Optional[str] = None
-    founded: Optional[str] = None
-    country: List[str] = []
-    jurisdiction: List[str] = []
-    types: List[str] = []
-    legal_form: List[str] = []
-    headquarters: List[str] = []
-    headquarters_coords: List[Coordinates] = []
-    website: List[WebsiteEntry] = []
-    official_language: List[str] = []
-    logo: List[str] = []
-    budget: List[str] = []
-    parent_institution: List[str] = []
-    sub_institutions: List[SubInstitution] = []
-    sector: List[str] = []
-    affiliations: List[str] = []
-    accounts: List[AccountEntry] = []
-    updated_at: Optional[str] = None
+    name: Optional[str] = None  # ?institutionLabel
+    description: Optional[str] = None  # ?description
+    founded_date: Optional[str] = None  # ?foundedDate
+    dissolved_date: Optional[str] = None  # ?dissolvedDate
+    countries: Optional[str] = None  # ?countryLabel
+    types: Optional[str] = None  # ?typeLabel
+    image: Optional[str] = None  # ?image
+    instagram_handle: Optional[str] = None  # ?instagramHandle
+    twitter_handle: Optional[str] = None  # ?twitterHandle
+    facebook_handle: Optional[str] = None  # ?facebookHandle
+    youtube_handle: Optional[str] = None  # ?youtubeHandle
 
 
 class PaginatedResponse(BaseModel):

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from ..models import AccountEntry, Coordinates, PublicInstitution, WebsiteEntry
+from ..models import Coordinates, PublicInstitution
 
 
 def normalize_public_institution(
@@ -14,47 +14,7 @@ def normalize_public_institution(
     current_time = datetime.now(timezone.utc).isoformat()
 
     if expanded_data is None:
-        expanded_data = {
-            "aliases": [],
-            "types": [],
-            "country": [],
-            "country_code": [],
-            "jurisdiction": [],
-            "founded": [],
-            "legal_form": [],
-            "headquarters": [],
-            "headquarters_coords": [],
-            "website": [],
-            "official_language": [],
-            "logo": [],
-            "budget": [],
-            "parent_institution": [],
-            "sector": [],
-            "affiliations": [],
-            "accounts": [],
-        }
-
-    for key in [
-        "aliases",
-        "types",
-        "country",
-        "country_code",
-        "jurisdiction",
-        "founded",
-        "legal_form",
-        "headquarters",
-        "headquarters_coords",
-        "website",
-        "official_language",
-        "logo",
-        "budget",
-        "parent_institution",
-        "sector",
-        "affiliations",
-        "accounts",
-    ]:
-        if key not in expanded_data or expanded_data[key] is None:
-            expanded_data[key] = []
+        expanded_data = {}
 
     name_value = item.get("institutionLabel", {}).get("value")
 
@@ -74,12 +34,7 @@ def normalize_public_institution(
 
     description_value = item.get("description", {}).get("value")
 
-    image_list = []
-    if item.get("image", {}).get("value"):
-        image_list.append(item["image"]["value"])
-
-    website_list = [WebsiteEntry(**w) for w in expanded_data.get("website", [])]
-    accounts_list = [AccountEntry(**a) for a in expanded_data.get("accounts", [])]
+    image_value = item.get("image", {}).get("value")
 
     hq_coords_list = []
     coords_list = expanded_data.get("headquarters_coords", []) or []
@@ -102,67 +57,38 @@ def normalize_public_institution(
         if type_label:
             types = [type_label]
 
-    founded_value = None
+    founded_date = None
     founded_dates = expanded_data.get("founded", []) or []
     if founded_dates:
-        founded_value = founded_dates[0]
-    elif not founded_dates:
+        founded_date = founded_dates[0]
+    else:
         founded_date = item.get("foundedDate", {}).get("value")
-        if founded_date:
-            founded_value = founded_date
 
-    country_codes = expanded_data.get("country_code", []) or []
+    dissolved_date = item.get("dissolvedDate", {}).get("value")
 
-    jurisdictions = expanded_data.get("jurisdiction", []) or []
-    if not jurisdictions:
-        jurisdiction_label = item.get("jurisdictionLabel", {}).get("value")
-        if jurisdiction_label:
-            jurisdictions = [jurisdiction_label]
+    # Countries as labels (from expanded_data if provided, else from item)
+    countries = expanded_data.get("country", []) or []
+    if not countries:
+        country_label = item.get("countryLabel", {}).get("value")
+        if country_label:
+            countries = [country_label]
 
-    logos = expanded_data.get("logo", []) or []
-    if not logos and image_list:
-        logos = image_list
-
-    def add_account(platform: str, handle: Optional[str]):
-        if not handle:
-            return
-        if not any(acc.platform == platform and acc.handle == handle for acc in accounts_list):
-            accounts_list.append(
-                AccountEntry(
-                    platform=platform,
-                    handle=handle,
-                    source="wikidata",
-                    retrieved_at=current_time,
-                )
-            )
-
-    add_account("twitter", item.get("twitterHandle", {}).get("value"))
-    add_account("instagram", item.get("instagramHandle", {}).get("value"))
-    add_account("facebook", item.get("facebookHandle", {}).get("value"))
-    add_account("youtube", item.get("youtubeHandle", {}).get("value"))
-    add_account("tiktok", item.get("tiktokHandle", {}).get("value"))
+    # Social handles as direct fields on the model
 
     return PublicInstitution(
         id=qid,
         entity_kind="public_institution",
         name=name_value,
-        aliases=expanded_data.get("aliases", []) or [],
+        # aliases not part of current model surface
         description=description_value,
-        founded=founded_value,
-        country=country_codes,
-        jurisdiction=jurisdictions,
+        founded_date=founded_date,
+        dissolved_date=dissolved_date,
+        countries=countries,
         types=types,
-        legal_form=expanded_data.get("legal_form", []) or [],
-        headquarters=expanded_data.get("headquarters", []) or [],
-        headquarters_coords=hq_coords_list,
-        website=website_list,
-        official_language=expanded_data.get("official_language", []) or [],
-        logo=logos,
-        budget=expanded_data.get("budget", []) or [],
-        parent_institution=expanded_data.get("parent_institution", []) or [],
-        sub_institutions=[],  # populated when expand=sub_institutions
-        sector=expanded_data.get("sector", []) or [],
-        affiliations=expanded_data.get("affiliations", []) or [],
-        accounts=accounts_list,
+        image=image_value,
+        instagram_handle=item.get("instagramHandle", {}).get("value"),
+        twitter_handle=item.get("twitterHandle", {}).get("value"),
+        facebook_handle=item.get("facebookHandle", {}).get("value"),
+        youtube_handle=item.get("youtubeHandle", {}).get("value"),
         updated_at=current_time,
     )

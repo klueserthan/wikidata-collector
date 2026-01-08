@@ -20,7 +20,7 @@ from .exceptions import (
     QueryExecutionError,
     UpstreamUnavailableError,
 )
-from .models import PublicFigure, PublicInstitution
+from .models import PublicFigureWikiRecord, PublicInstitution
 from .normalizers.figure_normalizer import normalize_public_figure
 from .normalizers.institution_normalizer import normalize_public_institution
 from .proxy import ProxyManager
@@ -657,7 +657,7 @@ class WikidataClient:
         nationality: Optional[str] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
-    ) -> Iterator[PublicFigure]:
+    ) -> Iterator[PublicFigureWikiRecord]:
         """Yield public figures matching the given filters.
 
         Applies filters on birthday and nationality as specified in the feature spec.

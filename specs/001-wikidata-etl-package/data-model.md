@@ -10,44 +10,47 @@ public institutions as normalized Python objects suitable for ETL pipelines. The
 
 ### PublicFigure
 
-Represents an individual public figure.
+Represents an individual public figure. Fields mirror the SELECT clause in
+`build_public_figures_query`.
 
 Key fields (all strings are UTF-8 text unless otherwise noted):
 
-- `id: str` — stable Wikidata identifier (e.g., `Q42`).
+- `id: str | None` — stable Wikidata identifier (QID extracted from `?person`).
 - `entity_kind: Literal["public_figure"] | None` — entity discriminator for downstream code.
-- `name: str | None` — primary label in the requested language.
-- `aliases: list[str]` — alternative names and spellings.
-- `description: str | None` — short description from Wikidata.
-- `birthday: str | None` — ISO-8601 date or datetime string for date of birth.
-- `deathday: str | None` — ISO-8601 date or datetime string for date of death (if applicable).
-- `gender: str | None` — human-readable gender label or code.
-- `nationalities: list[str]` — list of nationalities (multi-valued by design).
-- `professions: list[str]` — list of professions or occupations.
-- `website: list[WebsiteEntry]` — normalized website entries.
-- `accounts: list[AccountEntry]` — social media accounts (Twitter/X, Instagram, Facebook, TikTok, etc.).
-- `identifiers: list[Identifier]` — external identifiers such as GND or VIAF.
-- `image: list[str]` — image URLs.
+- `name: str | None` — primary label (`?personLabel`).
+- `description: str | None` — short description (`?description`).
+- `birth_date: str | None` — ISO-8601 date/datetime (`?birthDate`).
+- `death_date: str | None` — ISO-8601 date/datetime (`?deathDate`).
+- `gender: str | None` — gender label (`?genderLabel`).
+- `countries: list[str]` — country labels (`?countryLabel`), possibly multi-valued.
+- `occupations: list[str]` — occupation labels (`?occupationLabel`), possibly multi-valued.
+- `image: str | None` — image URL (`?image`).
+- `instagram_handle: str | None` — `?instagramHandle`.
+- `twitter_handle: str | None` — `?twitterHandle`.
+- `facebook_handle: str | None` — `?facebookHandle`.
+- `youtube_handle: str | None` — `?youtubeHandle`.
 - `updated_at: str | None` — timestamp when this record was last refreshed.
 
 ### PublicInstitution
 
 Represents a public institution such as a government agency, NGO, municipality, or media outlet.
+Fields mirror the SELECT clause in `build_public_institutions_query`.
 
 Key fields:
 
-- `id: str` — stable Wikidata identifier.
+- `id: str | None` — stable Wikidata identifier (QID extracted from `?institution`).
 - `entity_kind: Literal["public_institution"] | None` — entity discriminator.
-- `name: str | None` — primary label.
-- `aliases: list[str]` — alternative names.
-- `description: str | None` — short description.
-- `founded: str | None` — ISO-8601 date/datetime for founding date.
-- `country: list[str]` — countries associated with the institution.
-- `types: list[str]` — institution types (e.g., government agency, NGO).
-- `headquarters: list[str]` — headquarters locations (labels or identifiers).
-- `website: list[WebsiteEntry]` — official websites.
-- `logo: list[str]` — logo image URLs.
-- `accounts: list[AccountEntry]` — social media accounts.
+- `name: str | None` — primary label (`?institutionLabel`).
+- `description: str | None` — short description (`?description`).
+- `founded_date: str | None` — ISO-8601 date/datetime (`?foundedDate`).
+- `dissolved_date: str | None` — ISO-8601 date/datetime (`?dissolvedDate`).
+- `countries: list[str]` — country labels (`?countryLabel`), possibly multi-valued.
+- `types: list[str]` — institution type labels (`?typeLabel`), possibly multi-valued.
+- `image: str | None` — image URL (`?image`).
+- `instagram_handle: str | None` — `?instagramHandle`.
+- `twitter_handle: str | None` — `?twitterHandle`.
+- `facebook_handle: str | None` — `?facebookHandle`.
+- `youtube_handle: str | None` — `?youtubeHandle`.
 - `updated_at: str | None` — last refresh timestamp.
 
 ### Supporting Types

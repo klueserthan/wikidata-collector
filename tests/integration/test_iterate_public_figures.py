@@ -7,7 +7,7 @@ They use pytest markers to allow selective execution.
 
 import pytest
 
-from wikidata_collector import InvalidFilterError, PublicFigure, WikidataClient
+from wikidata_collector import InvalidFilterError, PublicFigureWikiRecord, WikidataClient
 from wikidata_collector.exceptions import QueryExecutionError
 
 
@@ -48,7 +48,7 @@ class TestIteratePublicFiguresHappyPath:
 
         # Verify results
         assert len(results) == 2
-        assert all(isinstance(r, PublicFigure) for r in results)
+        assert all(isinstance(r, PublicFigureWikiRecord) for r in results)
         assert results[0].id == "Q42"
         assert results[0].name == "Douglas Adams"
         assert results[1].id == "Q5593"
@@ -74,7 +74,7 @@ class TestIteratePublicFiguresHappyPath:
 
         # Verify only 10 results returned
         assert len(results) == 10
-        assert all(isinstance(r, PublicFigure) for r in results)
+        assert all(isinstance(r, PublicFigureWikiRecord) for r in results)
 
     def test_iterate_with_birthday_filters(self, mocker):
         """Test iteration with birthday filters."""
@@ -104,7 +104,7 @@ class TestIteratePublicFiguresHappyPath:
         )
 
         assert len(results) == 1
-        assert results[0].birthday == "1995-06-15T00:00:00Z"
+        assert results[0].birth_date == "1995-06-15T00:00:00Z"
 
     def test_iterate_with_nationality_filter(self, mocker):
         """Test iteration with nationality filter."""
@@ -131,7 +131,7 @@ class TestIteratePublicFiguresHappyPath:
         assert call_args.kwargs["nationality"] == "United States"
 
         assert len(results) == 1
-        assert results[0].nationalities == ["United States"]
+        assert results[0].countries == ["United States"]
 
 
 @pytest.mark.integration

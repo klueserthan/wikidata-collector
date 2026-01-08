@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from wikidata_collector import PublicFigure, WikidataClient
+from wikidata_collector import PublicFigureWikiRecord, WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 
 
@@ -115,7 +115,7 @@ class TestLiveSparqlConnectivity:
         )
 
         # Verify all results are PublicFigure instances
-        assert all(isinstance(r, PublicFigure) for r in results), (
+        assert all(isinstance(r, PublicFigureWikiRecord) for r in results), (
             "All results should be PublicFigure instances"
         )
 
