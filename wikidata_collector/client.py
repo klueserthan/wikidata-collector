@@ -31,7 +31,7 @@ from .security import validate_qid
 logger = logging.getLogger(__name__)
 
 # Default page size for iterator-friendly pagination
-DEFAULT_PAGE_SIZE = 15
+DEFAULT_LIMIT = 15
 
 
 def _log_query_execution(
@@ -344,7 +344,7 @@ class WikidataClient:
         nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = 100,
+        limit: int = DEFAULT_LIMIT,
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
@@ -386,7 +386,7 @@ class WikidataClient:
         country: Optional[str] = None,
         type: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = 100,
+        limit: int = DEFAULT_LIMIT,
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
@@ -556,7 +556,7 @@ class WikidataClient:
         nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = DEFAULT_PAGE_SIZE,
+        limit: int = DEFAULT_LIMIT,
         override_proxies: Optional[List[str]] = None,
     ) -> Iterator[Dict[str, Any]]:
         """Iterate over public figures with automatic pagination.
@@ -608,7 +608,7 @@ class WikidataClient:
         country: Optional[str] = None,
         type: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = DEFAULT_PAGE_SIZE,
+        limit: int = DEFAULT_LIMIT,
         override_proxies: Optional[List[str]] = None,
     ) -> Iterator[Dict[str, Any]]:
         """Iterate over public institutions with automatic pagination.

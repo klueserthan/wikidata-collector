@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from wikidata_collector.client import DEFAULT_PAGE_SIZE
+from wikidata_collector.client import DEFAULT_LIMIT
 
 
 class TestIterPublicFigures:
@@ -30,7 +30,7 @@ class TestIterPublicFigures:
         # Create mock data for two pages
         page1_results = [
             {"person": {"value": f"http://www.wikidata.org/entity/Q{i}"}}
-            for i in range(1, DEFAULT_PAGE_SIZE + 1)
+            for i in range(1, DEFAULT_LIMIT + 1)
         ]
         page2_results = [
             {"person": {"value": "http://www.wikidata.org/entity/Q100"}},
@@ -49,7 +49,7 @@ class TestIterPublicFigures:
         with patch.object(wikidata_client, "get_public_figures", side_effect=mock_get_figures):
             results = list(wikidata_client.iter_public_figures(nationality="Q30"))
 
-            assert len(results) == DEFAULT_PAGE_SIZE + 1
+            assert len(results) == DEFAULT_LIMIT + 1
             assert call_count == 2
 
     def test_iter_empty_results(self, wikidata_client):
@@ -124,7 +124,7 @@ class TestIterPublicInstitutions:
         """Test iteration across multiple pages."""
         page1_results = [
             {"institution": {"value": f"http://www.wikidata.org/entity/Q{i}"}}
-            for i in range(1, DEFAULT_PAGE_SIZE + 1)
+            for i in range(1, DEFAULT_LIMIT + 1)
         ]
         page2_results = [
             {"institution": {"value": "http://www.wikidata.org/entity/Q100"}},
@@ -145,7 +145,7 @@ class TestIterPublicInstitutions:
         ):
             results = list(wikidata_client.iter_public_institutions(country="Q30"))
 
-            assert len(results) == DEFAULT_PAGE_SIZE + 1
+            assert len(results) == DEFAULT_LIMIT + 1
             assert call_count == 2
 
     def test_iter_empty_results(self, wikidata_client):
@@ -193,4 +193,4 @@ class TestDefaultPageSize:
 
     def test_default_page_size_is_15(self):
         """Verify the default page size is 15 as specified."""
-        assert DEFAULT_PAGE_SIZE == 15
+        assert DEFAULT_LIMIT == 15
