@@ -59,8 +59,8 @@ class TestIterPublicFigures:
 
             assert len(results) == 0
 
-    def test_iter_custom_page_size(self, wikidata_client):
-        """Test iteration with custom page size."""
+    def test_iter_custom_limit(self, wikidata_client):
+        """Test iteration with custom per-page limit."""
         # Return 3 results (less than page size of 5) - should only call once
         mock_results = [
             {"person": {"value": f"http://www.wikidata.org/entity/Q{i}"}}
@@ -70,7 +70,7 @@ class TestIterPublicFigures:
         with patch.object(
             wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
         ) as mock:
-            results = list(wikidata_client.iter_public_figures(nationality="Q30", page_size=5))
+            results = list(wikidata_client.iter_public_figures(nationality="Q30", limit=5))
 
             # Verify it was called with the custom page size
             mock.assert_called_once()
@@ -155,8 +155,8 @@ class TestIterPublicInstitutions:
 
             assert len(results) == 0
 
-    def test_iter_custom_page_size(self, wikidata_client):
-        """Test iteration with custom page size."""
+    def test_iter_custom_limit(self, wikidata_client):
+        """Test iteration with custom per-page limit."""
         # Return 8 results (less than page size of 10) - should only call once
         mock_results = [
             {"institution": {"value": f"http://www.wikidata.org/entity/Q{i}"}}
@@ -166,7 +166,7 @@ class TestIterPublicInstitutions:
         with patch.object(
             wikidata_client, "get_public_institutions", return_value=(mock_results, "direct")
         ) as mock:
-            results = list(wikidata_client.iter_public_institutions(country="Q30", page_size=10))
+            results = list(wikidata_client.iter_public_institutions(country="Q30", limit=10))
 
             # Verify it was called with the custom page size
             mock.assert_called_once()

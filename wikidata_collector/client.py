@@ -491,7 +491,7 @@ class WikidataClient:
         entity_uri_key: str,
         fetch_page_fn,
         params: Dict[str, Any],
-        page_size: int,
+        limit: int,
     ) -> Iterator[Dict[str, Any]]:
         """Generic helper for paginating SPARQL results with keyset pagination.
 
@@ -500,7 +500,7 @@ class WikidataClient:
             entity_uri_key: Key name in results dict containing entity URI (e.g., 'person', 'institution')
             fetch_page_fn: Function to fetch a page of results, must accept after_qid parameter
             params: Query parameters for logging
-            page_size: Number of results per page
+            limit: Number of results per page
 
         Yields:
             Individual SPARQL result bindings
@@ -534,7 +534,7 @@ class WikidataClient:
                 yield result
 
             # Set up next page using keyset pagination
-            if len(results) < page_size:
+            if len(results) < limit:
                 # Last page
                 break
 
@@ -556,7 +556,7 @@ class WikidataClient:
         nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
-        page_size: int = DEFAULT_PAGE_SIZE,
+        limit: int = DEFAULT_PAGE_SIZE,
         override_proxies: Optional[List[str]] = None,
     ) -> Iterator[Dict[str, Any]]:
         """Iterate over public figures with automatic pagination.
@@ -570,7 +570,7 @@ class WikidataClient:
             nationality: List of nationality filters (QIDs, ISO codes, or labels)
             profession: List of profession filters (QIDs or labels)
             lang: Language code for labels
-            page_size: Results per page (default: 15)
+            limit: Results per page (default: 15)
             override_proxies: Optional list of proxy URLs
 
         Yields:
@@ -584,7 +584,7 @@ class WikidataClient:
                 nationality=nationality,
                 profession=profession,
                 lang=lang,
-                limit=page_size,
+                limit=limit,
                 after_qid=after_qid,
                 override_proxies=override_proxies,
             )
@@ -600,16 +600,15 @@ class WikidataClient:
                 "profession": profession,
                 "lang": lang,
             },
-            page_size=page_size,
+            limit=limit,
         )
 
     def iter_public_institutions(
         self,
         country: Optional[str] = None,
         type: Optional[List[str]] = None,
-        jurisdiction: Optional[str] = None,
         lang: str = "en",
-        page_size: int = DEFAULT_PAGE_SIZE,
+        limit: int = DEFAULT_PAGE_SIZE,
         override_proxies: Optional[List[str]] = None,
     ) -> Iterator[Dict[str, Any]]:
         """Iterate over public institutions with automatic pagination.
@@ -622,7 +621,7 @@ class WikidataClient:
             type: List of institution type filters (mapped keys, QIDs, or labels)
             jurisdiction: Jurisdiction filter (QID or label)
             lang: Language code for labels
-            page_size: Results per page (default: 15)
+            limit: Results per page (default: 15)
             override_proxies: Optional list of proxy URLs
 
         Yields:
@@ -634,7 +633,7 @@ class WikidataClient:
                 country=country,
                 type=type,
                 lang=lang,
-                limit=page_size,
+                limit=limit,
                 after_qid=after_qid,
                 override_proxies=override_proxies,
             )
@@ -643,8 +642,8 @@ class WikidataClient:
             query_type="public_institutions",
             entity_uri_key="institution",
             fetch_page_fn=fetch_page,
-            params={"country": country, "type": type, "jurisdiction": jurisdiction, "lang": lang},
-            page_size=page_size,
+            params={"country": country, "type": type, "lang": lang},
+            limit=limit,
         )
 
     def iterate_public_figures(
@@ -868,7 +867,6 @@ class WikidataClient:
             for sparql_result in self.iter_public_institutions(
                 country=country,
                 type=types,
-                jurisdiction=jurisdiction,
                 lang=lang,
             ):
                 # Normalize the SPARQL result to PublicInstitution model

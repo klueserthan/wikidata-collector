@@ -17,22 +17,20 @@ def example_iterate_figures():
     print("=" * 60)
 
     # Initialize client
-    config = WikidataCollectorConfig(
-        contact_email="example@example.com"
-    )
+    config = WikidataCollectorConfig(contact_email="example@example.com")
     client = WikidataClient(config)
 
     # Use the iterator to fetch public figures
-    # The iterator automatically handles pagination with page_size=15 (default)
+    # The iterator automatically handles pagination with limit=15 (default)
     print("\nFetching actors from the United States born after 1990...")
     print("Using iter_public_figures() with automatic pagination\n")
 
     count = 0
     for figure in client.iter_public_figures(
         birthday_from="1990-01-01",
-        nationality=["US"],  # United States
+        nationality="US",  # United States
         profession=["actor"],  # Actor
-        page_size=15  # Uses DEFAULT_PAGE_SIZE internally
+        limit=15,  # Uses DEFAULT_PAGE_SIZE internally
     ):
         count += 1
         qid = figure.get("person", {}).get("value", "").split("/")[-1]
@@ -54,9 +52,7 @@ def example_iterate_institutions():
     print("=" * 60)
 
     # Initialize client
-    config = WikidataCollectorConfig(
-        contact_email="example@example.com"
-    )
+    config = WikidataCollectorConfig(contact_email="example@example.com")
     client = WikidataClient(config)
 
     # Use the iterator to fetch institutions
@@ -67,7 +63,7 @@ def example_iterate_institutions():
     for institution in client.iter_public_institutions(
         country="US",  # United States
         type=["government_agency"],  # Government agency
-        page_size=15
+        limit=15,
     ):
         count += 1
         qid = institution.get("institution", {}).get("value", "").split("/")[-1]
@@ -92,13 +88,10 @@ def example_structured_logging():
 
     # Configure logging to see structured log output
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    config = WikidataCollectorConfig(
-        contact_email="example@example.com"
-    )
+    config = WikidataCollectorConfig(contact_email="example@example.com")
     client = WikidataClient(config)
 
     print("\nFetching with structured logging enabled...")
@@ -106,10 +99,7 @@ def example_structured_logging():
 
     # The iterator will log structured information about each page
     count = 0
-    for figure in client.iter_public_figures(
-        nationality=["US"],
-        page_size=15
-    ):
+    for figure in client.iter_public_figures(nationality="US", limit=15):
         count += 1
         if count >= 20:  # Just fetch a few for demo
             break
