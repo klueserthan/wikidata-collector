@@ -20,27 +20,20 @@ def example_iterate_figures():
     config = WikidataCollectorConfig(contact_email="example@example.com")
     client = WikidataClient(config)
 
-    # Use the iterator to fetch public figures
-    # The iterator automatically handles pagination with limit=15 (default)
-    print("\nFetching actors from the United States born after 1990...")
-    print("Using iter_public_figures() with automatic pagination\n")
+    # Use the high-level iterator to fetch public figures
+    # Returns normalized PublicFigure model objects with automatic pagination
+    print("\nFetching people from the United States born after 1990...")
+    print("Using iterate_public_figures() with max_results limit\n")
 
     count = 0
-    for figure in client.iter_public_figures(
+    for figure in client.iterate_public_figures(
         birthday_from="1990-01-01",
+        birthday_to="1990-01-31",
         nationality="US",  # United States
-        profession=["actor"],  # Actor
-        limit=15,  # Uses DEFAULT_PAGE_SIZE internally
+        max_results=30,  # Limit total results
     ):
         count += 1
-        qid = figure.get("person", {}).get("value", "").split("/")[-1]
-        name = figure.get("personLabel", {}).get("value", "Unknown")
-
-        print(f"{count}. {name} ({qid})")
-
-        # Stop after 30 results for demo purposes
-        if count >= 30:
-            break
+        print(figure.name + f" ({figure.id})")
 
     print(f"\nTotal fetched: {count} figures")
 
@@ -55,25 +48,23 @@ def example_iterate_institutions():
     config = WikidataCollectorConfig(contact_email="example@example.com")
     client = WikidataClient(config)
 
-    # Use the iterator to fetch institutions
+    # Use the high-level iterator to fetch institutions
+    # Returns normalized PublicInstitution model objects with automatic pagination
     print("\nFetching government agencies in the United States...")
-    print("Using iter_public_institutions() with automatic pagination\n")
+    print("Using iterate_public_institutions() with max_results limit\n")
 
     count = 0
-    for institution in client.iter_public_institutions(
+    for institution in client.iterate_public_institutions(
         country="US",  # United States
-        type=["government_agency"],  # Government agency
-        limit=15,
+        types=["government_agency"],  # Government agency
+        max_results=20,  # Limit total results
     ):
         count += 1
-        qid = institution.get("institution", {}).get("value", "").split("/")[-1]
-        name = institution.get("institutionLabel", {}).get("value", "Unknown")
-
-        print(f"{count}. {name} ({qid})")
-
-        # Stop after 20 results for demo purposes
-        if count >= 20:
-            break
+        print(f"{count}. {institution.name} ({institution.qid})")
+        if institution.country:
+            print(f"    Country: {institution.country}")
+        if institution.institution_type:
+            print(f"    Type: {institution.institution_type}")
 
     print(f"\nTotal fetched: {count} institutions")
 
@@ -99,10 +90,9 @@ def example_structured_logging():
 
     # The iterator will log structured information about each page
     count = 0
-    for figure in client.iter_public_figures(nationality="US", limit=15):
+    for figure in client.iterate_public_figures(nationality="US", max_results=20):
         count += 1
-        if count >= 20:  # Just fetch a few for demo
-            break
+        print(f"  {figure.name}")
 
     print(f"\nFetched {count} results (check logs for structured output)")
 
@@ -111,17 +101,17 @@ if __name__ == "__main__":
     print("""
     ╔════════════════════════════════════════════════════════════╗
     ║  Phase 2: Iterator and Logging Examples                   ║
-    ║  Demonstrating new iterator functionality                 ║
-    ╚════════════════════════════════════════════════════════════╝
+    ║  Iterator Examples - High-Level API                       ║
+    ║  Demonstrating normalized model iteration══════════════════╝
     """)
 
     # NOTE: These examples require a working internet connection
     # and will make real API calls to Wikidata.
     # Uncomment the examples you want to run:
 
-    # example_iterate_figures()
-    # example_iterate_institutions()
-    # example_structured_logging()
+    example_iterate_figures()
+    example_iterate_institutions()
+    example_structured_logging()
 
     print("\n✓ Examples are ready to run!")
     print("  Uncomment the example calls in __main__ to test them.")
