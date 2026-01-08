@@ -180,17 +180,12 @@ class TestIterPublicInstitutions:
         with patch.object(
             wikidata_client, "get_public_institutions", return_value=(mock_results, "direct")
         ) as mock:
-            list(
-                wikidata_client.iter_public_institutions(
-                    country="Q30", type=["Q327333"], jurisdiction="Q30"
-                )
-            )
+            list(wikidata_client.iter_public_institutions(country="Q30", type=["Q327333"]))
 
             # Verify filters were passed through
             call_kwargs = mock.call_args[1]
             assert call_kwargs["country"] == "Q30"
             assert call_kwargs["type"] == ["Q327333"]
-            assert call_kwargs["jurisdiction"] == "Q30"
 
 
 class TestDefaultPageSize:

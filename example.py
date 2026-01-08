@@ -7,7 +7,6 @@ and institutions from Wikidata.
 """
 
 from wikidata_collector import WikidataClient
-from wikidata_collector.normalizers.figure_normalizer import normalize_public_figure
 
 
 def main():
@@ -25,37 +24,37 @@ def main():
 
     # Example 1: Query public figures born after 1990
     print("\n=== Example 1: Public Figures ===")
-    print("Querying actors born after 1990...")
+    # print("Querying actors born after 1990...")
 
-    try:
-        results, proxy_used = client.get_public_figures(
-            birthday_from="1990-01-01",
-            birthday_to="1990-01-02",
-            lang="de",
-            limit=5,
-        )
+    # try:
+    #     results, proxy_used = client.get_public_figures(
+    #         birthday_from="1990-01-01",
+    #         birthday_to="1990-01-02",
+    #         lang="de",
+    #         limit=5,
+    #     )
 
-        print(f"Found {len(results)} results (using {proxy_used})")
-        print("\nFirst few results:")
-        for item in results[:3]:
-            qid = item["person"]["value"].split("/")[-1]
-            name = item.get("personLabel", {}).get("value", "Unknown")
-            birthday = item.get("birthDate", {}).get("value", "Unknown")
-            print(
-                f"  - {qid}: {name} (born {birthday[:10] if birthday != 'Unknown' else 'Unknown'})"
-            )
+    #     print(f"Found {len(results)} results (using {proxy_used})")
+    #     print("\nFirst few results:")
+    #     for item in results[:3]:
+    #         qid = item["person"]["value"].split("/")[-1]
+    #         name = item.get("personLabel", {}).get("value", "Unknown")
+    #         birthday = item.get("birthDate", {}).get("value", "Unknown")
+    #         print(
+    #             f"  - {qid}: {name} (born {birthday[:10] if birthday != 'Unknown' else 'Unknown'})"
+    #         )
 
-        # Normalize a result
-        if results:
-            print("\nNormalized first result:")
-            normalized = normalize_public_figure(results[0], None)
-            print(f"  ID: {normalized.id}")
-            print(f"  Name: {normalized.name}")
-            print(f"  Professions: {normalized.professions}")
-            print(f"  Nationalities: {normalized.nationalities}")
+    #     # Normalize a result
+    #     if results:
+    #         print("\nNormalized first result:")
+    #         normalized = normalize_public_figure(results[0], None)
+    #         print(f"  ID: {normalized.id}")
+    #         print(f"  Name: {normalized.name}")
+    #         print(f"  Professions: {normalized.professions}")
+    #         print(f"  Nationalities: {normalized.nationalities}")
 
-    except Exception as e:
-        print(f"Error querying figures: {e}")
+    # except Exception as e:
+    #     print(f"Error querying figures: {e}")
 
     # Example 2: Query public institutions
     print("\n=== Example 2: Public Institutions ===")
@@ -64,7 +63,7 @@ def main():
     try:
         results, proxy_used = client.get_public_institutions(
             type=["Q327333"],  # Government agency QID
-            country="Q30",  # United States QID
+            country="United States",  # Country name
             lang="en",
             limit=5,
         )

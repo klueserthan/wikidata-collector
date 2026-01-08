@@ -385,7 +385,6 @@ class WikidataClient:
         self,
         country: Optional[str] = None,
         type: Optional[List[str]] = None,
-        jurisdiction: Optional[str] = None,
         lang: str = "en",
         limit: int = 100,
         cursor: int = 0,
@@ -397,7 +396,6 @@ class WikidataClient:
         Args:
             country: Country filter (QID, ISO code, or label)
             type: List of institution type filters (mapped keys, QIDs, or labels)
-            jurisdiction: Jurisdiction filter (QID or label)
             lang: Language code for labels
             limit: Maximum results to return
             cursor: Offset for pagination
@@ -410,7 +408,6 @@ class WikidataClient:
         query = build_public_institutions_query(
             country=country,
             type=type,
-            jurisdiction=jurisdiction,
             lang=lang,
             limit=limit,
             cursor=cursor,
@@ -636,7 +633,6 @@ class WikidataClient:
             return self.get_public_institutions(
                 country=country,
                 type=type,
-                jurisdiction=jurisdiction,
                 lang=lang,
                 limit=page_size,
                 after_qid=after_qid,

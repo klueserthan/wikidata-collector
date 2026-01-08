@@ -143,6 +143,6 @@ def build_public_figures_query(
 """ % (lang, lang)
 
     # Write query to query.rq file for debugging
-    with open("query.rq", "w", encoding="utf-8") as f:
-        f.write(query)
+    # with open("query_person.rq", "w", encoding="utf-8") as f:
+    #     f.write(query)
     return query

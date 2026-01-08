@@ -149,36 +149,22 @@ class TestInstitutionsQueryInjectionPrevention:
         with pytest.raises(ValueError, match="Invalid QID format"):
             build_public_institutions_query(country="Q42; DROP")
 
-    def test_country_label_injection_escaped(self):
-        """Test that malicious label in country is escaped."""
+    def test_country_label_injection_rejected(self):
+        """Test that malicious label in country is rejected (only QIDs accepted)."""
         malicious_input = '" . } DROP GRAPH <urn:wikidata> ; { #'
-        query = build_public_institutions_query(country=malicious_input)
-        # Verify escaping occurred
-        assert '\\"' in query or '" . }' not in query
+        with pytest.raises(ValueError, match="Country filter must be a QID"):
+            build_public_institutions_query(country=malicious_input)
 
     def test_type_qid_injection_prevented(self):
         """Test that malicious QID in type is rejected."""
         with pytest.raises(ValueError, match="Invalid QID format"):
             build_public_institutions_query(type=["Q42; SELECT *"])
 
-    def test_type_label_injection_escaped(self):
-        """Test that malicious label in type is escaped."""
+    def test_type_label_injection_rejected(self):
+        """Test that malicious label in type is rejected (not in mappings)."""
         malicious_input = '"; } FILTER(?x = "bad'
-        query = build_public_institutions_query(type=[malicious_input])
-        # Verify escaping occurred
-        assert '\\"' in query or '"; }' not in query
-
-    def test_jurisdiction_qid_injection_prevented(self):
-        """Test that malicious QID in jurisdiction is rejected."""
-        with pytest.raises(ValueError, match="Invalid QID format"):
-            build_public_institutions_query(jurisdiction="Q42; DROP")
-
-    def test_jurisdiction_label_injection_escaped(self):
-        """Test that malicious label in jurisdiction is escaped."""
-        malicious_input = '" UNION { ?x ?y ?z } . "'
-        query = build_public_institutions_query(jurisdiction=malicious_input)
-        # Verify escaping occurred
-        assert '\\"' in query or '" UNION' not in query
+        with pytest.raises(ValueError, match="Unknown institution type"):
+            build_public_institutions_query(type=[malicious_input])
 
 
 class TestCountryCodeEscaping:
