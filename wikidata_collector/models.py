@@ -1,6 +1,6 @@
 from datetime import datetime
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -197,7 +197,9 @@ class PublicFigureNormalizedRecord(PublicFigureBase):
         accounts = existing.accounts.copy()
         new_accounts = _collect_accounts(new_record)
         for account in new_accounts:
-            if all(acc.platform != account.platform or acc.handle != account.handle for acc in accounts):
+            if all(
+                acc.platform != account.platform or acc.handle != account.handle for acc in accounts
+            ):
                 accounts.append(account)
 
         # Collect countries
@@ -322,7 +324,10 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
         accounts = existing.accounts.copy()
         new_accounts = _collect_accounts(new_record)
         for account in new_accounts:
-            if not any(acc.platform == account.platform and acc.handle == account.handle for acc in accounts):
+            if not any(
+                acc.platform == account.platform and acc.handle == account.handle
+                for acc in accounts
+            ):
                 accounts.append(account)
 
         # Collect countries
@@ -346,11 +351,3 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
             types=types,
             accounts=accounts,
         )
-
-
-class PaginatedResponse(BaseModel):
-    """Generic paginated response model for API endpoints."""
-
-    data: List[Dict[str, Any]]
-    next_cursor: Optional[str] = None
-    has_more: bool = False
