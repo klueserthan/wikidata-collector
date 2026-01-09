@@ -142,35 +142,34 @@ class PublicFigureNormalizedRecord(PublicFigureBase):
     websites: List[WebsiteEntry] = []
     accounts: List[AccountEntry] = []
 
-    # Backwards-compatible view properties expected by existing tests
-    @property
-    def birthday(self) -> Optional[str]:  # pragma: no cover - formatting alias
-        if not self.birth_date:
-            return None
-        dt = self.birth_date
-        iso = dt.isoformat()
-        # Normalize to trailing 'Z' when UTC
-        if iso.endswith("+00:00"):
-            return iso[:-6] + "Z"
-        if dt.tzinfo is None:
-            return iso + "Z"
-        return iso
-
-    @property
-    def deathday(self) -> Optional[str]:  # pragma: no cover - formatting alias
-        if not self.death_date:
-            return None
-        dt = self.death_date
-        iso = dt.isoformat()
-        if iso.endswith("+00:00"):
-            return iso[:-6] + "Z"
-        if dt.tzinfo is None:
-            return iso + "Z"
-        return iso
-
-    @property
-    def nationalities(self) -> List[str]:  # pragma: no cover - alias to countries
-        return self.countries
+    def generate_pretty_string(self) -> str:
+        """Return a pretty-printed string representation of the record."""
+        lines = [f"Public Figure: {self.name} ({self.qid})"]
+        if self.description:
+            lines.append(f"  Description: {self.description}")
+        if self.birth_date:
+            lines.append(f"  Birth Date: {self.birth_date.isoformat()}")
+        if self.death_date:
+            lines.append(f"  Death Date: {self.death_date.isoformat()}")
+        if self.gender:
+            lines.append(f"  Gender: {self.gender}")
+        if self.image:
+            lines.append(f"  Image: {self.image}")
+        if self.countries:
+            lines.append(f"  Countries: {', '.join(self.countries)}")
+        if self.occupations:
+            lines.append(f"  Occupations: {', '.join(self.occupations)}")
+        if self.websites:
+            lines.append("  Websites:")
+            for website in self.websites:
+                lines.append(f"    - {website.url} (source: {website.source})")
+        if self.accounts:
+            lines.append("  Accounts:")
+            for account in self.accounts:
+                lines.append(
+                    f"    - {account.platform}: {account.handle} (source: {account.source})"
+                )
+        return "\n".join(lines)
 
     @classmethod
     def from_wikidata_record(cls, record: PublicFigureWikiRecord) -> "PublicFigureNormalizedRecord":
@@ -297,6 +296,29 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
     types: List[str] = []
     websites: List[WebsiteEntry] = []
     accounts: List[AccountEntry] = []
+
+    def generate_pretty_string(self) -> str:
+        """Return a pretty-printed string representation of the record."""
+        lines = [f"Public Institution: {self.name} ({self.qid})"]
+        if self.description:
+            lines.append(f"  Description: {self.description}")
+        if self.founded_date:
+            lines.append(f"  Founded Date: {self.founded_date.isoformat()}")
+        if self.dissolved_date:
+            lines.append(f"  Dissolved Date: {self.dissolved_date.isoformat()}")
+        if self.countries:
+            lines.append(f"  Countries: {', '.join(self.countries)}")
+        if self.types:
+            lines.append(f"  Types: {', '.join(self.types)}")
+        if self.websites:
+            lines.append("  Websites:")
+            for website in self.websites:
+                lines.append(f"    - {website.url} (source: {website.source})")
+        if self.accounts:
+            lines.append("  Social Media Accounts:")
+            for account in self.accounts:
+                lines.append(f"    - {account.platform}: {account.handle}")
+        return "\n".join(lines)
 
     @classmethod
     def from_wikidata_record(

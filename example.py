@@ -41,11 +41,8 @@ def main():
         print(f"Found {len(results)} results (using {proxy_used})")
         print("\nResults (normalized model objects):")
         for item in results:
-            print(f"  - {item.qid}: {item.name}")
-            if item.birth_date:
-                print(f"    Born: {item.birth_date}")
-            if item.countries:
-                print(f"    Countries: {', '.join(item.countries)}")
+            print(item.generate_pretty_string())
+            print()
 
     except Exception as e:
         print(f"Error querying figures: {e}")
@@ -64,12 +61,9 @@ def main():
 
         print(f"Found {len(results)} results (using {proxy_used})")
         print("\nResults (normalized model objects):")
-        for item in results[:3]:
-            print(f"  - {item.qid}: {item.name}")
-            if item.countries:
-                print(f"    Countries: {', '.join(item.countries)}")
-            if item.types:
-                print(f"    Types: {', '.join(item.types)}")
+        for item in results:
+            print(item.generate_pretty_string())
+            print()
 
     except Exception as e:
         print(f"Error querying institutions: {e}")
