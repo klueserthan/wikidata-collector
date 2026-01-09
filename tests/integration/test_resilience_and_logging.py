@@ -404,7 +404,8 @@ class TestStructuredLoggingInIterators:
             for log in page_fetch_logs:
                 assert hasattr(log, "query_type")
                 assert hasattr(log, "page")
-                assert hasattr(log, "result_count")
+                assert hasattr(log, "raw_count")
+                assert hasattr(log, "unique_qid_count")
 
     def test_iterate_public_institutions_logs_filters(self, caplog):
         """

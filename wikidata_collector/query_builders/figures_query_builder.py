@@ -37,7 +37,7 @@ def build_public_figures_query(
     # Build efficient subquery with core filters
     subquery = """
   {
-    SELECT ?person ?birthDate WHERE {
+    SELECT ?person ?birthDate ?qidNum WHERE {
       ?person wdt:P31 wd:Q5 ;
               wdt:P569 ?birthDate"""
 
@@ -99,7 +99,7 @@ def build_public_figures_query(
             pass
 
     # Close subquery with ordering and pagination
-    subquery += "    }\n    ORDER BY ?person\n"
+    subquery += "    }\n    ORDER BY ?qidNum\n"
     subquery += f"    LIMIT {limit}\n"
 
     if (not after_qid) and cursor > 0:
@@ -143,6 +143,6 @@ ORDER BY ?qidNum
 """ % (lang, lang)
 
     # Write query to query.rq file for debugging
-    # with open("query_person.rq", "w", encoding="utf-8") as f:
-    #     f.write(query)
+    with open("query_person.rq", "w", encoding="utf-8") as f:
+        f.write(query)
     return query

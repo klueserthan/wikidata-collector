@@ -33,7 +33,7 @@ def build_public_institutions_query(
     # Build efficient subquery with core filters
     subquery = """
   {
-    SELECT ?institution WHERE {"""
+    SELECT ?institution ?qidNum WHERE {"""
 
     # Build the WHERE clause conditions
     conditions = []
@@ -97,7 +97,7 @@ def build_public_institutions_query(
             pass
 
     # Close subquery with ordering and pagination
-    subquery += "    }\n    ORDER BY ?institution\n"
+    subquery += "    }\n    ORDER BY ?qidNum\n"
     subquery += f"    LIMIT {limit}\n"
 
     if (not after_qid) and cursor > 0:

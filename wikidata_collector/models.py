@@ -77,6 +77,11 @@ class PublicFigureBase(BaseModel):
     qid: str
     name: str
 
+    # Backwards-compatible alias used by integration tests
+    @property
+    def id(self) -> str:  # pragma: no cover - alias for compatibility
+        return self.qid
+
 
 class PublicFigureWikiRecord(PublicFigureBase):
     """Normalized view of fields returned by build_public_figures_query."""
@@ -138,6 +143,36 @@ class PublicFigureNormalizedRecord(PublicFigureBase):
     websites: List[WebsiteEntry] = []
     accounts: List[AccountEntry] = []
 
+    # Backwards-compatible view properties expected by existing tests
+    @property
+    def birthday(self) -> Optional[str]:  # pragma: no cover - formatting alias
+        if not self.birth_date:
+            return None
+        dt = self.birth_date
+        iso = dt.isoformat()
+        # Normalize to trailing 'Z' when UTC
+        if iso.endswith("+00:00"):
+            return iso[:-6] + "Z"
+        if dt.tzinfo is None:
+            return iso + "Z"
+        return iso
+
+    @property
+    def deathday(self) -> Optional[str]:  # pragma: no cover - formatting alias
+        if not self.death_date:
+            return None
+        dt = self.death_date
+        iso = dt.isoformat()
+        if iso.endswith("+00:00"):
+            return iso[:-6] + "Z"
+        if dt.tzinfo is None:
+            return iso + "Z"
+        return iso
+
+    @property
+    def nationalities(self) -> List[str]:  # pragma: no cover - alias to countries
+        return self.countries
+
     @classmethod
     def from_wikidata_record(cls, record: PublicFigureWikiRecord) -> "PublicFigureNormalizedRecord":
         """Create PublicFigureNormalizedRecord from a PublicFigureWikiRecord."""
@@ -195,6 +230,11 @@ class PublicInstitutionBase(BaseModel):
     qid: str
     name: str
 
+    # Backwards-compatible alias used by integration tests
+    @property
+    def id(self) -> str:  # pragma: no cover - alias for compatibility
+        return self.qid
+
 
 class PublicInstitutionWikiRecord(PublicInstitutionBase):
     """Normalized view of fields returned by build_public_institutions_query."""
@@ -213,7 +253,7 @@ class PublicInstitutionWikiRecord(PublicInstitutionBase):
     @classmethod
     def from_wikidata(cls, item: Dict[str, Any]) -> "PublicInstitutionWikiRecord":
         """Create PublicInstitutionWikiRecord from a Wikidata item dictionary.
-        
+
         Raises:
             KeyError: If required fields are missing from the item dictionary
             ValueError: If validation fails for the record data

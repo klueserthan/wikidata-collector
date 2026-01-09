@@ -20,7 +20,7 @@ class TestBuildPublicFiguresQuery:
         assert "SELECT ?person" in query
         assert "?person wdt:P31 wd:Q5" in query  # instance of human
         assert "wdt:P569" in query  # date of birth
-        assert "ORDER BY ?person" in query
+        assert "ORDER BY ?qidNum" in query  # Keyset pagination ordering
         assert "LIMIT" in query
         assert "OPTIONAL" in query  # Should have optional clauses for outer query
 
@@ -125,7 +125,7 @@ class TestBuildPublicInstitutionsQuery:
 
         assert "SELECT ?institution" in query
         assert "?institution wdt:P31 ?type" in query
-        assert "ORDER BY ?institution" in query
+        assert "ORDER BY ?qidNum" in query  # Keyset pagination ordering
         assert "LIMIT" in query
         assert "OPTIONAL" in query  # Should have optional clauses for outer query
 

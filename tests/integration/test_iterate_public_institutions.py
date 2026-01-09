@@ -5,10 +5,29 @@ These tests verify the iterator-based API for streaming public institutions.
 They use pytest markers to allow selective execution.
 """
 
+from datetime import datetime
+
 import pytest
 
-from wikidata_collector import InvalidFilterError, PublicInstitution, WikidataClient
+from wikidata_collector import InvalidFilterError, PublicInstitutionNormalizedRecord, WikidataClient
 from wikidata_collector.exceptions import QueryExecutionError
+
+
+def _pi(
+    qid: str,
+    name: str = "Institution",
+    *,
+    founded: str | None = None,
+    countries: list[str] | None = None,
+    types: list[str] | None = None,
+) -> PublicInstitutionNormalizedRecord:
+    return PublicInstitutionNormalizedRecord(
+        qid=qid,
+        name=name,
+        founded_date=datetime.fromisoformat(founded) if founded else None,
+        countries=list(countries or []),
+        types=list(types or []),
+    )
 
 
 @pytest.mark.integration
@@ -18,30 +37,26 @@ class TestIteratePublicInstitutionsHappyPath:
 
     def test_iterate_returns_public_institution_models(self, mocker):
         """Test that iterator yields PublicInstitution model instances."""
-        # Mock the underlying iter_public_institutions to return sample SPARQL results
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q123"},
-                "institutionLabel": {"value": "Example Government Agency"},
-                "description": {"value": "A test government agency"},
-                "foundedDate": {"value": "1950-01-01T00:00:00Z"},
-                "countryLabel": {"value": "United States"},
-                "typeLabel": {"value": "government agency"},
-            },
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q456"},
-                "institutionLabel": {"value": "Test Public Broadcaster"},
-                "description": {"value": "A test broadcasting organization"},
-                "foundedDate": {"value": "1970-06-15T00:00:00Z"},
-                "countryLabel": {"value": "United Kingdom"},
-                "typeLabel": {"value": "public broadcaster"},
-            },
+        # Mock the underlying iter_public_institutions to return normalized models
+        sample_records = [
+            _pi(
+                "Q123",
+                "Example Government Agency",
+                founded="1950-01-01T00:00:00",
+                countries=["United States"],
+                types=["government agency"],
+            ),
+            _pi(
+                "Q456",
+                "Test Public Broadcaster",
+                founded="1970-06-15T00:00:00",
+                countries=["United Kingdom"],
+                types=["public broadcaster"],
+            ),
         ]
 
         client = WikidataClient()
-        mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
-        )
+        mocker.patch.object(client, "iter_public_institutions", return_value=iter(sample_records))
 
         # Call the iterator API
         results = list(
@@ -50,7 +65,7 @@ class TestIteratePublicInstitutionsHappyPath:
 
         # Verify results
         assert len(results) == 2
-        assert all(isinstance(r, PublicInstitution) for r in results)
+        assert all(isinstance(r, PublicInstitutionNormalizedRecord) for r in results)
         assert results[0].id == "Q123"
         assert results[0].name == "Example Government Agency"
         assert results[1].id == "Q456"
@@ -59,41 +74,29 @@ class TestIteratePublicInstitutionsHappyPath:
     def test_iterate_with_max_results(self, mocker):
         """Test that max_results limits the number of results."""
         # Create a large list of sample results
-        sample_sparql_results = [
-            {
-                "institution": {"value": f"http://www.wikidata.org/entity/Q{i}"},
-                "institutionLabel": {"value": f"Institution {i}"},
-                "foundedDate": {"value": "2000-01-01T00:00:00Z"},
-            }
-            for i in range(100)
+        sample_records = [
+            _pi(f"Q{i}", f"Institution {i}", founded="2000-01-01T00:00:00") for i in range(100)
         ]
 
         client = WikidataClient()
-        mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
-        )
+        mocker.patch.object(client, "iter_public_institutions", return_value=iter(sample_records))
 
         # Request only 10 results
         results = list(client.iterate_public_institutions(country="US", max_results=10))
 
         # Verify only 10 results returned
         assert len(results) == 10
-        assert all(isinstance(r, PublicInstitution) for r in results)
+        assert all(isinstance(r, PublicInstitutionNormalizedRecord) for r in results)
 
     def test_iterate_with_country_filter(self, mocker):
         """Test iteration with country filter."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q100"},
-                "institutionLabel": {"value": "German Institution"},
-                "foundedDate": {"value": "1990-01-01T00:00:00Z"},
-                "countryLabel": {"value": "Germany"},
-            }
+        sample_records = [
+            _pi("Q100", "German Institution", founded="1990-01-01T00:00:00", countries=["Germany"])
         ]
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_records)
         )
 
         # Call with country filter
@@ -106,17 +109,11 @@ class TestIteratePublicInstitutionsHappyPath:
 
     def test_iterate_with_types_filter(self, mocker):
         """Test iteration with types filter."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q200"},
-                "institutionLabel": {"value": "Political Party Example"},
-                "typeLabel": {"value": "political party"},
-            }
-        ]
+        sample_records = [_pi("Q200", "Political Party Example", types=["political party"])]
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_records)
         )
 
         # Call with types filter
@@ -135,19 +132,18 @@ class TestIteratePublicInstitutionsHappyPath:
 
     def test_iterate_with_combined_filters(self, mocker):
         """Test iteration with multiple filters combined."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q400"},
-                "institutionLabel": {"value": "US Government Agency"},
-                "description": {"value": "Federal agency"},
-                "countryLabel": {"value": "United States"},
-                "typeLabel": {"value": "government agency"},
-            }
+        sample_records = [
+            _pi(
+                "Q400",
+                "US Government Agency",
+                countries=["United States"],
+                types=["government agency"],
+            )
         ]
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_records)
         )
 
         # Call with combined filters
@@ -239,18 +235,10 @@ class TestIteratePublicInstitutionsEdgeCases:
 
     def test_iterate_without_filters(self, mocker):
         """Test iteration without any filters."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q1"},
-                "institutionLabel": {"value": "Institution 1"},
-                "foundedDate": {"value": "2000-01-01T00:00:00Z"},
-            }
-        ]
+        sample_records = [_pi("Q1", "Institution 1", founded="2000-01-01T00:00:00")]
 
         client = WikidataClient()
-        mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
-        )
+        mocker.patch.object(client, "iter_public_institutions", return_value=iter(sample_records))
 
         # Call without filters
         results = list(client.iterate_public_institutions())
@@ -260,21 +248,10 @@ class TestIteratePublicInstitutionsEdgeCases:
 
     def test_max_results_one(self, mocker):
         """Test with max_results=1."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q1"},
-                "institutionLabel": {"value": "Institution 1"},
-            },
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q2"},
-                "institutionLabel": {"value": "Institution 2"},
-            },
-        ]
+        sample_records = [_pi("Q1", "Institution 1"), _pi("Q2", "Institution 2")]
 
         client = WikidataClient()
-        mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
-        )
+        mocker.patch.object(client, "iter_public_institutions", return_value=iter(sample_records))
 
         results = list(client.iterate_public_institutions(max_results=1))
 
@@ -283,17 +260,11 @@ class TestIteratePublicInstitutionsEdgeCases:
 
     def test_country_iso_code_filter(self, mocker):
         """Test with country as ISO code."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q999"},
-                "institutionLabel": {"value": "US Institution"},
-                "countryLabel": {"value": "United States"},
-            }
-        ]
+        sample_records = [_pi("Q999", "US Institution", countries=["United States"])]
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_records)
         )
 
         # Call with ISO code
@@ -308,17 +279,11 @@ class TestIteratePublicInstitutionsEdgeCases:
 
     def test_country_qid_filter(self, mocker):
         """Test with country as QID."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q888"},
-                "institutionLabel": {"value": "UK Institution"},
-                "countryLabel": {"value": "United Kingdom"},
-            }
-        ]
+        sample_records = [_pi("Q888", "UK Institution", countries=["United Kingdom"])]
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_records)
         )
 
         # Call with QID
@@ -333,17 +298,11 @@ class TestIteratePublicInstitutionsEdgeCases:
 
     def test_types_with_mapped_keys(self, mocker):
         """Test types filter with mapped keys."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q777"},
-                "institutionLabel": {"value": "Party Example"},
-                "typeLabel": {"value": "political party"},
-            }
-        ]
+        sample_records = [_pi("Q777", "Party Example", types=["political party"])]
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
+            client, "iter_public_institutions", return_value=iter(sample_records)
         )
 
         # Call with mapped type keys

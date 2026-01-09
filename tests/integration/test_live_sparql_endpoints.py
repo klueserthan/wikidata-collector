@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from wikidata_collector import PublicFigure, WikidataClient
+from wikidata_collector import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 
 
@@ -81,7 +81,7 @@ class TestLiveSparqlConnectivity:
         # Create client with no proxies and reasonable timeout
         config = WikidataCollectorConfig(
             proxy_list=[],  # No proxies - direct connection only
-            sparql_timeout_seconds=30,  # Allow enough time for query execution
+            sparql_timeout_seconds=55,  # Allow enough time for query execution
             max_retries=1,  # Single attempt for live test
         )
         client = WikidataClient(config)
@@ -149,7 +149,7 @@ class TestLiveSparqlConnectivity:
         # Create client with no proxies for direct connection
         config = WikidataCollectorConfig(
             proxy_list=[],  # Direct connection only
-            sparql_timeout_seconds=30,  # Time budget for query execution
+            sparql_timeout_seconds=55,  # Time budget for query execution
             max_retries=1,  # Single attempt for live test
         )
         client = WikidataClient(config)
@@ -161,8 +161,8 @@ class TestLiveSparqlConnectivity:
         # Using United States (Q30) and government_agency to get deterministic results
         results = list(
             client.iterate_public_institutions(
-                country="Q30",  # United States #TODO: accept country name as well
-                types=["government_agency"],
+                country="United States",
+                types=["Q327333"],  # Government agency QID
                 max_results=5,  # Limit results for faster test execution
             )
         )

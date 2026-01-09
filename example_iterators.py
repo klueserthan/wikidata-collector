@@ -13,29 +13,33 @@ from wikidata_collector.config import WikidataCollectorConfig
 def example_iterate_figures():
     """Example: Iterate over public figures using the new iterator."""
     print("=" * 60)
-    print("Example: Iterating over public figures")
+    print("Example: Iterating over public figures with auto-pagination")
     print("=" * 60)
 
     # Initialize client
     config = WikidataCollectorConfig(contact_email="example@example.com")
     client = WikidataClient(config)
 
-    # Use the high-level iterator to fetch public figures
-    # Returns normalized PublicFigure model objects with automatic pagination
-    print("\nFetching people from the United States born after 1990...")
-    print("Using iterate_public_figures() with max_results limit\n")
+    # Use iter_public_figures() for automatic pagination
+    # Yields normalized PublicFigureNormalizedRecord objects one at a time
+    # Handles page fetching internally
+    print("\nFetching people born after 1990...")
+    print("Using iter_public_figures() for automatic pagination\n")
 
     count = 0
-    for figure in client.iterate_public_figures(
-        birthday_from="1990-01-01",
-        birthday_to="1990-01-31",
-        nationality="US",  # United States
-        max_results=30,  # Limit total results
-    ):
-        count += 1
-        print(figure.name + f" ({figure.id})")
-
-    print(f"\nTotal fetched: {count} figures")
+    try:
+        for figure in client.iter_public_figures(
+            birthday_from="1990-01-01",
+            birthday_to="1990-12-31",
+            limit=15,  # Page size (records per page)
+        ):
+            count += 1
+            print(f"{count:3d}. {figure.name:40s} ({figure.qid})")
+            if count >= 20:  # Show first 20 for demo
+                print("  ... (iterator continues)")
+                break
+    except Exception as e:
+        print(f"Error: {e}")
 
 
 def example_iterate_institutions():
@@ -48,25 +52,59 @@ def example_iterate_institutions():
     config = WikidataCollectorConfig(contact_email="example@example.com")
     client = WikidataClient(config)
 
-    # Use the high-level iterator to fetch institutions
-    # Returns normalized PublicInstitution model objects with automatic pagination
-    print("\nFetching government agencies in the United States...")
-    print("Using iterate_public_institutions() with max_results limit\n")
+    # Use iter_public_institutions() for automatic pagination
+    # Yields normalized PublicInstitutionNormalizedRecord objects one at a time
+    print("\nFetching government agencies...")
+    print("Using iter_public_institutions() for automatic pagination\n")
 
     count = 0
-    for institution in client.iterate_public_institutions(
-        country="US",  # United States
-        types=["government_agency"],  # Government agency
-        max_results=20,  # Limit total results
-    ):
-        count += 1
-        print(f"{count}. {institution.name} ({institution.qid})")
-        if institution.country:
-            print(f"    Country: {institution.country}")
-        if institution.institution_type:
-            print(f"    Type: {institution.institution_type}")
+    try:
+        for institution in client.iter_public_institutions(
+            type=["Q327333"],  # Government agency
+            limit=15,  # Page size
+        ):
+            count += 1
+            print(f"{count:3d}. {institution.name:40s} ({institution.qid})")
+            if institution.country:
+                print(f"      Country: {institution.country}")
+            if count >= 15:  # Show first 15 for demo
+                print("  ... (iterator continues)")
+                break
+    except Exception as e:
+        print(f"Error: {e}")
 
-    print(f"\nTotal fetched: {count} institutions")
+
+def example_high_level_iterator():
+    """Example: High-level iterator with max_results filtering."""
+    print("\n" + "=" * 60)
+    print("Example: High-level iterate_public_figures() with max_results")
+    print("=" * 60)
+
+    # Initialize client
+    config = WikidataCollectorConfig(contact_email="example@example.com")
+    client = WikidataClient(config)
+
+    # Use iterate_public_figures() for additional filtering and validation
+    # Returns up to max_results normalized PublicFigureNormalizedRecord objects
+    print("\nFetching US citizens born between 1985-01-01 and 1995-12-31...")
+    print("Using iterate_public_figures() with max_results=25\n")
+
+    try:
+        count = 0
+        for figure in client.iterate_public_figures(
+            birthday_from="1985-01-01",
+            birthday_to="1995-12-31",
+            nationality="Q30",  # United States QID
+            max_results=25,  # Stop after 25 results
+        ):
+            count += 1
+            print(f"{count:3d}. {figure.name:40s} ({figure.qid})")
+            if figure.countries:
+                print(f"      Countries: {', '.join(figure.countries)}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+    print(f"\nFetched exactly {count} results (stopped at max_results limit)")
 
 
 def example_structured_logging():
@@ -86,23 +124,35 @@ def example_structured_logging():
     client = WikidataClient(config)
 
     print("\nFetching with structured logging enabled...")
-    print("Check the log output for structured query and page information\n")
+    print("Check the log output for page fetch and query execution information\n")
 
     # The iterator will log structured information about each page
+    # including raw_records, unique_qids, latency, and proxy used
     count = 0
-    for figure in client.iterate_public_figures(nationality="US", max_results=20):
-        count += 1
-        print(f"  {figure.name}")
+    try:
+        for figure in client.iter_public_figures(
+            birthday_from="1990-01-01",
+            birthday_to="1990-01-31",
+            limit=15,
+        ):
+            count += 1
+            if count <= 5:
+                print(f"  - {figure.name}")
+            elif count == 6:
+                print(f"  ... ({count} results and continuing)")
+    except Exception as e:
+        print(f"Error: {e}")
 
-    print(f"\nFetched {count} results (check logs for structured output)")
+    print(f"\nFetched {count} results total")
+    print("(Check logs above for structured pagination information)")
 
 
 if __name__ == "__main__":
     print("""
     ╔════════════════════════════════════════════════════════════╗
-    ║  Phase 2: Iterator and Logging Examples                   ║
-    ║  Iterator Examples - High-Level API                       ║
-    ║  Demonstrating normalized model iteration══════════════════╝
+    ║  Iterator and Logging Examples                            ║
+    ║  Demonstrating normalized model iteration and pagination  ║
+    ╚════════════════════════════════════════════════════════════╝
     """)
 
     # NOTE: These examples require a working internet connection
@@ -111,8 +161,9 @@ if __name__ == "__main__":
 
     example_iterate_figures()
     example_iterate_institutions()
+    example_high_level_iterator()
     example_structured_logging()
 
     print("\n✓ Examples are ready to run!")
-    print("  Uncomment the example calls in __main__ to test them.")
+    print("  All examples demonstrate normalized model objects.")
     print("  Note: Requires internet connection to query Wikidata.\n")
