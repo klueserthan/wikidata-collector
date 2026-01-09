@@ -207,8 +207,8 @@ class TestPublicInstitutionWikiRecord:
         assert record.description == "A test organization"
         assert record.founded_date == datetime(2000, 1, 1, tzinfo=timezone.utc)
         assert record.dissolved_date == datetime(2020, 12, 31, tzinfo=timezone.utc)
-        assert record.countries == "United States"
-        assert record.types == "Government Agency"
+        assert record.country == "United States"
+        assert record.type == "Government Agency"
         assert record.twitter_handle == "@testorg"
 
     def test_wiki_record_from_wikidata_missing_institution(self):
@@ -248,8 +248,8 @@ class TestPublicInstitutionNormalizedRecord:
             name="Test Organization",
             description="A test organization",
             founded_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
-            countries="United States",
-            types="Government Agency",
+            country="United States",
+            type="Government Agency",
             twitter_handle="@testorg",
         )
 
@@ -283,8 +283,8 @@ class TestPublicInstitutionNormalizedRecord:
         wiki_record1 = PublicInstitutionWikiRecord(
             qid="Q123",
             name="Test Organization",
-            countries="United States",
-            types="Government Agency",
+            country="United States",
+            type="Government Agency",
             twitter_handle="@testorg",
         )
         normalized = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record1)
@@ -293,8 +293,8 @@ class TestPublicInstitutionNormalizedRecord:
         wiki_record2 = PublicInstitutionWikiRecord(
             qid="Q123",
             name="Test Organization",
-            countries="Canada",
-            types="Public Agency",
+            country="Canada",
+            type="Public Agency",
             instagram_handle="@testorg_insta",
         )
         updated = PublicInstitutionNormalizedRecord.add_from_wikidata_record(
@@ -314,7 +314,7 @@ class TestPublicInstitutionNormalizedRecord:
         wiki_record1 = PublicInstitutionWikiRecord(
             qid="Q123",
             name="Test Organization",
-            countries="United States",
+            country="United States",
             twitter_handle="@testorg",
         )
         normalized = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record1)
@@ -323,7 +323,7 @@ class TestPublicInstitutionNormalizedRecord:
         wiki_record2 = PublicInstitutionWikiRecord(
             qid="Q123",
             name="Test Organization",
-            countries="United States",
+            country="United States",
             twitter_handle="@testorg",
         )
         updated = PublicInstitutionNormalizedRecord.add_from_wikidata_record(

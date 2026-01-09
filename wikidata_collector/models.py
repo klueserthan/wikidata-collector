@@ -242,8 +242,8 @@ class PublicInstitutionWikiRecord(PublicInstitutionBase):
     description: Optional[str] = None  # ?description
     founded_date: Optional[datetime] = None  # ?foundedDate
     dissolved_date: Optional[datetime] = None  # ?dissolvedDate
-    countries: Optional[str] = None  # ?countryLabel
-    types: Optional[str] = None  # ?typeLabel
+    country: Optional[str] = None  # ?countryLabel
+    type: Optional[str] = None  # ?typeLabel
     image: Optional[str] = None  # ?image
     instagram_handle: Optional[str] = None  # ?instagramHandle
     twitter_handle: Optional[str] = None  # ?twitterHandle
@@ -272,8 +272,8 @@ class PublicInstitutionWikiRecord(PublicInstitutionBase):
             dissolved_date=_parse_date(
                 item.get("dissolvedDate", {}).get("value"), qid, "dissolved date"
             ),
-            countries=item.get("countryLabel", {}).get("value"),
-            types=item.get("typeLabel", {}).get("value"),
+            country=item.get("countryLabel", {}).get("value"),
+            type=item.get("typeLabel", {}).get("value"),
             image=item.get("image", {}).get("value"),
             instagram_handle=item.get("instagramHandle", {}).get("value"),
             twitter_handle=item.get("twitterHandle", {}).get("value"),
@@ -307,8 +307,8 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
             founded_date=record.founded_date,
             dissolved_date=record.dissolved_date,
             image=record.image,
-            countries=[record.countries] if record.countries else [],
-            types=[record.types] if record.types else [],
+            countries=[record.country] if record.country else [],
+            types=[record.type] if record.type else [],
             accounts=_collect_accounts(record),
         )
 
@@ -326,13 +326,13 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
 
         # Collect countries
         countries = existing.countries.copy()
-        if new_record.countries and new_record.countries not in countries:
-            countries.append(new_record.countries)
+        if new_record.country and new_record.country not in countries:
+            countries.append(new_record.country)
 
         # Collect types
         types = existing.types.copy()
-        if new_record.types and new_record.types not in types:
-            types.append(new_record.types)
+        if new_record.type and new_record.type not in types:
+            types.append(new_record.type)
 
         return cls(
             qid=existing.qid,

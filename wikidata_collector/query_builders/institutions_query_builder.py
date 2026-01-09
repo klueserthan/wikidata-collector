@@ -30,7 +30,8 @@ def build_public_institutions_query(
     Raises:
         ValueError: If QID validation fails
     """
-    # Build efficient subquery with core filters
+    # Build efficient subquery with core filters. ?qidNum must be selected so it is
+    # available for keyset pagination and ordering in the outer query.
     subquery = """
   {
     SELECT ?institution ?qidNum WHERE {"""
@@ -137,8 +138,8 @@ def build_public_institutions_query(
 ORDER BY ?qidNum
 """ % (lang, lang)
 
-    # Write query to query.rq file for debugging
-    with open("query_institution.rq", "w", encoding="utf-8") as f:
-        f.write(query)
+    # # Write query to query.rq file for debugging
+    # with open("query_institution.rq", "w", encoding="utf-8") as f:
+    #     f.write(query)
 
     return query
