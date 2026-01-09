@@ -34,14 +34,14 @@ class TestBuildPublicFiguresQuery:
     def test_nationality_filter_qid(self):
         """Test nationality filter with QID."""
         query = build_public_figures_query(
-            nationality="Q145"  # United Kingdom QID
+            country="Q145"  # United Kingdom QID
         )
 
         assert "wdt:P27 wd:Q145" in query
 
     def test_nationality_filter_name(self):
         """Test nationality filter with mapped name."""
-        query = build_public_figures_query(nationality="United Kingdom", lang="en")
+        query = build_public_figures_query(country="United Kingdom", lang="en")
 
         # United Kingdom is mapped to Q145 in constants
         assert "wdt:P27 wd:Q145" in query
@@ -49,14 +49,14 @@ class TestBuildPublicFiguresQuery:
     def test_profession_filter_qid(self):
         """Test profession filter with QID."""
         query = build_public_figures_query(
-            profession=["Q36180"]  # Writer QID
+            occupations=["Q36180"]  # Writer QID
         )
 
         assert "wdt:P106 wd:Q36180" in query
 
     def test_profession_filter_name(self):
         """Test profession filter with mapped name."""
-        query = build_public_figures_query(profession=["writer"], lang="en")
+        query = build_public_figures_query(occupations=["writer"], lang="en")
 
         # writer is mapped to Q36180 in constants
         assert "wdt:P106 wd:Q36180" in query
@@ -64,7 +64,7 @@ class TestBuildPublicFiguresQuery:
     def test_multiple_professions(self):
         """Test multiple profession filters."""
         query = build_public_figures_query(
-            profession=["Q36180", "Q33999"]  # Writer and Actor
+            occupations=["Q36180", "Q33999"]  # Writer and Actor
         )
 
         assert "wdt:P106 wd:Q36180" in query
@@ -100,7 +100,7 @@ class TestBuildPublicFiguresQuery:
     def test_nationality_filter_mapped_name(self):
         """Test nationality filter with mapped country name."""
         query = build_public_figures_query(
-            nationality="Germany"  # Maps to Q183
+            country="Germany"  # Maps to Q183
         )
 
         # Should translate to mapped QID
@@ -109,7 +109,7 @@ class TestBuildPublicFiguresQuery:
     def test_nationality_filter_short_code(self):
         """Test nationality filter with short country code."""
         query = build_public_figures_query(
-            nationality="US"  # Maps to Q30
+            country="US"  # Maps to Q30
         )
 
         # Should handle US code mapping
@@ -285,8 +285,8 @@ class TestQueryBuilderEdgeCases:
         query = build_public_figures_query(
             birthday_from="1990-01-01",
             birthday_to="2000-12-31",
-            nationality="United States",
-            profession=["Q36180", "writer"],
+            country="United States",
+            occupations=["Q36180", "writer"],
             lang="fr",
             limit=25,
         )
@@ -323,7 +323,7 @@ class TestQueryBuilderEdgeCases:
 
     def test_figures_none_nationality(self):
         """Test query with None nationality (no filter)."""
-        query = build_public_figures_query(nationality=None)
+        query = build_public_figures_query(country=None)
 
         # Should have OPTIONAL clause for country
         assert "OPTIONAL { ?person wdt:P27  ?country. }" in query

@@ -11,8 +11,8 @@ from ..security import validate_qid
 def build_public_figures_query(
     birthday_from: Optional[str] = None,
     birthday_to: Optional[str] = None,
-    nationality: Optional[str] = None,
-    profession: Optional[List[str]] = None,
+    country: Optional[str] = None,
+    occupations: Optional[List[str]] = None,
     lang: str = "en",
     limit: Optional[int] = None,
     cursor: int = 0,
@@ -23,8 +23,8 @@ def build_public_figures_query(
     Args:
         birthday_from: Start date filter (ISO format)
         birthday_to: End date filter (ISO format)
-        nationality: Nationality filter (country name or QID)
-        profession: List of profession filters (mapped keys or QIDs)
+        country: Country filter (country name or QID)
+        occupations: List of occupation filters (mapped keys or QIDs)
         lang: Language code for labels
         limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
@@ -46,39 +46,39 @@ def build_public_figures_query(
               wdt:P569 ?birthDate"""
 
     # Add nationality filter to subquery if provided
-    if nationality:
-        nationality_value = nationality.strip()
-        if nationality_value.startswith("Q"):
+    if country:
+        country_value = country.strip()
+        if country_value.startswith("Q"):
             # Direct QID - validate it
-            validated_qid = validate_qid(nationality_value)
+            validated_qid = validate_qid(country_value)
             subquery += f" ;\n              wdt:P27 wd:{validated_qid}"
-        elif nationality_value in COUNTRY_MAPPINGS:
+        elif country_value in COUNTRY_MAPPINGS:
             # Map country name to QID
-            country_qid = COUNTRY_MAPPINGS[nationality_value]
+            country_qid = COUNTRY_MAPPINGS[country_value]
             subquery += f" ;\n              wdt:P27 wd:{country_qid}"
         else:
             # Unknown country - skip filter or raise error
             raise ValueError(
-                f"Unknown country '{nationality_value}'. "
+                f"Unknown country '{country_value}'. "
                 f"Supported countries: {', '.join(sorted(COUNTRY_MAPPINGS.keys()))}"
             )
 
     # Add profession filters to subquery if provided
-    if profession:
-        for prof in profession:
-            prof_value = prof.strip()
-            if prof_value.startswith("Q"):
+    if occupations:
+        for occupation in occupations:
+            occupation_value = occupation.strip()
+            if occupation_value.startswith("Q"):
                 # Direct QID - validate it
-                validated_qid = validate_qid(prof_value)
+                validated_qid = validate_qid(occupation_value)
                 subquery += f" ;\n              wdt:P106 wd:{validated_qid}"
-            elif prof_value in PROFESSION_MAPPINGS:
+            elif occupation_value in PROFESSION_MAPPINGS:
                 # Map profession name to QID
-                profession_qid = PROFESSION_MAPPINGS[prof_value]
+                profession_qid = PROFESSION_MAPPINGS[occupation_value]
                 subquery += f" ;\n              wdt:P106 wd:{profession_qid}"
             else:
                 # Unknown profession - skip filter or raise error
                 raise ValueError(
-                    f"Unknown profession '{prof_value}'. "
+                    f"Unknown profession '{occupation_value}'. "
                     f"Supported professions: {', '.join(sorted(PROFESSION_MAPPINGS.keys()))}"
                 )
 

@@ -390,8 +390,8 @@ class WikidataClient:
         query = build_public_figures_query(
             birthday_from=birthday_from,
             birthday_to=birthday_to,
-            nationality=nationality,
-            profession=profession,
+            country=nationality,
+            occupations=profession,
             lang=lang,
             limit=limit,
             cursor=cursor,
