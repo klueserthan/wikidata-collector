@@ -14,6 +14,10 @@ import pytest
 
 from wikidata_collector import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
+from wikidata_collector.models import (
+    PublicFigureNormalizedRecord,
+    PublicInstitutionNormalizedRecord,
+)
 
 
 @pytest.mark.live
@@ -115,7 +119,7 @@ class TestLiveSparqlConnectivity:
         )
 
         # Verify all results are PublicFigure instances
-        assert all(isinstance(r, PublicFigure) for r in results), (
+        assert all(isinstance(r, PublicFigureNormalizedRecord) for r in results), (
             "All results should be PublicFigure instances"
         )
 
@@ -175,17 +179,23 @@ class TestLiveSparqlConnectivity:
             f"types=['government_agency'], but got {len(results)}"
         )
 
-        # Verify all results have expected attributes
-        assert all(
-            hasattr(r, "id") and hasattr(r, "name") and r.id is not None and r.name is not None
-            for r in results
-        ), "All results should have valid 'id' and 'name' attributes"
-
-        # Note: Duplicate IDs are expected when the outer query expands optional properties
-        # (e.g., an institution with multiple types will appear multiple times)
+        # Verify all results are PublicInstitution instances
+        assert all(isinstance(r, PublicInstitutionNormalizedRecord) for r in results), (
+            "All results should be PublicInstitutionNormalizedRecord instances"
+        )
 
         # Verify end-to-end call duration is within time budget
         time_budget = config.sparql_timeout_seconds
         assert duration <= time_budget, (
             f"End-to-end call duration ({duration:.2f}s) exceeded time budget ({time_budget}s)"
         )
+
+        # Log successful execution for visibility
+        print(f"\n✓ Live test completed successfully: {len(results)} results in {duration:.2f}s")
+
+        # Additional verification: check that we got PublicFigure objects with expected data
+        if len(results) > 0:
+            first_result = results[0]
+            print(f"  Sample result: {first_result.name} (ID: {first_result.id})")
+            assert first_result.id is not None, "Result should have an ID"
+            assert first_result.name is not None, "Result should have a name"
