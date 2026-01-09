@@ -8,47 +8,53 @@ public institutions as normalized Python objects suitable for ETL pipelines. The
 
 ## Core Entities
 
-### PublicFigure
+### PublicFigureNormalizedRecord
 
-Represents an individual public figure.
+Represents an individual public figure after aggregating multiple SPARQL rows by QID.
+
+**Note on Architecture**: SPARQL queries return one row per multi-valued field (e.g., each profession, award, or nationality). The library aggregates these rows by QID into normalized record objects.
 
 Key fields (all strings are UTF-8 text unless otherwise noted):
 
-- `id: str` — stable Wikidata identifier (e.g., `Q42`).
+- `qid: str` — stable Wikidata identifier (e.g., `Q42`).
+- `id: str` — compatibility alias for `qid`.
 - `entity_kind: Literal["public_figure"] | None` — entity discriminator for downstream code.
 - `name: str | None` — primary label in the requested language.
 - `aliases: list[str]` — alternative names and spellings.
 - `description: str | None` — short description from Wikidata.
-- `birthday: str | None` — ISO-8601 date or datetime string for date of birth.
-- `deathday: str | None` — ISO-8601 date or datetime string for date of death (if applicable).
+- `birth_date: str | None` — ISO-8601 datetime string for date of birth.
+- `birthday: str` — formatted date string (YYYY-MM-DD) extracted from `birth_date`.
+- `death_date: str | None` — ISO-8601 datetime string for date of death (if applicable).
 - `gender: str | None` — human-readable gender label or code.
-- `nationalities: list[str]` — list of nationalities (multi-valued by design).
-- `professions: list[str]` — list of professions or occupations.
+- `nationalities: list[str]` — list of nationalities (aggregated from multiple SPARQL rows).
+- `professions: list[str]` — list of professions or occupations (aggregated).
 - `website: list[WebsiteEntry]` — normalized website entries.
 - `accounts: list[AccountEntry]` — social media accounts (Twitter/X, Instagram, Facebook, TikTok, etc.).
 - `identifiers: list[Identifier]` — external identifiers such as GND or VIAF.
 - `image: list[str]` — image URLs.
-- `updated_at: str | None` — timestamp when this record was last refreshed.
+- `retrieved_at: str | None` — timestamp when this record was retrieved.
 
-### PublicInstitution
+### PublicInstitutionNormalizedRecord
 
-Represents a public institution such as a government agency, NGO, municipality, or media outlet.
+Represents a public institution such as a government agency, NGO, municipality, or media outlet, after aggregating multiple SPARQL rows by QID.
 
 Key fields:
 
-- `id: str` — stable Wikidata identifier.
+- `qid: str` — stable Wikidata identifier.
+- `id: str` — compatibility alias for `qid`.
 - `entity_kind: Literal["public_institution"] | None` — entity discriminator.
 - `name: str | None` — primary label.
 - `aliases: list[str]` — alternative names.
 - `description: str | None` — short description.
 - `founded: str | None` — ISO-8601 date/datetime for founding date.
-- `country: list[str]` — countries associated with the institution.
-- `types: list[str]` — institution types (e.g., government agency, NGO).
+- `country: list[str]` — countries associated with the institution (aggregated).
+- `types: list[str]` — institution types (e.g., government agency, NGO) (aggregated).
 - `headquarters: list[str]` — headquarters locations (labels or identifiers).
 - `website: list[WebsiteEntry]` — official websites.
 - `logo: list[str]` — logo image URLs.
 - `accounts: list[AccountEntry]` — social media accounts.
-- `updated_at: str | None` — last refresh timestamp.
+- `sub_institutions: list[SubInstitution]` — subsidiary organizations.
+- `retrieved_at: str | None` — last refresh timestamp.
 
 ### Supporting Types
 
@@ -60,9 +66,14 @@ Key fields:
 
 ### Result Set (Public API)
 
-Iterator-based public APIs yield individual `PublicFigure` or `PublicInstitution` instances.
-Internally, the library may still construct transient `PaginatedResponse`-like structures to
-handle SPARQL result pages, but these are not exposed to callers.
+Iterator-based public APIs (`iterate_public_figures`, `iterate_public_institutions`) yield individual `PublicFigureNormalizedRecord` or `PublicInstitutionNormalizedRecord` instances.
+
+Lower-level methods (`get_public_figures`, `get_public_institutions`) return `(List[NormalizedRecord], proxy)` tuples, where the list contains aggregated normalized records from a single SPARQL query page.
+
+**Internal Architecture**: The library uses a three-layer pattern:
+1. **Page fetch layer**: `get_public_*` executes SPARQL, aggregates rows by QID, returns list of normalized records
+2. **Stream iterator layer**: `iter_public_*` wraps page fetch with automatic pagination using keyset cursors
+3. **High-level wrapper**: `iterate_public_*` adds validation, logging, and `max_results` control
 
 ### Filter Set
 

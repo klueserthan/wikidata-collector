@@ -87,21 +87,26 @@ wikidata_collector/
 ├── config.py                 # Configuration, including timeouts and proxy settings
 ├── constants.py              # Shared constants (e.g., endpoint URLs)
 ├── exceptions.py             # Library-specific exception types
-├── models.py                 # PublicFigure, PublicInstitution, and supporting models
-├── proxy.py                  # Optional proxy integration (not used in live connectivity tests)
-├── query_builders/
-│   ├── figures_query_builder.py
-│   └── institutions_query_builder.py
-└── normalizers/
-    ├── figure_normalizer.py
-    └── institution_normalizer.py
+├── models.py                 # WikiRecord and NormalizedRecord classes with aggregation logic
+├── proxy.py                  # Proxy rotation manager with failure detection
+├── security.py               # SPARQL injection prevention (QID validation, literal escaping)
+└── query_builders/
+    ├── figures_query_builder.py
+    └── institutions_query_builder.py
 
 tests/
-├── unit/                     # Pure unit tests (models, normalizers, query builders)
-└── integration/              # Integration tests for iterator APIs and, later,
+├── unit/                     # Pure unit tests (models, query builders, security)
+│   ├── test_normalizers.py  # Tests for model aggregation logic (WikiRecord → NormalizedRecord)
+│   ├── test_sparql_builders.py
+│   ├── test_sparql_security.py
+│   ├── test_proxy_service.py
+│   ├── test_client_iterators.py
+│   └── test_logging.py
+└── integration/              # Integration tests for iterator APIs
     ├── test_iterate_public_figures.py
     ├── test_iterate_public_institutions.py
-    └── test_live_sparql_endpoints.py   # New live connectivity + template tests (marked "live")
+    ├── test_resilience_and_logging.py
+    └── test_live_sparql_endpoints.py   # Live connectivity tests (marked "live")
 ```
 
 **Structure Decision**: Single Python package (`wikidata_collector`) with a separate `tests/`

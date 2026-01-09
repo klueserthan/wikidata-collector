@@ -13,7 +13,7 @@ normalization internally.
 
 ```python
 from collections.abc import Iterator
-from wikidata_collector.models import PublicFigure
+from wikidata_collector.models import PublicFigureNormalizedRecord
 
 class WikidataClient:
     def iterate_public_figures(
@@ -24,7 +24,7 @@ class WikidataClient:
         nationality: list[str] | None = None,
         max_results: int | None = None,
         lang: str = "en",
-    ) -> Iterator[PublicFigure]:
+    ) -> Iterator[PublicFigureNormalizedRecord]:
         """Yield public figures matching the given filters.
 
         - Applies filters on birthday and nationality as specified in the feature spec.
@@ -41,7 +41,7 @@ class WikidataClient:
 
 ```python
 from collections.abc import Iterator
-from wikidata_collector.models import PublicInstitution
+from wikidata_collector.models import PublicInstitutionNormalizedRecord
 
 class WikidataClient:
     def iterate_public_institutions(
@@ -54,7 +54,7 @@ class WikidataClient:
         headquarter: list[str] | None = None,
         max_results: int | None = None,
         lang: str = "en",
-    ) -> Iterator[PublicInstitution]:
+    ) -> Iterator[PublicInstitutionNormalizedRecord]:
         """Yield public institutions matching the given filters.
 
         - Applies filters on founding date, country, types, and headquarter.
