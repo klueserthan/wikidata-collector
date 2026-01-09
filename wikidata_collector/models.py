@@ -318,7 +318,7 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
         accounts = existing.accounts.copy()
         new_accounts = _collect_accounts(new_record)
         for account in new_accounts:
-            if all(acc.handle != account.handle for acc in accounts):
+            if not any(acc.platform == account.platform and acc.handle == account.handle for acc in accounts):
                 accounts.append(account)
 
         # Collect countries
