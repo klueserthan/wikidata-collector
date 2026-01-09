@@ -195,7 +195,7 @@ class PublicFigureNormalizedRecord(PublicFigureBase):
         accounts = existing.accounts.copy()
         new_accounts = _collect_accounts(new_record)
         for account in new_accounts:
-            if all(acc.handle != account.handle for acc in accounts):
+            if all(acc.platform != account.platform or acc.handle != account.handle for acc in accounts):
                 accounts.append(account)
 
         # Collect countries
