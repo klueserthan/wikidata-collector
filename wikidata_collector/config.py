@@ -3,6 +3,31 @@
 import os
 from typing import List, Optional
 
+from dotenv import find_dotenv, load_dotenv
+
+# Load environment variables from .env
+load_dotenv(find_dotenv())
+
+
+# Retry behavior constants
+RETRY_MAX_WAIT_SECONDS = int(
+    os.getenv("RETRY_MAX_WAIT_SECONDS", "10")
+)  # Maximum wait time for exponential backoff on 5xx errors
+RETRY_JITTER_BASE = float(
+    os.getenv("RETRY_JITTER_BASE", "0.5")
+)  # Base jitter time in seconds for request exception retries
+RETRY_JITTER_INCREMENT = float(
+    os.getenv("RETRY_JITTER_INCREMENT", "0.2")
+)  # Jitter increment per attempt
+
+# Query pagination constant
+DEFAULT_LIMIT = int(
+    os.getenv("DEFAULT_LIMIT", "15")
+)  # Default limit for SPARQL queries and page size for iterators
+
+# HTTP status codes requiring retry
+RETRYABLE_STATUS_CODES = {429, 502, 503, 504}  # 429: throttled, 5xx: upstream unavailable
+
 
 class WikidataCollectorConfig:
     """Module-only configuration for Wikidata retrieval."""
@@ -16,6 +41,10 @@ class WikidataCollectorConfig:
         sparql_timeout_seconds: int = 60,
         max_retries: int = 3,
         proxy_cooldown_seconds: int = 300,
+        default_limit: int = DEFAULT_LIMIT,
+        retry_max_wait_seconds: int = RETRY_MAX_WAIT_SECONDS,
+        retry_jitter_base: float = RETRY_JITTER_BASE,
+        retry_jitter_increment: float = RETRY_JITTER_INCREMENT,
     ):
         """Initialize configuration.
 
@@ -27,6 +56,10 @@ class WikidataCollectorConfig:
             sparql_timeout_seconds: Timeout for SPARQL requests
             max_retries: Maximum retry attempts
             proxy_cooldown_seconds: Cooldown period for failed proxies
+            default_limit: Default limit for SPARQL queries and page size for iterators
+            retry_max_wait_seconds: Maximum wait time for exponential backoff on 5xx errors
+            retry_jitter_base: Base jitter time in seconds for request exception retries
+            retry_jitter_increment: Jitter increment per attempt
         """
         self.contact_email = contact_email or os.getenv("CONTACT_EMAIL", "not-provided")
         self.wikidata_sparql_url = wikidata_sparql_url or os.getenv(
@@ -46,9 +79,21 @@ class WikidataCollectorConfig:
         self.sparql_timeout_seconds = int(
             os.getenv("SPARQL_TIMEOUT_SECONDS", sparql_timeout_seconds)
         )
-        self.max_retries = max_retries
+        self.max_retries = int(os.getenv("MAX_RETRIES", max_retries))
         self.proxy_cooldown_seconds = int(
             os.getenv("PROXY_COOLDOWN_SECONDS", proxy_cooldown_seconds)
+        )
+
+        # Query pagination settings
+        self.default_limit = int(os.getenv("DEFAULT_LIMIT", default_limit))
+
+        # Retry behavior settings
+        self.retry_max_wait_seconds = int(
+            os.getenv("RETRY_MAX_WAIT_SECONDS", retry_max_wait_seconds)
+        )
+        self.retry_jitter_base = float(os.getenv("RETRY_JITTER_BASE", retry_jitter_base))
+        self.retry_jitter_increment = float(
+            os.getenv("RETRY_JITTER_INCREMENT", retry_jitter_increment)
         )
 
     def get_user_agent(self) -> str:

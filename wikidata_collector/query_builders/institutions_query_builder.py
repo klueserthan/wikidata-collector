@@ -3,6 +3,7 @@
 import os
 from typing import List, Optional
 
+from ..config import DEFAULT_LIMIT
 from ..constants import COUNTRY_MAPPINGS, TYPE_MAPPINGS
 from ..security import validate_qid
 
@@ -11,7 +12,7 @@ def build_public_institutions_query(
     country: Optional[str] = None,
     type: Optional[List[str]] = None,
     lang: str = "en",
-    limit: int = 100,
+    limit: Optional[int] = None,
     cursor: int = 0,
     after_qid: Optional[str] = None,
 ) -> str:
@@ -21,7 +22,7 @@ def build_public_institutions_query(
         country: Country filter (QID or label)
         type: List of institution type filters (mapped keys, QIDs, or labels)
         lang: Language code for labels
-        limit: Maximum results to return
+        limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
         after_qid: QID for keyset pagination
 
@@ -31,6 +32,8 @@ def build_public_institutions_query(
     Raises:
         ValueError: If QID validation fails
     """
+    if limit is None:
+        limit = DEFAULT_LIMIT
     # Build efficient subquery with core filters. ?qidNum must be selected so it is
     # available for keyset pagination and ordering in the outer query.
     subquery = """

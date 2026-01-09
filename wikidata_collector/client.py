@@ -30,9 +30,6 @@ from .query_builders.institutions_query_builder import build_public_institutions
 
 logger = logging.getLogger(__name__)
 
-# Default page size for iterator-friendly pagination
-DEFAULT_LIMIT = 15
-
 
 class _HasQid(Protocol):
     qid: str
@@ -253,7 +250,7 @@ class WikidataClient:
 
                 if response.status_code in (502, 503, 504):
                     last_status_code = response.status_code
-                    wait_s = min(10, 2**attempt)
+                    wait_s = min(self.config.retry_max_wait_seconds, 2**attempt)
                     if attempt < self.config.max_retries - 1:
                         _log_retry_attempt(
                             attempt=attempt + 1,
@@ -290,7 +287,9 @@ class WikidataClient:
 
                 # Log retry attempt with structured format (only if not already logged)
                 if attempt < self.config.max_retries - 1 and not already_logged_retry:
-                    wait_time = 0.5 + 0.2 * attempt
+                    wait_time = (
+                        self.config.retry_jitter_base + self.config.retry_jitter_increment * attempt
+                    )
                     _log_retry_attempt(
                         attempt=attempt + 1,
                         max_retries=self.config.max_retries,
@@ -339,7 +338,10 @@ class WikidataClient:
 
                 # Short jitter before retry (skip if already slept for status codes)
                 if not already_logged_retry:
-                    time.sleep(0.5 + 0.2 * attempt)
+                    wait_time = (
+                        self.config.retry_jitter_base + self.config.retry_jitter_increment * attempt
+                    )
+                    time.sleep(wait_time)
         # This point should be unreachable: every loop iteration should either
         # return a result or raise on the final attempt. If we get here, it
         # indicates a logic error in the retry loop implementation.
@@ -362,7 +364,7 @@ class WikidataClient:
         nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = DEFAULT_LIMIT,
+        limit: Optional[int] = None,
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
@@ -375,7 +377,7 @@ class WikidataClient:
             nationality: List of nationality filters (QIDs, ISO codes, or labels)
             profession: List of profession filters (QIDs or labels)
             lang: Language code for labels
-            limit: Maximum results to return
+            limit: Maximum results to return (defaults to config.default_page_limit)
             cursor: Offset for pagination
             after_qid: QID for keyset pagination
             override_proxies: Optional list of proxy URLs
@@ -383,6 +385,8 @@ class WikidataClient:
         Returns:
             Tuple of (List[PublicFigureNormalizedRecord], used_proxy)
         """
+        if limit is None:
+            limit = self.config.default_limit
         query = build_public_figures_query(
             birthday_from=birthday_from,
             birthday_to=birthday_to,
@@ -431,7 +435,7 @@ class WikidataClient:
         country: Optional[str] = None,
         type: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = DEFAULT_LIMIT,
+        limit: Optional[int] = None,
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
@@ -442,7 +446,7 @@ class WikidataClient:
             country: Country filter (QID, ISO code, or label)
             type: List of institution type filters (mapped keys, QIDs, or labels)
             lang: Language code for labels
-            limit: Maximum results to return
+            limit: Maximum results to return (defaults to config.default_page_limit)
             cursor: Offset for pagination
             after_qid: QID for keyset pagination
             override_proxies: Optional list of proxy URLs
@@ -450,6 +454,8 @@ class WikidataClient:
         Returns:
             Tuple of (List[PublicInstitutionNormalizedRecord], used_proxy)
         """
+        if limit is None:
+            limit = self.config.default_limit
         query = build_public_institutions_query(
             country=country,
             type=type,
@@ -558,7 +564,7 @@ class WikidataClient:
         nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = DEFAULT_LIMIT,
+        limit: Optional[int] = None,
         override_proxies: Optional[List[str]] = None,
     ) -> Iterator[PublicFigureNormalizedRecord]:
         """Iterate over public figures with automatic pagination.
@@ -572,12 +578,14 @@ class WikidataClient:
             nationality: List of nationality filters (QIDs, ISO codes, or labels)
             profession: List of profession filters (QIDs or labels)
             lang: Language code for labels
-            limit: Results per page (default: 15)
+            limit: Results per page (defaults to config.default_page_limit)
             override_proxies: Optional list of proxy URLs
 
         Yields:
             Individual public figure normalized records
         """
+        if limit is None:
+            limit = self.config.default_limit
 
         def fetch_page(after_qid: Optional[str]) -> Tuple[List[PublicFigureNormalizedRecord], str]:
             return self.get_public_figures(
@@ -609,7 +617,7 @@ class WikidataClient:
         country: Optional[str] = None,
         type: Optional[List[str]] = None,
         lang: str = "en",
-        limit: int = DEFAULT_LIMIT,
+        limit: Optional[int] = None,
         override_proxies: Optional[List[str]] = None,
     ) -> Iterator[PublicInstitutionNormalizedRecord]:
         """Iterate over public institutions with automatic pagination.
@@ -622,12 +630,14 @@ class WikidataClient:
             type: List of institution type filters (mapped keys, QIDs, or labels)
             jurisdiction: Jurisdiction filter (QID or label)
             lang: Language code for labels
-            limit: Results per page (default: 15)
+            limit: Results per page (defaults to config.default_page_limit)
             override_proxies: Optional list of proxy URLs
 
         Yields:
             Individual public institution results (SPARQL bindings)
         """
+        if limit is None:
+            limit = self.config.default_limit
 
         def fetch_page(
             after_qid: Optional[str],

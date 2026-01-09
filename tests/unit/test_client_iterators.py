@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from wikidata_collector.client import DEFAULT_LIMIT
+from wikidata_collector.config import DEFAULT_LIMIT
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
     PublicInstitutionNormalizedRecord,

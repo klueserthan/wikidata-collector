@@ -3,6 +3,7 @@
 import os
 from typing import List, Optional
 
+from ..config import DEFAULT_LIMIT
 from ..constants import COUNTRY_MAPPINGS, PROFESSION_MAPPINGS
 from ..security import validate_qid
 
@@ -13,7 +14,7 @@ def build_public_figures_query(
     nationality: Optional[str] = None,
     profession: Optional[List[str]] = None,
     lang: str = "en",
-    limit: int = 100,
+    limit: Optional[int] = None,
     cursor: int = 0,
     after_qid: Optional[str] = None,
 ) -> str:
@@ -25,7 +26,7 @@ def build_public_figures_query(
         nationality: Nationality filter (country name or QID)
         profession: List of profession filters (mapped keys or QIDs)
         lang: Language code for labels
-        limit: Maximum results to return
+        limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
         after_qid: QID for keyset pagination
 
@@ -35,6 +36,8 @@ def build_public_figures_query(
     Raises:
         ValueError: If QID validation fails
     """
+    if limit is None:
+        limit = DEFAULT_LIMIT
     # Build efficient subquery with core filters
     subquery = """
   {
