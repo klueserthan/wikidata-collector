@@ -24,19 +24,23 @@ def main():
 
     # Example 1: Query public figures born after 1990
     print("\n=== Example 1: Public Figures (Single Page) ===")
-    print("Querying public figures born between 1990-01-01 and 1990-01-02...")
+    print(
+        "Querying public figures (occupations=['politician'], country='Q30') born between 1990-01-01 and 1990-01-02..."
+    )
 
     try:
         results, proxy_used = client.get_public_figures(
             birthday_from="1990-01-01",
-            birthday_to="1990-01-02",
+            birthday_to="1990-01-10",
+            occupations=["politician"],
+            country="Q30",  # United States QID
             lang="en",
             limit=5,
         )
 
         print(f"Found {len(results)} results (using {proxy_used})")
         print("\nResults (normalized model objects):")
-        for item in results[:3]:
+        for item in results:
             print(f"  - {item.qid}: {item.name}")
             if item.birth_date:
                 print(f"    Born: {item.birth_date}")

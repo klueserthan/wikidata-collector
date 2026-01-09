@@ -361,8 +361,8 @@ class WikidataClient:
         self,
         birthday_from: Optional[str] = None,
         birthday_to: Optional[str] = None,
-        nationality: Optional[str] = None,
-        profession: Optional[List[str]] = None,
+        country: Optional[str] = None,
+        occupations: Optional[List[str]] = None,
         lang: str = "en",
         limit: Optional[int] = None,
         cursor: int = 0,
@@ -374,8 +374,8 @@ class WikidataClient:
         Args:
             birthday_from: Birth date from (ISO format)
             birthday_to: Birth date to (ISO format)
-            nationality: List of nationality filters (QIDs, ISO codes, or labels)
-            profession: List of profession filters (QIDs or labels)
+            country: List of country filters (QIDs, ISO codes, or labels)
+            occupations: List of occupation filters (QIDs or labels)
             lang: Language code for labels
             limit: Maximum results to return (defaults to config.default_page_limit)
             cursor: Offset for pagination
@@ -390,8 +390,8 @@ class WikidataClient:
         query = build_public_figures_query(
             birthday_from=birthday_from,
             birthday_to=birthday_to,
-            country=nationality,
-            occupations=profession,
+            country=country,
+            occupations=occupations,
             lang=lang,
             limit=limit,
             cursor=cursor,
@@ -591,8 +591,8 @@ class WikidataClient:
             return self.get_public_figures(
                 birthday_from=birthday_from,
                 birthday_to=birthday_to,
-                nationality=nationality,
-                profession=profession,
+                country=nationality,
+                occupations=profession,
                 lang=lang,
                 limit=limit,
                 after_qid=after_qid,
