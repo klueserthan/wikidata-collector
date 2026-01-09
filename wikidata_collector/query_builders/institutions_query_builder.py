@@ -1,5 +1,6 @@
 """SPARQL query builder for public institutions."""
 
+import os
 from typing import List, Optional
 
 from ..constants import COUNTRY_MAPPINGS, TYPE_MAPPINGS
@@ -112,7 +113,7 @@ def build_public_institutions_query(
         "       ?typeLabel ?countryLabel\n"
         "       ?foundedDate ?dissolvedDate\n"
         "       ?image\n"
-        "       ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle\n"
+        "       ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle ?tiktokHandle\n"
         "WHERE {\n"
     )
     query += subquery
@@ -127,6 +128,7 @@ def build_public_institutions_query(
   OPTIONAL { ?institution wdt:P2002 ?twitterHandle. }
   OPTIONAL { ?institution wdt:P2013 ?facebookHandle. }
   OPTIONAL { ?institution wdt:P2397 ?youtubeHandle. }
+  OPTIONAL { ?institution wdt:P7085 ?tiktokHandle. }
 
   OPTIONAL {
     ?institution schema:description ?description.
@@ -138,8 +140,9 @@ def build_public_institutions_query(
 ORDER BY ?qidNum
 """ % (lang, lang)
 
-    # # Write query to query.rq file for debugging
-    # with open("query_institution.rq", "w", encoding="utf-8") as f:
-    #     f.write(query)
+    # Write query to file for debugging if DEBUG_QUERIES environment variable is set
+    if os.getenv("DEBUG_QUERIES", "").lower() in ("true", "1", "yes"):
+        with open("query_institution.rq", "w", encoding="utf-8") as f:
+            f.write(query)
 
     return query
