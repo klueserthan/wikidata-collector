@@ -2,9 +2,6 @@ from datetime import datetime
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
-if TYPE_CHECKING:
-    from wikidata_collector.models import AccountEntry
-
 from pydantic import BaseModel
 
 logger = getLogger(__name__)
