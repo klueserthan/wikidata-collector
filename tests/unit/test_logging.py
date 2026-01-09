@@ -44,7 +44,8 @@ class TestLogQueryExecution:
                 query_type="public_figures",
                 params={"birthday_from": "2000-01-01", "nationality": ["United States"]},
                 page_num=1,
-                result_count=15,
+                raw_count=18,
+                unique_qid_count=15,
                 latency_ms=123.45,
                 proxy_used="http://proxy.example.com:8080",
             )
@@ -60,14 +61,16 @@ class TestLogQueryExecution:
         assert "SPARQL query executed" in record.message
         assert "type=public_figures" in record.message
         assert "page=1" in record.message
-        assert "results=15" in record.message
+        assert "raw_records=18" in record.message
+        assert "unique_qids=15" in record.message
         assert "latency=123.45ms" in record.message
         assert "proxy=http://proxy.example.com:8080" in record.message
 
         # Verify structured extra fields
         assert record.query_type == "public_figures"
         assert record.page == 1
-        assert record.result_count == 15
+        assert record.raw_count == 18
+        assert record.unique_qid_count == 15
         assert record.latency_ms == 123.45
         assert record.proxy_used == "http://proxy.example.com:8080"
         assert "birthday_from" in record.params
@@ -80,7 +83,8 @@ class TestLogQueryExecution:
                 query_type="public_institutions",
                 params={"country": "Q30"},
                 page_num=2,
-                result_count=10,
+                raw_count=12,
+                unique_qid_count=10,
                 latency_ms=234.56,
                 proxy_used="direct",
             )
@@ -97,7 +101,11 @@ class TestLogPageFetch:
         """Test that page fetch logs include all required fields"""
         with log_capture.at_level(logging.DEBUG):
             _log_page_fetch(
-                query_type="public_figures", page_num=3, after_qid="Q12345", result_count=15
+                query_type="public_figures",
+                page_num=3,
+                after_qid="Q12345",
+                raw_count=18,
+                unique_qid_count=15,
             )
 
         assert len(log_capture.records) == 1
@@ -111,19 +119,25 @@ class TestLogPageFetch:
         assert "type=public_figures" in record.message
         assert "page=3" in record.message
         assert "after_qid=Q12345" in record.message
-        assert "results=15" in record.message
+        assert "raw_records=18" in record.message
+        assert "unique_qids=15" in record.message
 
         # Verify structured fields
         assert record.query_type == "public_figures"
         assert record.page == 3
         assert record.after_qid == "Q12345"
-        assert record.result_count == 15
+        assert record.raw_count == 18
+        assert record.unique_qid_count == 15
 
     def test_log_page_fetch_with_no_after_qid(self, log_capture):
         """Test page fetch logging for first page (no after_qid)"""
         with log_capture.at_level(logging.DEBUG):
             _log_page_fetch(
-                query_type="public_institutions", page_num=1, after_qid=None, result_count=15
+                query_type="public_institutions",
+                page_num=1,
+                after_qid=None,
+                raw_count=15,
+                unique_qid_count=15,
             )
 
         record = log_capture.records[0]
@@ -292,12 +306,19 @@ class TestLoggingSchema:
         """Test that numeric fields are stored as numbers, not strings"""
         with log_capture.at_level(logging.INFO):
             _log_query_execution(
-                "test", {}, page_num=1, result_count=10, latency_ms=123.45, proxy_used="direct"
+                "test",
+                {},
+                page_num=1,
+                raw_count=10,
+                unique_qid_count=10,
+                latency_ms=123.45,
+                proxy_used="direct",
             )
 
         record = log_capture.records[0]
         assert isinstance(record.page, int)
-        assert isinstance(record.result_count, int)
+        assert isinstance(record.raw_count, int)
+        assert isinstance(record.unique_qid_count, int)
         assert isinstance(record.latency_ms, float)
 
     def test_filter_params_preserved_as_dict(self, log_capture):
@@ -305,7 +326,7 @@ class TestLoggingSchema:
         filters = {"birthday_from": "2000-01-01", "nationality": ["US", "UK"], "limit": 100}
 
         with log_capture.at_level(logging.INFO):
-            _log_query_execution("test", filters, 1, 10, 123.45, "direct")
+            _log_query_execution("test", filters, 1, 10, 10, 123.45, "direct")
 
         record = log_capture.records[0]
         assert isinstance(record.params, dict)

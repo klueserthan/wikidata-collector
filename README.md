@@ -8,9 +8,9 @@ A pure Python library for fetching public figures and institutions from Wikidata
 - **SPARQL Query Builder**: Type-safe query construction with security validation
 - **Keyset Pagination**: Deterministic QID-based cursor pagination (no OFFSET drift)
 - **Iterator API**: High-level iterators that handle pagination automatically (internal page size: 15 entities)
-- **Multi-Valued Fields**: Correctly returns all professions, awards, nationalities, etc.
+- **Multi-Valued Fields**: Correctly returns all occupations, awards, nationalities, etc.
 - **Proxy Rotation**: Round-robin with failure detection, retry/backoff, and Retry-After handling
-- **Comprehensive Filtering**: Birth dates, nationality, profession, institution types, country, jurisdiction
+- **Comprehensive Filtering**: Birth dates, nationality, occupation, institution types, country, jurisdiction
 - **Caching**: TTL-based in-memory cache for SPARQL queries (configurable)
 - **Security**: Built-in SPARQL injection prevention with QID validation and literal escaping
 - **Data Models**: Pydantic models for type-safe data handling
@@ -42,38 +42,39 @@ config = WikidataCollectorConfig(
 )
 client = WikidataClient(config)
 
-# Iterator API (Recommended) - Returns normalized PublicFigure objects
+# Iterator API (Recommended) - Returns PublicFigureNormalizedRecord objects
 for figure in client.iterate_public_figures(
     birthday_from="1990-01-01",
     nationality=["US"],  # United States (ISO code or label)
     max_results=50,
     lang="en"
 ):
-    print(f"{figure.id}: {figure.name}")
-    print(f"  Birthday: {figure.birthday}")
+    print(f"{figure.qid}: {figure.name}")
+    print(f"  Birthday: {figure.birthday}")  # Formatted as YYYY-MM-DD string
     print(f"  Nationalities: {', '.join(figure.nationalities)}")
-    print(f"  Professions: {', '.join(figure.professions)}")
+    print(f"  Occupations: {', '.join(figure.occupations)}")
 
-# Iterator API for institutions - Returns normalized PublicInstitution objects
+# Iterator API for institutions - Returns PublicInstitutionNormalizedRecord objects
 for institution in client.iterate_public_institutions(
     country="US",  # Single country (ISO code or label)
     types=["public broadcaster"],  # Institution types
     max_results=50,
     lang="en"
 ):
-    print(f"{institution.id}: {institution.name}")
-    print(f"  Founded: {institution.founded}")
-    print(f"  Country: {', '.join(institution.country)}")
+    print(f"{institution.qid}: {institution.name}")
+    print(f"  Founded: {institution.founded_date}")
+    print(f"  Countries: {', '.join(institution.countries)}")
     print(f"  Types: {', '.join(institution.types)}")
 
-# Lower-level API - For advanced use cases, returns raw SPARQL bindings
-results, proxy_used = client.get_public_figures(
+# Lower-level API - For advanced use cases, returns (List[NormalizedRecord], proxy)
+figures, proxy_used = client.get_public_figures(
     birthday_from="1990-01-01",
     nationality=["Q30"],  # QID preferred for performance
-    profession=["Q33999"],  # Actor
+    occupation=["Q33999"],  # Actor
     lang="en",
     limit=50
 )
+# figures is a list of PublicFigureNormalizedRecord objects
 
 # Get single entity by QID
 entity, proxy_used = client.get_entity(
@@ -125,7 +126,7 @@ client = WikidataClient(config)
 
 ### Iterator API (Recommended)
 
-The iterator API handles pagination automatically and returns normalized objects:
+The iterator API handles pagination automatically and returns normalized record objects:
 
 ```python
 # Automatically paginates through all results
@@ -133,32 +134,32 @@ for figure in client.iterate_public_figures(
     nationality=["US"],
     max_results=100  # Optional limit
 ):
-    print(f"{figure.name}")
+    print(f"{figure.name}")  # figure is a PublicFigureNormalizedRecord
 
 # Without max_results, yields all matching entities
 for institution in client.iterate_public_institutions(
     country="US",
     types=["university"]
 ):
-    print(f"{institution.name}")
+    print(f"{institution.name}")  # institution is a PublicInstitutionNormalizedRecord
 ```
 
 ### Manual Keyset Pagination (Advanced)
 
-For lower-level control, use keyset pagination:
+For lower-level control, use keyset pagination with `get_public_figures` or `get_public_institutions`:
 
 ```python
-# First page
-results, proxy = client.get_public_figures(
+# First page - returns (List[PublicFigureNormalizedRecord], proxy)
+figures, proxy = client.get_public_figures(
     nationality=["Q30"],
     limit=50
 )
 
 # Get last QID for next page
-last_qid = results[-1]["person"]["value"].split("/")[-1]
+last_qid = figures[-1].qid
 
 # Next page
-results, proxy = client.get_public_figures(
+figures, proxy = client.get_public_figures(
     nationality=["Q30"],
     limit=50,
     after_qid=last_qid
@@ -167,12 +168,14 @@ results, proxy = client.get_public_figures(
 
 ### OFFSET Pagination (Fallback)
 
+For simple use cases, OFFSET pagination is also available, but returns normalized records:
+
 ```python
-# Page 1
-results, proxy = client.get_public_figures(nationality=["Q30"], limit=50, cursor=0)
+# Page 1 - returns (List[PublicFigureNormalizedRecord], proxy)
+figures, proxy = client.get_public_figures(nationality=["Q30"], limit=50, cursor=0)
 
 # Page 2
-results, proxy = client.get_public_figures(nationality=["Q30"], limit=50, cursor=50)
+figures, proxy = client.get_public_figures(nationality=["Q30"], limit=50, cursor=50)
 ```
 
 ## Security
@@ -194,31 +197,45 @@ All query builders automatically validate QIDs and escape string literals to pre
 
 ## Data Models
 
-```python
-from wikidata_collector.models import PublicFigure, PublicInstitution
+The library uses Pydantic models for type-safe data handling. All queries return normalized record objects:
 
-# Public Figure
-figure = PublicFigure(
-    id="Q42",
+```python
+from wikidata_collector.models import (
+    PublicFigureNormalizedRecord,
+    PublicInstitutionNormalizedRecord
+)
+
+# Public Figure - aggregated data from multiple SPARQL rows
+figure = PublicFigureNormalizedRecord(
+    qid="Q42",
     entity_kind="public_figure",
     name="Douglas Adams",
-    professions=["writer", "humorist"],
+    occupations=["writer", "humorist"],
     nationalities=["United Kingdom"],
-    birthday="1952-03-11T00:00:00Z",
+    birth_date="1952-03-11T00:00:00Z",
     # ... more fields
 )
 
-# Public Institution
-institution = PublicInstitution(
-    id="Q95",
+# Access via .qid or .id (compatibility alias)
+print(f"QID: {figure.qid}")
+print(f"ID: {figure.id}")  # Same as .qid
+
+# Formatted birthday string
+print(f"Birthday: {figure.birthday}")  # "1952-03-11"
+
+# Public Institution - aggregated data from multiple SPARQL rows
+institution = PublicInstitutionNormalizedRecord(
+    qid="Q95",
     entity_kind="public_institution",
     name="Google",
     types=["business", "public company"],
-    country=["USA"],
-    founded="1998-09-04T00:00:00Z",
+    countries=["USA"],
+    founded_date="1998-09-04T00:00:00Z",
     # ... more fields
 )
 ```
+
+**Note on Data Aggregation**: SPARQL queries return one row per multi-valued field (e.g., each occupation, award, or nationality creates a separate row). The library automatically aggregates these rows by QID and merges multi-valued fields into lists within normalized record objects.
 
 ## Query Builders
 
@@ -232,7 +249,7 @@ from wikidata_collector.query_builders.institutions_query_builder import build_p
 query = build_public_figures_query(
     birthday_from="1990-01-01",
     nationality=["Q30"],
-    profession=["Q33999"],
+    occupation=["Q33999"],
     lang="en",
     limit=50,
     after_qid="Q12345"
@@ -359,28 +376,26 @@ pytest tests/unit/test_sparql_builders.py -v
 ```
 wikidata_collector/          # Main module
 ├── __init__.py              # Public API exports
-├── client.py                # WikidataClient
+├── client.py                # WikidataClient with iterators and pagination
 ├── config.py                # Configuration
 ├── exceptions.py            # Custom exceptions
 ├── constants.py             # Type mappings
 ├── security.py              # Security validation
-├── models.py                # Pydantic data models
-├── cache.py                 # TTL cache implementation
+├── models.py                # Pydantic data models (WikiRecord & NormalizedRecord)
 ├── proxy.py                 # Proxy rotation manager
-├── query_builders/          # SPARQL query builders
-│   ├── figures_query_builder.py
-│   └── institutions_query_builder.py
-└── normalizers/             # Data normalizers
-    ├── figure_normalizer.py
-    └── institution_normalizer.py
+└── query_builders/          # SPARQL query builders
+    ├── figures_query_builder.py
+    └── institutions_query_builder.py
 
 tests/                       # Test suite
 ├── conftest.py              # Pytest configuration
-└── unit/                    # Unit tests
-    ├── test_normalizers.py
-    ├── test_sparql_builders.py
-    ├── test_sparql_security.py
-    └── test_proxy_service.py
+├── unit/                    # Unit tests
+│   ├── test_normalizers.py
+│   ├── test_sparql_builders.py
+│   ├── test_sparql_security.py
+│   └── test_proxy_service.py
+└── integration/             # Integration tests
+    └── ...
 ```
 
 ## Best Practices
@@ -388,37 +403,41 @@ tests/                       # Test suite
 ### Use Iterator API for ETL Workflows
 
 ```python
-# ✓ Recommended - handles pagination automatically, returns typed objects
+# ✓ Recommended - handles pagination automatically, returns typed normalized records
 for figure in client.iterate_public_figures(
     nationality=["US"],
     max_results=1000
 ):
-    process(figure)
+    process(figure)  # figure is a PublicFigureNormalizedRecord
 
-# ✗ Manual pagination - more code, raw SPARQL bindings
-results, _ = client.get_public_figures(nationality=["Q30"], limit=50)
+# ✗ Manual pagination - more code to manage
+figures, _ = client.get_public_figures(nationality=["Q30"], limit=50)
+# Still returns normalized records, but you manage pagination yourself
 ```
 
 ### Use QIDs for Better Performance (Lower-level API)
 
 ```python
 # ✓ Fast - uses direct QID matching
-client.get_public_figures(nationality=["Q30"])  # United States
+figures, _ = client.get_public_figures(nationality=["Q30"])  # United States
 
 # ✗ Slow - requires label joins in SPARQL
-client.get_public_figures(nationality=["United States"])
+figures, _ = client.get_public_figures(nationality=["United States"])
 
-# Note: Iterator API accepts both and handles translation
+# Note: Both return List[PublicFigureNormalizedRecord]
+# Iterator API accepts both labels and QIDs and handles translation automatically
 ```
 
 ### Prefer Keyset Pagination (Lower-level API)
 
 ```python
 # ✓ Deterministic and efficient
-results, _ = client.get_public_figures(limit=50, after_qid="Q12345")
+figures, _ = client.get_public_figures(limit=50, after_qid="Q12345")
 
 # ✗ Can have drift if data changes
-results, _ = client.get_public_figures(limit=50, cursor=100)
+figures, _ = client.get_public_figures(limit=50, cursor=100)
+
+# Note: Both return List[PublicFigureNormalizedRecord]
 ```
 
 ### Set Contact Email
@@ -453,14 +472,14 @@ for figure in client.iterate_public_figures(
     max_results=100,
     lang="en"
 ):
-    # Filter by profession in your code or add profession filter
-    if "actor" in [p.lower() for p in figure.professions]:
+    # Filter by occupation in your code or add occupation filter
+    if "actor" in [p.lower() for p in figure.occupations]:
         print(f"{figure.name} - {figure.birthday}")
 
-# Using lower-level API with QID
-results, _ = client.get_public_figures(
+# Using lower-level API with QID - returns List[PublicFigureNormalizedRecord]
+figures, _ = client.get_public_figures(
     birthday_from="1990-01-01",
-    profession=["Q33999"],  # Actor QID
+    occupation=["Q33999"],  # Actor QID
     lang="en",
     limit=100
 )
@@ -476,10 +495,10 @@ for institution in client.iterate_public_institutions(
     max_results=100,
     lang="en"
 ):
-    print(f"{institution.name} - Founded: {institution.founded}")
+    print(f"{institution.name} - Founded: {institution.founded_date}")
 
-# Using lower-level API with QID
-results, _ = client.get_public_institutions(
+# Using lower-level API with QID - returns List[PublicInstitutionNormalizedRecord]
+institutions, _ = client.get_public_institutions(
     type=["Q327333"],  # Government agency QID
     country="Q30",  # United States QID
     lang="en",

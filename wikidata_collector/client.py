@@ -7,26 +7,26 @@ This client has no FastAPI dependencies and can be used standalone.
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, Tuple, TypeVar
 
 import requests
 
 from .config import WikidataCollectorConfig
 from .exceptions import (
-    EntityNotFoundError,
     InvalidFilterError,
-    InvalidQIDError,
     ProxyMisconfigurationError,
     QueryExecutionError,
     UpstreamUnavailableError,
 )
-from .models import PublicFigure, PublicInstitution
-from .normalizers.figure_normalizer import normalize_public_figure
-from .normalizers.institution_normalizer import normalize_public_institution
+from .models import (
+    PublicFigureNormalizedRecord,
+    PublicFigureWikiRecord,
+    PublicInstitutionNormalizedRecord,
+    PublicInstitutionWikiRecord,
+)
 from .proxy import ProxyManager
 from .query_builders.figures_query_builder import build_public_figures_query
 from .query_builders.institutions_query_builder import build_public_institutions_query
-from .security import validate_qid
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +34,19 @@ logger = logging.getLogger(__name__)
 DEFAULT_LIMIT = 15
 
 
+class _HasQid(Protocol):
+    qid: str
+
+
+TRecord = TypeVar("TRecord", bound=_HasQid)
+
+
 def _log_query_execution(
     query_type: str,
     params: Dict[str, Any],
     page_num: int,
-    result_count: int,
+    raw_count: int,
+    unique_qid_count: int,
     latency_ms: float,
     proxy_used: str,
 ) -> None:
@@ -48,17 +56,20 @@ def _log_query_execution(
         query_type: Type of query (e.g., 'public_figures', 'public_institutions')
         params: Query parameters used
         page_num: Page number (1-indexed)
-        result_count: Number of results returned
+        raw_count: Number of normalized records returned (may include duplicates due to SPARQL expansion)
+        unique_qid_count: Number of unique QIDs in the page
         latency_ms: Query latency in milliseconds
         proxy_used: Proxy used for the query
     """
     logger.info(
         f"SPARQL query executed: type={query_type}, page={page_num}, "
-        f"results={result_count}, latency={latency_ms:.2f}ms, proxy={proxy_used}",
+        f"raw_records={raw_count}, unique_qids={unique_qid_count}, "
+        f"latency={latency_ms:.2f}ms, proxy={proxy_used}",
         extra={
             "query_type": query_type,
             "page": page_num,
-            "result_count": result_count,
+            "raw_count": raw_count,
+            "unique_qid_count": unique_qid_count,
             "latency_ms": latency_ms,
             "proxy_used": proxy_used,
             "params": params,
@@ -67,7 +78,11 @@ def _log_query_execution(
 
 
 def _log_page_fetch(
-    query_type: str, page_num: int, after_qid: Optional[str], result_count: int
+    query_type: str,
+    page_num: int,
+    after_qid: Optional[str],
+    raw_count: int,
+    unique_qid_count: int,
 ) -> None:
     """Log structured information about page fetching for iterators.
 
@@ -75,15 +90,18 @@ def _log_page_fetch(
         query_type: Type of query
         page_num: Page number being fetched
         after_qid: QID used for keyset pagination (if any)
-        result_count: Number of results in this page
+        raw_count: Number of normalized records in this page (may include duplicates)
+        unique_qid_count: Number of unique QIDs in this page
     """
     logger.debug(
-        f"Fetched page: type={query_type}, page={page_num}, after_qid={after_qid}, results={result_count}",
+        f"Fetched page: type={query_type}, page={page_num}, after_qid={after_qid}, "
+        f"raw_records={raw_count}, unique_qids={unique_qid_count}",
         extra={
             "query_type": query_type,
             "page": page_num,
             "after_qid": after_qid,
-            "result_count": result_count,
+            "raw_count": raw_count,
+            "unique_qid_count": unique_qid_count,
         },
     )
 
@@ -348,7 +366,7 @@ class WikidataClient:
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
-    ) -> Tuple[List[Dict[str, Any]], str]:
+    ) -> Tuple[List[PublicFigureNormalizedRecord], str]:
         """Get public figures with optional filters.
 
         Args:
@@ -363,7 +381,7 @@ class WikidataClient:
             override_proxies: Optional list of proxy URLs
 
         Returns:
-            Tuple of (results_list, used_proxy)
+            Tuple of (List[PublicFigureNormalizedRecord], used_proxy)
         """
         query = build_public_figures_query(
             birthday_from=birthday_from,
@@ -379,7 +397,34 @@ class WikidataClient:
         result, used_proxy = self.execute_sparql_query(query, override_proxies)
         bindings = result.get("results", {}).get("bindings", [])
 
-        return bindings, used_proxy
+        # Aggregate SPARQL bindings by QID (one page of normalized records)
+        results: List[PublicFigureNormalizedRecord] = []
+        current: Optional[PublicFigureNormalizedRecord] = None
+
+        for binding in bindings:
+            try:
+                wiki_record = PublicFigureWikiRecord.from_wikidata(binding)
+            except (KeyError, ValueError) as e:
+                logger.warning(f"Failed to parse record: {e}")
+                continue
+
+            if current is None:
+                current = PublicFigureNormalizedRecord.from_wikidata_record(wiki_record)
+                continue
+
+            if wiki_record.qid == current.qid:
+                current = PublicFigureNormalizedRecord.add_from_wikidata_record(
+                    current, wiki_record
+                )
+                continue
+
+            results.append(current)
+            current = PublicFigureNormalizedRecord.from_wikidata_record(wiki_record)
+
+        if current is not None:
+            results.append(current)
+
+        return results, used_proxy
 
     def get_public_institutions(
         self,
@@ -390,7 +435,7 @@ class WikidataClient:
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
-    ) -> Tuple[List[Dict[str, Any]], str]:
+    ) -> Tuple[List[PublicInstitutionNormalizedRecord], str]:
         """Get public institutions with optional filters.
 
         Args:
@@ -403,7 +448,7 @@ class WikidataClient:
             override_proxies: Optional list of proxy URLs
 
         Returns:
-            Tuple of (results_list, used_proxy)
+            Tuple of (List[PublicInstitutionNormalizedRecord], used_proxy)
         """
         query = build_public_institutions_query(
             country=country,
@@ -417,93 +462,52 @@ class WikidataClient:
         result, used_proxy = self.execute_sparql_query(query, override_proxies)
         bindings = result.get("results", {}).get("bindings", [])
 
-        return bindings, used_proxy
+        # Aggregate SPARQL bindings by QID (one page of normalized records)
+        results: List[PublicInstitutionNormalizedRecord] = []
+        current: Optional[PublicInstitutionNormalizedRecord] = None
 
-    def get_entity(
-        self, qid: str, lang: str = "en", override_proxies: Optional[List[str]] = None
-    ) -> Tuple[Dict[str, Any], str]:
-        """Fetch raw entity data from Wikidata EntityData API.
-
-        Args:
-            qid: Wikidata entity QID (e.g., 'Q42')
-            lang: Language code for labels
-            override_proxies: Optional list of proxy URLs
-
-        Returns:
-            Tuple of (entity_dict, used_proxy)
-
-        Raises:
-            InvalidQIDError: If QID format is invalid
-            EntityNotFoundError: If entity is not found
-            QueryExecutionError: If entity cannot be fetched after retries
-        """
-        # Validate QID format
-        try:
-            qid = validate_qid(qid)
-        except ValueError as e:
-            raise InvalidQIDError(str(e))
-
-        entity_url = self.config.wikidata_entity_api_url.format(qid=qid)
-        used_proxy = "direct"
-
-        for attempt in range(self.config.max_retries):
-            proxy = None
+        for binding in bindings:
             try:
-                # Get proxy for this attempt
-                proxy = self.proxy_manager.get_next_proxy(override_proxies)
-                proxy_dict = self.proxy_manager.get_proxy_dict(proxy) if proxy else None
+                wiki_record = PublicInstitutionWikiRecord.from_wikidata(binding)
+            except (KeyError, ValueError) as e:
+                logger.warning(f"Failed to parse record: {e}")
+                continue
 
-                headers = {"Accept": "application/json", "User-Agent": self.config.get_user_agent()}
+            if current is None:
+                current = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record)
+                continue
 
-                resp = requests.get(
-                    entity_url,
-                    params={"language": lang},
-                    headers=headers,
-                    proxies=proxy_dict,
-                    timeout=self.config.sparql_timeout_seconds,
+            if wiki_record.qid == current.qid:
+                current = PublicInstitutionNormalizedRecord.add_from_wikidata_record(
+                    current, wiki_record
                 )
-                resp.raise_for_status()
-                used_proxy = proxy or "direct"
-                data = resp.json()
+                continue
 
-                entities = data.get("entities", {})
-                ent = entities.get(qid)
-                if not ent:
-                    raise EntityNotFoundError(f"Entity {qid} not found")
+            results.append(current)
+            current = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record)
 
-                return ent, used_proxy
+        if current is not None:
+            results.append(current)
 
-            except requests.exceptions.RequestException as e:
-                logger.error(
-                    f"Entity lookup failed (attempt {attempt + 1}/{self.config.max_retries}): {e}"
-                )
-                if proxy:
-                    self.proxy_manager.mark_proxy_failed(proxy)
-                if attempt == self.config.max_retries - 1:
-                    raise QueryExecutionError(f"Failed to fetch entity {qid} from Wikidata")
-                time.sleep(1)
-
-        raise QueryExecutionError(f"Failed to fetch entity {qid} from Wikidata")
+        return results, used_proxy
 
     def _paginate_sparql_results(
         self,
         query_type: str,
-        entity_uri_key: str,
-        fetch_page_fn,
+        fetch_page_fn: Callable[[Optional[str]], Tuple[List[TRecord], str]],
         params: Dict[str, Any],
         limit: int,
-    ) -> Iterator[Dict[str, Any]]:
-        """Generic helper for paginating SPARQL results with keyset pagination.
+    ) -> Iterator[TRecord]:
+        """Generic helper for paginating normalized record pages with keyset pagination.
 
         Args:
             query_type: Type of query (e.g., 'public_figures', 'public_institutions')
-            entity_uri_key: Key name in results dict containing entity URI (e.g., 'person', 'institution')
             fetch_page_fn: Function to fetch a page of results, must accept after_qid parameter
             params: Query parameters for logging
             limit: Number of results per page
 
         Yields:
-            Individual SPARQL result bindings
+            Individual normalized records
         """
         after_qid = None
         page_num = 0
@@ -513,16 +517,22 @@ class WikidataClient:
             start_time = time.time()
 
             # Fetch page using provided function
-            results, proxy = fetch_page_fn(after_qid=after_qid)
+            results, proxy = fetch_page_fn(after_qid)
             latency_ms = (time.time() - start_time) * 1000
 
+            # Calculate metrics for logging and pagination control
+            raw_count = len(results)
+            unique_qids_in_page = {record.qid for record in results}
+            unique_qid_count = len(unique_qids_in_page)
+
             # Log page fetch
-            _log_page_fetch(query_type, page_num, after_qid, len(results))
+            _log_page_fetch(query_type, page_num, after_qid, raw_count, unique_qid_count)
             _log_query_execution(
                 query_type,
                 params,
                 page_num,
-                len(results),
+                raw_count,
+                unique_qid_count,
                 latency_ms,
                 proxy,
             )
@@ -533,24 +543,13 @@ class WikidataClient:
             for result in results:
                 yield result
 
-            # Extract distinct QIDs from results to check if we've reached the end
-            distinct_qids = set()
-            for result in results:
-                entity_uri = result.get(entity_uri_key, {}).get("value", "")
-                if entity_uri and "/" in entity_uri:
-                    qid = entity_uri.rsplit("/", 1)[-1]
-                    if qid:
-                        distinct_qids.add(qid)
-
-            # If we got fewer distinct IDs than limit, we've reached the end
-            if len(distinct_qids) < limit:
+            # Records can be expanded in the SPARQL query (e.g., multi-row per entity),
+            # so we must determine end-of-results based on the number of unique QIDs.
+            if unique_qid_count < limit:
                 break
 
-            # Get highest QID for next page keyset pagination
-            if distinct_qids:
-                after_qid = sorted(distinct_qids)[-1]
-            else:
-                break
+            # Keyset pagination: use the last record's QID.
+            after_qid = results[-1].qid
 
     def iter_public_figures(
         self,
@@ -561,7 +560,7 @@ class WikidataClient:
         lang: str = "en",
         limit: int = DEFAULT_LIMIT,
         override_proxies: Optional[List[str]] = None,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[PublicFigureNormalizedRecord]:
         """Iterate over public figures with automatic pagination.
 
         Uses keyset pagination with a fixed page size for efficient iteration.
@@ -577,10 +576,10 @@ class WikidataClient:
             override_proxies: Optional list of proxy URLs
 
         Yields:
-            Individual public figure results (SPARQL bindings)
+            Individual public figure normalized records
         """
 
-        def fetch_page(after_qid: Optional[str]) -> Tuple[List[Dict[str, Any]], str]:
+        def fetch_page(after_qid: Optional[str]) -> Tuple[List[PublicFigureNormalizedRecord], str]:
             return self.get_public_figures(
                 birthday_from=birthday_from,
                 birthday_to=birthday_to,
@@ -594,7 +593,6 @@ class WikidataClient:
 
         yield from self._paginate_sparql_results(
             query_type="public_figures",
-            entity_uri_key="person",
             fetch_page_fn=fetch_page,
             params={
                 "birthday_from": birthday_from,
@@ -613,7 +611,7 @@ class WikidataClient:
         lang: str = "en",
         limit: int = DEFAULT_LIMIT,
         override_proxies: Optional[List[str]] = None,
-    ) -> Iterator[Dict[str, Any]]:
+    ) -> Iterator[PublicInstitutionNormalizedRecord]:
         """Iterate over public institutions with automatic pagination.
 
         Uses keyset pagination with a fixed page size for efficient iteration.
@@ -631,7 +629,9 @@ class WikidataClient:
             Individual public institution results (SPARQL bindings)
         """
 
-        def fetch_page(after_qid: Optional[str]) -> Tuple[List[Dict[str, Any]], str]:
+        def fetch_page(
+            after_qid: Optional[str],
+        ) -> Tuple[List[PublicInstitutionNormalizedRecord], str]:
             return self.get_public_institutions(
                 country=country,
                 type=type,
@@ -643,7 +643,6 @@ class WikidataClient:
 
         yield from self._paginate_sparql_results(
             query_type="public_institutions",
-            entity_uri_key="institution",
             fetch_page_fn=fetch_page,
             params={"country": country, "type": type, "lang": lang},
             limit=limit,
@@ -657,8 +656,8 @@ class WikidataClient:
         nationality: Optional[str] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
-    ) -> Iterator[PublicFigure]:
-        """Yield public figures matching the given filters.
+    ) -> Iterator[PublicFigureNormalizedRecord]:
+        """Yield aggregated public figures matching the given filters.
 
         Applies filters on birthday and nationality as specified in the feature spec.
         Expects human-readable nationality label (e.g., "US", "Germany") or QID;
@@ -717,20 +716,15 @@ class WikidataClient:
         start_time = time.time()
 
         try:
-            for sparql_result in self.iter_public_figures(
+            for record in self.iter_public_figures(
                 birthday_from=birthday_from,
                 birthday_to=birthday_to,
                 nationality=nationality,
                 lang=lang,
             ):
-                # Normalize the SPARQL result to PublicFigure model
-                # Using None for expanded_data to rely on SPARQL bindings only
-                figure = normalize_public_figure(sparql_result, expanded_data=None)
-
-                yield figure
+                yield record
                 count += 1
 
-                # Check max_results limit
                 if max_results is not None and count >= max_results:
                     logger.info(
                         f"Reached max_results limit of {max_results}",
@@ -821,8 +815,8 @@ class WikidataClient:
         jurisdiction: Optional[str] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
-    ) -> Iterator[PublicInstitution]:
-        """Yield public institutions matching the given filters.
+    ) -> Iterator[PublicInstitutionNormalizedRecord]:
+        """Yield aggregated public institutions matching the given filters.
 
         Note: This is a simplified implementation matching the underlying SPARQL support.
         The full API contract (founded_from, founded_to, country list, headquarter) will be
@@ -867,19 +861,14 @@ class WikidataClient:
         start_time = time.time()
 
         try:
-            for sparql_result in self.iter_public_institutions(
+            for record in self.iter_public_institutions(
                 country=country,
                 type=types,
                 lang=lang,
             ):
-                # Normalize the SPARQL result to PublicInstitution model
-                # Using None for expanded_data to rely on SPARQL bindings only
-                institution = normalize_public_institution(sparql_result, expanded_data=None)
-
-                yield institution
+                yield record
                 count += 1
 
-                # Check max_results limit
                 if max_results is not None and count >= max_results:
                     logger.info(
                         f"Reached max_results limit of {max_results}",

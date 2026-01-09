@@ -13,7 +13,7 @@ pip install wikidata-collector
 
 ### Iterator API (Recommended)
 
-The `iterate_public_figures` method returns normalized `PublicFigure` objects directly:
+The `iterate_public_figures` method returns normalized `PublicFigureNormalizedRecord` objects directly:
 
 ```python
 from wikidata_collector import WikidataClient
@@ -29,8 +29,8 @@ for figure in client.iterate_public_figures(
     nationality=["US"],  # United States (label/code, not QID)
     lang="en",
 ):
-    print(f"{figure.id}: {figure.name}")
-    print(f"  Birthday: {figure.birthday}")
+    print(f"{figure.qid}: {figure.name}")  # .id also works (compatibility alias)
+    print(f"  Birthday: {figure.birthday}")  # Formatted as YYYY-MM-DD
     print(f"  Nationalities: {', '.join(figure.nationalities)}")
     print(f"  Professions: {', '.join(figure.professions)}")
 ```
@@ -74,7 +74,7 @@ for figure in client.iterate_public_figures(
 
 ### Iterator API (Recommended)
 
-The `iterate_public_institutions` method returns normalized `PublicInstitution` objects directly:
+The `iterate_public_institutions` method returns normalized `PublicInstitutionNormalizedRecord` objects directly:
 
 ```python
 from wikidata_collector import WikidataClient
@@ -88,7 +88,7 @@ for institution in client.iterate_public_institutions(
     max_results=50,
     lang="en",
 ):
-    print(f"{institution.id}: {institution.name}")
+    print(f"{institution.qid}: {institution.name}")  # .id also works (compatibility alias)
     print(f"  Founded: {institution.founded}")
     print(f"  Country: {', '.join(institution.country)}")
     print(f"  Types: {', '.join(institution.types)}")

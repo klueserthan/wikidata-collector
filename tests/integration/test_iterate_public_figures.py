@@ -5,10 +5,27 @@ These tests verify the iterator-based API for streaming public figures.
 They use pytest markers to allow selective execution.
 """
 
+from datetime import datetime
+
 import pytest
 
-from wikidata_collector import InvalidFilterError, PublicFigure, WikidataClient
+from wikidata_collector import InvalidFilterError, PublicFigureNormalizedRecord, WikidataClient
 from wikidata_collector.exceptions import QueryExecutionError
+
+
+def _pf(
+    qid: str,
+    name: str = "Person",
+    *,
+    birthday: str | None = None,
+    nationalities: list[str] | None = None,
+) -> PublicFigureNormalizedRecord:
+    return PublicFigureNormalizedRecord(
+        qid=qid,
+        name=name,
+        birth_date=datetime.fromisoformat(birthday) if birthday else None,
+        countries=list(nationalities or []),
+    )
 
 
 @pytest.mark.integration
@@ -18,28 +35,24 @@ class TestIteratePublicFiguresHappyPath:
 
     def test_iterate_returns_public_figure_models(self, mocker):
         """Test that iterator yields PublicFigure model instances."""
-        # Mock the underlying iter_public_figures to return sample SPARQL results
-        sample_sparql_results = [
-            {
-                "person": {"value": "http://www.wikidata.org/entity/Q42"},
-                "personLabel": {"value": "Douglas Adams"},
-                "description": {"value": "English writer"},
-                "birthDate": {"value": "1952-03-11T00:00:00Z"},
-                "countryLabel": {"value": "United Kingdom"},
-                "occupationLabel": {"value": "writer"},
-            },
-            {
-                "person": {"value": "http://www.wikidata.org/entity/Q5593"},
-                "personLabel": {"value": "Jane Austen"},
-                "description": {"value": "English novelist"},
-                "birthDate": {"value": "1775-12-16T00:00:00Z"},
-                "countryLabel": {"value": "United Kingdom"},
-                "occupationLabel": {"value": "novelist"},
-            },
+        # Mock the underlying iter_public_figures to return normalized models
+        sample_records = [
+            _pf(
+                "Q42",
+                "Douglas Adams",
+                birthday="1952-03-11T00:00:00",
+                nationalities=["United Kingdom"],
+            ),
+            _pf(
+                "Q5593",
+                "Jane Austen",
+                birthday="1775-12-16T00:00:00",
+                nationalities=["United Kingdom"],
+            ),
         ]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_sparql_results))
+        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
 
         # Call the iterator API
         results = list(
@@ -48,7 +61,7 @@ class TestIteratePublicFiguresHappyPath:
 
         # Verify results
         assert len(results) == 2
-        assert all(isinstance(r, PublicFigure) for r in results)
+        assert all(isinstance(r, PublicFigureNormalizedRecord) for r in results)
         assert results[0].id == "Q42"
         assert results[0].name == "Douglas Adams"
         assert results[1].id == "Q5593"
@@ -56,39 +69,28 @@ class TestIteratePublicFiguresHappyPath:
 
     def test_iterate_with_max_results(self, mocker):
         """Test that max_results limits the number of results."""
-        # Create a large list of sample results
-        sample_sparql_results = [
-            {
-                "person": {"value": f"http://www.wikidata.org/entity/Q{i}"},
-                "personLabel": {"value": f"Person {i}"},
-                "birthDate": {"value": "1990-01-01T00:00:00Z"},
-            }
-            for i in range(100)
+        # Create a large list of sample normalized records
+        sample_records = [
+            _pf(f"Q{i}", f"Person {i}", birthday="1990-01-01T00:00:00") for i in range(100)
         ]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_sparql_results))
+        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
 
         # Request only 10 results
         results = list(client.iterate_public_figures(birthday_from="1990-01-01", max_results=10))
 
         # Verify only 10 results returned
         assert len(results) == 10
-        assert all(isinstance(r, PublicFigure) for r in results)
+        assert all(isinstance(r, PublicFigureNormalizedRecord) for r in results)
 
     def test_iterate_with_birthday_filters(self, mocker):
         """Test iteration with birthday filters."""
-        sample_sparql_results = [
-            {
-                "person": {"value": "http://www.wikidata.org/entity/Q100"},
-                "personLabel": {"value": "Modern Person"},
-                "birthDate": {"value": "1995-06-15T00:00:00Z"},
-            }
-        ]
+        sample_records = [_pf("Q100", "Modern Person", birthday="1995-06-15T00:00:00")]
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client, "iter_public_figures", return_value=iter(sample_sparql_results)
+            client, "iter_public_figures", return_value=iter(sample_records)
         )
 
         # Call with birthday filters
@@ -108,18 +110,18 @@ class TestIteratePublicFiguresHappyPath:
 
     def test_iterate_with_nationality_filter(self, mocker):
         """Test iteration with nationality filter."""
-        sample_sparql_results = [
-            {
-                "person": {"value": "http://www.wikidata.org/entity/Q200"},
-                "personLabel": {"value": "American Person"},
-                "birthDate": {"value": "1980-01-01T00:00:00Z"},
-                "countryLabel": {"value": "United States"},
-            }
+        sample_records = [
+            _pf(
+                "Q200",
+                "American Person",
+                birthday="1980-01-01T00:00:00",
+                nationalities=["United States"],
+            )
         ]
 
         client = WikidataClient()
         mock_iter = mocker.patch.object(
-            client, "iter_public_figures", return_value=iter(sample_sparql_results)
+            client, "iter_public_figures", return_value=iter(sample_records)
         )
 
         # Call with nationality filter
@@ -196,15 +198,8 @@ class TestIteratePublicFiguresEdgeCases:
         """Test that February 29 in a leap year is accepted."""
         client = WikidataClient()
 
-        sample_sparql_results = [
-            {
-                "person": {"value": "http://www.wikidata.org/entity/Q1"},
-                "personLabel": {"value": "Leap Year Person"},
-                "birthDate": {"value": "2000-02-29T00:00:00Z"},
-            }
-        ]
-
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_sparql_results))
+        sample_records = [_pf("Q1", "Leap Year Person", birthday="2000-02-29T00:00:00")]
+        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
 
         # Should not raise an error
         results = list(client.iterate_public_figures(birthday_from="2000-02-29"))
@@ -266,16 +261,10 @@ class TestIteratePublicFiguresEdgeCases:
 
     def test_iterate_without_filters(self, mocker):
         """Test iteration without any filters."""
-        sample_sparql_results = [
-            {
-                "person": {"value": "http://www.wikidata.org/entity/Q1"},
-                "personLabel": {"value": "Person 1"},
-                "birthDate": {"value": "1950-01-01T00:00:00Z"},
-            }
-        ]
+        sample_records = [_pf("Q1", "Person 1", birthday="1950-01-01T00:00:00")]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_sparql_results))
+        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
 
         # Call without filters
         results = list(client.iterate_public_figures())
@@ -285,19 +274,10 @@ class TestIteratePublicFiguresEdgeCases:
 
     def test_max_results_one(self, mocker):
         """Test with max_results=1."""
-        sample_sparql_results = [
-            {
-                "person": {"value": "http://www.wikidata.org/entity/Q1"},
-                "personLabel": {"value": "Person 1"},
-            },
-            {
-                "person": {"value": "http://www.wikidata.org/entity/Q2"},
-                "personLabel": {"value": "Person 2"},
-            },
-        ]
+        sample_records = [_pf("Q1", "Person 1"), _pf("Q2", "Person 2")]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_sparql_results))
+        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
 
         results = list(client.iterate_public_figures(max_results=1))
 

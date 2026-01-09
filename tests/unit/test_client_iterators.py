@@ -3,6 +3,18 @@
 from unittest.mock import patch
 
 from wikidata_collector.client import DEFAULT_LIMIT
+from wikidata_collector.models import (
+    PublicFigureNormalizedRecord,
+    PublicInstitutionNormalizedRecord,
+)
+
+
+def _figure(qid: str) -> PublicFigureNormalizedRecord:
+    return PublicFigureNormalizedRecord(qid=qid, name=f"Person {qid}")
+
+
+def _institution(qid: str) -> PublicInstitutionNormalizedRecord:
+    return PublicInstitutionNormalizedRecord(qid=qid, name=f"Institution {qid}")
 
 
 class TestIterPublicFigures:
@@ -12,8 +24,8 @@ class TestIterPublicFigures:
         """Test iteration with results fitting in a single page."""
         # Mock data for one page
         mock_results = [
-            {"person": {"value": "http://www.wikidata.org/entity/Q1"}},
-            {"person": {"value": "http://www.wikidata.org/entity/Q2"}},
+            _figure("Q1"),
+            _figure("Q2"),
         ]
 
         with patch.object(
@@ -28,12 +40,9 @@ class TestIterPublicFigures:
     def test_iter_multiple_pages(self, wikidata_client):
         """Test iteration across multiple pages."""
         # Create mock data for two pages
-        page1_results = [
-            {"person": {"value": f"http://www.wikidata.org/entity/Q{i}"}}
-            for i in range(1, DEFAULT_LIMIT + 1)
-        ]
+        page1_results = [_figure(f"Q{i}") for i in range(1, DEFAULT_LIMIT + 1)]
         page2_results = [
-            {"person": {"value": "http://www.wikidata.org/entity/Q100"}},
+            _figure("Q100"),
         ]
 
         call_count = 0
@@ -63,7 +72,7 @@ class TestIterPublicFigures:
         """Test iteration with custom per-page limit."""
         # Return 3 results (less than page size of 5) - should only call once
         mock_results = [
-            {"person": {"value": f"http://www.wikidata.org/entity/Q{i}"}}
+            _figure(f"Q{i}")
             for i in range(1, 4)  # 3 results
         ]
 
@@ -77,9 +86,30 @@ class TestIterPublicFigures:
             assert mock.call_args[1]["limit"] == 5
             assert len(results) == 3
 
+    def test_iter_stops_on_unique_qids_less_than_limit(self, wikidata_client):
+        """Stop condition must be based on unique QIDs, not raw record count."""
+        # Simulate SPARQL expansion: more rows/records than limit, but fewer unique QIDs.
+        # If stop condition incorrectly checks len(results) < limit, we'd fetch another page.
+        page_results = [
+            _figure("Q1"),
+            _figure("Q1"),
+            _figure("Q2"),
+            _figure("Q2"),
+            _figure("Q2"),
+            _figure("Q3"),
+        ]
+
+        with patch.object(
+            wikidata_client, "get_public_figures", return_value=(page_results, "direct")
+        ) as mock:
+            results = list(wikidata_client.iter_public_figures(nationality="Q30", limit=5))
+
+            mock.assert_called_once()
+            assert len(results) == len(page_results)
+
     def test_iter_with_filters(self, wikidata_client):
         """Test iteration with various filters."""
-        mock_results = [{"person": {"value": "http://www.wikidata.org/entity/Q1"}}]
+        mock_results = [_figure("Q1")]
 
         with patch.object(
             wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
@@ -107,8 +137,8 @@ class TestIterPublicInstitutions:
     def test_iter_single_page(self, wikidata_client):
         """Test iteration with results fitting in a single page."""
         mock_results = [
-            {"institution": {"value": "http://www.wikidata.org/entity/Q1"}},
-            {"institution": {"value": "http://www.wikidata.org/entity/Q2"}},
+            _institution("Q1"),
+            _institution("Q2"),
         ]
 
         with patch.object(
@@ -122,12 +152,9 @@ class TestIterPublicInstitutions:
 
     def test_iter_multiple_pages(self, wikidata_client):
         """Test iteration across multiple pages."""
-        page1_results = [
-            {"institution": {"value": f"http://www.wikidata.org/entity/Q{i}"}}
-            for i in range(1, DEFAULT_LIMIT + 1)
-        ]
+        page1_results = [_institution(f"Q{i}") for i in range(1, DEFAULT_LIMIT + 1)]
         page2_results = [
-            {"institution": {"value": "http://www.wikidata.org/entity/Q100"}},
+            _institution("Q100"),
         ]
 
         call_count = 0
@@ -159,7 +186,7 @@ class TestIterPublicInstitutions:
         """Test iteration with custom per-page limit."""
         # Return 8 results (less than page size of 10) - should only call once
         mock_results = [
-            {"institution": {"value": f"http://www.wikidata.org/entity/Q{i}"}}
+            _institution(f"Q{i}")
             for i in range(1, 9)  # 8 results
         ]
 
@@ -173,9 +200,30 @@ class TestIterPublicInstitutions:
             assert mock.call_args[1]["limit"] == 10
             assert len(results) == 8
 
+    def test_iter_stops_on_unique_qids_less_than_limit(self, wikidata_client):
+        """Stop condition must be based on unique QIDs, not raw record count."""
+        page_results = [
+            _institution("Q1"),
+            _institution("Q1"),
+            _institution("Q2"),
+            _institution("Q2"),
+            _institution("Q3"),
+            _institution("Q3"),
+        ]
+
+        with patch.object(
+            wikidata_client,
+            "get_public_institutions",
+            return_value=(page_results, "direct"),
+        ) as mock:
+            results = list(wikidata_client.iter_public_institutions(country="Q30", limit=5))
+
+            mock.assert_called_once()
+            assert len(results) == len(page_results)
+
     def test_iter_with_filters(self, wikidata_client):
         """Test iteration with various filters."""
-        mock_results = [{"institution": {"value": "http://www.wikidata.org/entity/Q1"}}]
+        mock_results = [_institution("Q1")]
 
         with patch.object(
             wikidata_client, "get_public_institutions", return_value=(mock_results, "direct")

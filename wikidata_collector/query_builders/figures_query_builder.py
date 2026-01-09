@@ -1,5 +1,6 @@
 """SPARQL query builder for public figures."""
 
+import os
 from typing import List, Optional
 
 from ..constants import COUNTRY_MAPPINGS, PROFESSION_MAPPINGS
@@ -37,7 +38,7 @@ def build_public_figures_query(
     # Build efficient subquery with core filters
     subquery = """
   {
-    SELECT ?person ?birthDate WHERE {
+    SELECT ?person ?birthDate ?qidNum WHERE {
       ?person wdt:P31 wd:Q5 ;
               wdt:P569 ?birthDate"""
 
@@ -99,7 +100,7 @@ def build_public_figures_query(
             pass
 
     # Close subquery with ordering and pagination
-    subquery += "    }\n    ORDER BY ?person\n"
+    subquery += "    }\n    ORDER BY ?qidNum\n"
     subquery += f"    LIMIT {limit}\n"
 
     if (not after_qid) and cursor > 0:
@@ -115,7 +116,7 @@ def build_public_figures_query(
         "       ?countryLabel\n"
         "       ?occupationLabel\n"
         "       ?image\n"
-        "       ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle\n"
+        "       ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle ?tiktokHandle\n"
         "WHERE {\n"
     )
     query += subquery
@@ -131,6 +132,7 @@ def build_public_figures_query(
   OPTIONAL { ?person wdt:P2002 ?twitterHandle. }
   OPTIONAL { ?person wdt:P2013 ?facebookHandle. }
   OPTIONAL { ?person wdt:P2397 ?youtubeHandle. }
+  OPTIONAL { ?person wdt:P7085 ?tiktokHandle. }
 
   OPTIONAL {
     ?person schema:description ?description.
@@ -142,7 +144,8 @@ def build_public_figures_query(
 ORDER BY ?qidNum
 """ % (lang, lang)
 
-    # Write query to query.rq file for debugging
-    # with open("query_person.rq", "w", encoding="utf-8") as f:
-    #     f.write(query)
+    # Write query to file for debugging if DEBUG_QUERIES environment variable is set
+    if os.getenv("DEBUG_QUERIES", "").lower() in ("true", "1", "yes"):
+        with open("query_person.rq", "w", encoding="utf-8") as f:
+            f.write(query)
     return query

@@ -23,82 +23,73 @@ def main():
     # client = WikidataClient(config)
 
     # Example 1: Query public figures born after 1990
-    print("\n=== Example 1: Public Figures ===")
-    # print("Querying actors born after 1990...")
-
-    # try:
-    #     results, proxy_used = client.get_public_figures(
-    #         birthday_from="1990-01-01",
-    #         birthday_to="1990-01-02",
-    #         lang="de",
-    #         limit=5,
-    #     )
-
-    #     print(f"Found {len(results)} results (using {proxy_used})")
-    #     print("\nFirst few results:")
-    #     for item in results[:3]:
-    #         qid = item["person"]["value"].split("/")[-1]
-    #         name = item.get("personLabel", {}).get("value", "Unknown")
-    #         birthday = item.get("birthDate", {}).get("value", "Unknown")
-    #         print(
-    #             f"  - {qid}: {name} (born {birthday[:10] if birthday != 'Unknown' else 'Unknown'})"
-    #         )
-
-    #     # Normalize a result
-    #     if results:
-    #         print("\nNormalized first result:")
-    #         normalized = normalize_public_figure(results[0], None)
-    #         print(f"  ID: {normalized.id}")
-    #         print(f"  Name: {normalized.name}")
-    #         print(f"  Professions: {normalized.professions}")
-    #         print(f"  Nationalities: {normalized.nationalities}")
-
-    # except Exception as e:
-    #     print(f"Error querying figures: {e}")
-
-    # Example 2: Query public institutions
-    print("\n=== Example 2: Public Institutions ===")
-    print("Querying US government agencies...")
+    print("\n=== Example 1: Public Figures (Single Page) ===")
+    print("Querying public figures born between 1990-01-01 and 1990-01-02...")
 
     try:
-        results, proxy_used = client.get_public_institutions(
-            type=["Q327333"],  # Government agency QID
-            country="United States",  # Country name
+        results, proxy_used = client.get_public_figures(
+            birthday_from="1990-01-01",
+            birthday_to="1990-01-02",
             lang="en",
             limit=5,
         )
 
         print(f"Found {len(results)} results (using {proxy_used})")
-        print("\nFirst few results:")
+        print("\nResults (normalized model objects):")
         for item in results[:3]:
-            qid = item["institution"]["value"].split("/")[-1]
-            name = item.get("institutionLabel", {}).get("value", "Unknown")
-            print(f"  - {qid}: {name}")
+            print(f"  - {item.qid}: {item.name}")
+            if item.birth_date:
+                print(f"    Born: {item.birth_date}")
+            if item.countries:
+                print(f"    Countries: {', '.join(item.countries)}")
+
+    except Exception as e:
+        print(f"Error querying figures: {e}")
+
+    # Example 2: Query public institutions
+    print("\n=== Example 2: Public Institutions (Single Page) ===")
+    print("Querying US institutions...")
+
+    try:
+        results, proxy_used = client.get_public_institutions(
+            type=["Q327333"],  # Government agency QID
+            country="Q30",  # United States QID
+            lang="en",
+            limit=5,
+        )
+
+        print(f"Found {len(results)} results (using {proxy_used})")
+        print("\nResults (normalized model objects):")
+        for item in results[:3]:
+            print(f"  - {item.qid}: {item.name}")
+            if item.countries:
+                print(f"    Countries: {', '.join(item.countries)}")
+            if item.types:
+                print(f"    Types: {', '.join(item.types)}")
 
     except Exception as e:
         print(f"Error querying institutions: {e}")
 
-    # Example 3: Get single entity
-    print("\n=== Example 3: Single Entity Lookup ===")
-    print("Looking up Q42 (Douglas Adams)...")
+    # Example 3: Use iterators for automatic pagination
+    print("\n=== Example 3: Iterate Public Figures (Auto-Paginated) ===")
+    print("Iterating over figures born between 1990-01-01 and 1990-01-05...")
 
     try:
-        entity, proxy_used = client.get_entity("Q42", lang="en")
+        count = 0
+        for figure in client.iter_public_figures(
+            birthday_from="1990-01-01",
+            birthday_to="1990-01-05",
+            limit=5,  # Page size
+        ):
+            count += 1
+            print(f"  {count}. {figure.name} ({figure.qid})")
+            if count >= 10:  # Limit output
+                break
 
-        labels = entity.get("labels", {})
-        en_label = labels.get("en", {}).get("value", "Unknown")
-
-        descriptions = entity.get("descriptions", {})
-        en_desc = descriptions.get("en", {}).get("value", "Unknown")
-
-        print(f"Entity found (using {proxy_used}):")
-        print(f"  Label: {en_label}")
-        print(f"  Description: {en_desc}")
+        print("\nShowed first 10 figures (iterator continues beyond this)")
 
     except Exception as e:
-        print(f"Error getting entity: {e}")
-
-    print("\n✅ Examples completed!")
+        print(f"Error iterating figures: {e}")
 
 
 if __name__ == "__main__":

@@ -13,13 +13,17 @@ from .exceptions import (
     QueryExecutionError,
     WikidataCollectorError,
 )
-from .models import PublicFigure, PublicInstitution, SubInstitution
+from .models import (
+    PublicFigureNormalizedRecord,
+    PublicInstitutionNormalizedRecord,
+    SubInstitution,
+)
 
 __version__ = "1.0.0"
 __all__ = [
     "WikidataClient",
-    "PublicFigure",
-    "PublicInstitution",
+    "PublicFigureNormalizedRecord",
+    "PublicInstitutionNormalizedRecord",
     "SubInstitution",
     "WikidataCollectorError",
     "InvalidQIDError",
