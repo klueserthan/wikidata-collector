@@ -65,8 +65,8 @@ def example_iterate_institutions():
         ):
             count += 1
             print(f"{count:3d}. {institution.name:40s} ({institution.qid})")
-            if institution.country:
-                print(f"      Country: {institution.country}")
+            if institution.countries:
+                print(f"      Countries: {', '.join(institution.countries)}")
             if count >= 15:  # Show first 15 for demo
                 print("  ... (iterator continues)")
                 break

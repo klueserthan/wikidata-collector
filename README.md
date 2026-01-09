@@ -8,9 +8,9 @@ A pure Python library for fetching public figures and institutions from Wikidata
 - **SPARQL Query Builder**: Type-safe query construction with security validation
 - **Keyset Pagination**: Deterministic QID-based cursor pagination (no OFFSET drift)
 - **Iterator API**: High-level iterators that handle pagination automatically (internal page size: 15 entities)
-- **Multi-Valued Fields**: Correctly returns all professions, awards, nationalities, etc.
+- **Multi-Valued Fields**: Correctly returns all occupations, awards, nationalities, etc.
 - **Proxy Rotation**: Round-robin with failure detection, retry/backoff, and Retry-After handling
-- **Comprehensive Filtering**: Birth dates, nationality, profession, institution types, country, jurisdiction
+- **Comprehensive Filtering**: Birth dates, nationality, occupation, institution types, country, jurisdiction
 - **Caching**: TTL-based in-memory cache for SPARQL queries (configurable)
 - **Security**: Built-in SPARQL injection prevention with QID validation and literal escaping
 - **Data Models**: Pydantic models for type-safe data handling
@@ -52,7 +52,7 @@ for figure in client.iterate_public_figures(
     print(f"{figure.qid}: {figure.name}")
     print(f"  Birthday: {figure.birthday}")  # Formatted as YYYY-MM-DD string
     print(f"  Nationalities: {', '.join(figure.nationalities)}")
-    print(f"  Professions: {', '.join(figure.professions)}")
+    print(f"  Occupations: {', '.join(figure.occupations)}")
 
 # Iterator API for institutions - Returns PublicInstitutionNormalizedRecord objects
 for institution in client.iterate_public_institutions(
@@ -62,15 +62,15 @@ for institution in client.iterate_public_institutions(
     lang="en"
 ):
     print(f"{institution.qid}: {institution.name}")
-    print(f"  Founded: {institution.founded}")
-    print(f"  Country: {', '.join(institution.country)}")
+    print(f"  Founded: {institution.founded_date}")
+    print(f"  Countries: {', '.join(institution.countries)}")
     print(f"  Types: {', '.join(institution.types)}")
 
 # Lower-level API - For advanced use cases, returns (List[NormalizedRecord], proxy)
 figures, proxy_used = client.get_public_figures(
     birthday_from="1990-01-01",
     nationality=["Q30"],  # QID preferred for performance
-    profession=["Q33999"],  # Actor
+    occupation=["Q33999"],  # Actor
     lang="en",
     limit=50
 )
@@ -210,7 +210,7 @@ figure = PublicFigureNormalizedRecord(
     qid="Q42",
     entity_kind="public_figure",
     name="Douglas Adams",
-    professions=["writer", "humorist"],
+    occupations=["writer", "humorist"],
     nationalities=["United Kingdom"],
     birth_date="1952-03-11T00:00:00Z",
     # ... more fields
@@ -229,13 +229,13 @@ institution = PublicInstitutionNormalizedRecord(
     entity_kind="public_institution",
     name="Google",
     types=["business", "public company"],
-    country=["USA"],
-    founded="1998-09-04T00:00:00Z",
+    countries=["USA"],
+    founded_date="1998-09-04T00:00:00Z",
     # ... more fields
 )
 ```
 
-**Note on Data Aggregation**: SPARQL queries return one row per multi-valued field (e.g., each profession, award, or nationality creates a separate row). The library automatically aggregates these rows by QID and merges multi-valued fields into lists within normalized record objects.
+**Note on Data Aggregation**: SPARQL queries return one row per multi-valued field (e.g., each occupation, award, or nationality creates a separate row). The library automatically aggregates these rows by QID and merges multi-valued fields into lists within normalized record objects.
 
 ## Query Builders
 
@@ -249,7 +249,7 @@ from wikidata_collector.query_builders.institutions_query_builder import build_p
 query = build_public_figures_query(
     birthday_from="1990-01-01",
     nationality=["Q30"],
-    profession=["Q33999"],
+    occupation=["Q33999"],
     lang="en",
     limit=50,
     after_qid="Q12345"
@@ -472,14 +472,14 @@ for figure in client.iterate_public_figures(
     max_results=100,
     lang="en"
 ):
-    # Filter by profession in your code or add profession filter
-    if "actor" in [p.lower() for p in figure.professions]:
+    # Filter by occupation in your code or add occupation filter
+    if "actor" in [p.lower() for p in figure.occupations]:
         print(f"{figure.name} - {figure.birthday}")
 
 # Using lower-level API with QID - returns List[PublicFigureNormalizedRecord]
 figures, _ = client.get_public_figures(
     birthday_from="1990-01-01",
-    profession=["Q33999"],  # Actor QID
+    occupation=["Q33999"],  # Actor QID
     lang="en",
     limit=100
 )
@@ -495,7 +495,7 @@ for institution in client.iterate_public_institutions(
     max_results=100,
     lang="en"
 ):
-    print(f"{institution.name} - Founded: {institution.founded}")
+    print(f"{institution.name} - Founded: {institution.founded_date}")
 
 # Using lower-level API with QID - returns List[PublicInstitutionNormalizedRecord]
 institutions, _ = client.get_public_institutions(

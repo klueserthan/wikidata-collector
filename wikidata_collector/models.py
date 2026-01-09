@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 logger = getLogger(__name__)
 
-SOCIAL_MEDIA_PLATFORMS = ["instagram", "twitter", "facebook", "youtube"]
+SOCIAL_MEDIA_PLATFORMS = ["instagram", "twitter", "facebook", "youtube", "tiktok"]
 
 
 # Helper functions
@@ -94,6 +94,7 @@ class PublicFigureWikiRecord(PublicFigureBase):
     twitter_handle: Optional[str] = None  # ?twitterHandle
     facebook_handle: Optional[str] = None  # ?facebookHandle
     youtube_handle: Optional[str] = None  # ?youtubeHandle
+    tiktok_handle: Optional[str] = None  # ?tiktokHandle
 
     @classmethod
     def from_wikidata(cls, item: Dict[str, Any]) -> "PublicFigureWikiRecord":
@@ -123,6 +124,7 @@ class PublicFigureWikiRecord(PublicFigureBase):
             twitter_handle=item.get("twitterHandle", {}).get("value"),
             facebook_handle=item.get("facebookHandle", {}).get("value"),
             youtube_handle=item.get("youtubeHandle", {}).get("value"),
+            tiktok_handle=item.get("tiktokHandle", {}).get("value"),
         )
 
 
@@ -246,6 +248,7 @@ class PublicInstitutionWikiRecord(PublicInstitutionBase):
     twitter_handle: Optional[str] = None  # ?twitterHandle
     facebook_handle: Optional[str] = None  # ?facebookHandle
     youtube_handle: Optional[str] = None  # ?youtubeHandle
+    tiktok_handle: Optional[str] = None  # ?tiktokHandle
 
     @classmethod
     def from_wikidata(cls, item: Dict[str, Any]) -> "PublicInstitutionWikiRecord":
@@ -276,6 +279,7 @@ class PublicInstitutionWikiRecord(PublicInstitutionBase):
             twitter_handle=item.get("twitterHandle", {}).get("value"),
             facebook_handle=item.get("facebookHandle", {}).get("value"),
             youtube_handle=item.get("youtubeHandle", {}).get("value"),
+            tiktok_handle=item.get("tiktokHandle", {}).get("value"),
         )
 
 
@@ -344,7 +348,9 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
         )
 
 
-# class PaginatedResponse(BaseModel):
-#     data: List[Dict[str, Any]]
-#     next_cursor: Optional[str] = None
-#     has_more: bool = False
+class PaginatedResponse(BaseModel):
+    """Generic paginated response model for API endpoints."""
+
+    data: List[Dict[str, Any]]
+    next_cursor: Optional[str] = None
+    has_more: bool = False
