@@ -255,6 +255,7 @@ class TestStructuredLoggingInFailureScenarios:
             try:
                 client.execute_sparql_query("SELECT * WHERE { ?s ?p ?o } LIMIT 1")
             except Exception:
+                # Expected to fail with UpstreamUnavailableError
                 pass
 
         timeout_records = [
@@ -274,6 +275,7 @@ class TestStructuredLoggingInFailureScenarios:
             try:
                 client.execute_sparql_query("SELECT * WHERE { ?s ?p ?o } LIMIT 1")
             except Exception:
+                # Expected to fail with UpstreamUnavailableError
                 pass
 
         failed_records = [
@@ -296,6 +298,7 @@ class TestStructuredLoggingInFailureScenarios:
             try:
                 client.execute_sparql_query("SELECT * WHERE { ?s ?p ?o } LIMIT 1")
             except Exception:
+                # Expected to fail with UpstreamUnavailableError
                 pass
 
         failed_records = [

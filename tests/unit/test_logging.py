@@ -6,8 +6,6 @@ Tests verify that log events contain expected fields and values.
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from wikidata_collector.client import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 
