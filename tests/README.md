@@ -1,13 +1,21 @@
 # Tests
 
-This directory contains unit tests and integration tests for the Wikidata Fetch Microservice.
+This directory contains unit tests and integration tests for the Wikidata Collector library.
 
 ## Test Structure
 
-- `test_sparql_builders.py` - Unit tests for SPARQL query builders
-- `test_normalizers.py` - Unit tests for data normalizers
-- `test_integration.py` - Integration tests with mocked SPARQL endpoint
-- `test_integration_live.py` - Integration tests with live SPARQL endpoint (optional)
+### Unit Tests (`tests/unit/`)
+- `test_sparql_builders.py` - Unit tests for SPARQL query builders (including iterator-focused query construction)
+- `test_normalizers.py` - Unit tests for data normalizers (PublicFigure, PublicInstitution models)
+- `test_proxy_service.py` - Unit tests for proxy configuration and behavior
+- `test_sparql_security.py` - Unit tests for SPARQL security and safety checks
+
+### Integration Tests (`tests/integration/`)
+- `test_iterate_public_figures.py` - Integration tests for `iterate_public_figures` API
+- `test_iterate_public_institutions.py` - Integration tests for `iterate_public_institutions` API
+- `test_resilience_and_logging.py` - Integration tests for proxy, retries, and structured logging
+
+### Shared Fixtures
 - `conftest.py` - Shared pytest fixtures and configuration
 
 ## Running Tests
@@ -15,7 +23,8 @@ This directory contains unit tests and integration tests for the Wikidata Fetch 
 ### Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
+pip install -e '.[dev]'
 ```
 
 ### Run All Tests
@@ -24,86 +33,101 @@ pip install -r requirements.txt
 pytest
 ```
 
-### Run Specific Test Files
+### Run Unit Tests Only
 
 ```bash
-# Unit tests only
-pytest tests/test_sparql_builders.py tests/test_normalizers.py
+pytest tests/unit -v
+```
 
-# Integration tests (mocked)
-pytest tests/test_integration.py
+### Run Integration Tests Only
 
-# All tests except live integration
-pytest -m "not integration"
+```bash
+pytest tests/integration -v
+```
+
+### Run Iterator-Focused Tests
+
+```bash
+# Run tests specifically marked for iterator APIs
+pytest -m iterator -v
+```
+
+### Run All Tests Except Integration
+
+```bash
+pytest -m "not integration" -v
 ```
 
 ### Run with Coverage
 
 ```bash
-pytest --cov=. --cov-report=html
+pytest --cov=wikidata_collector --cov-report=html --cov-report=term
 ```
 
-### Run Live Integration Tests (Optional)
+### Type Checking
 
-Live tests are skipped by default. To enable them, edit `test_integration_live.py` and set `skipif(True, ...)` to `skipif(False, ...)` for specific tests.
+```bash
+# Run type checker on library and tests
+pyright wikidata_collector tests
+```
 
-**Warning**: Live tests make actual requests to the Wikidata SPARQL endpoint. Use sparingly to avoid rate limiting.
+### Linting
 
-## Test Coverage
+```bash
+# Run ruff linter
+ruff check wikidata_collector tests
+```
 
-### SPARQL Builders
+## Test Coverage Goals
 
-- ✅ Basic query construction
-- ✅ Birthday filters (from/to)
-- ✅ Nationality filters (QID and name)
-- ✅ Profession filters (QID and name)
-- ✅ Multiple filters
-- ✅ Keyset pagination
-- ✅ Offset pagination (backward compatibility)
-- ✅ Limit parameter
-- ✅ Language parameter
+### Iterator-Based APIs (New Feature)
 
-### Normalizers
+- Unit tests for `iterate_public_figures` and `iterate_public_institutions`
+- Internal pagination logic (stable ID ordering, page size handling)
+- Filter translation (human-readable labels to SPARQL)
+- Empty results and error handling
+- Integration tests for complete iterator flows
 
-- ✅ Basic normalization
-- ✅ With expanded data
-- ✅ Social media from SPARQL
-- ✅ Without expanded data (fallback)
-- ✅ Empty/partial data handling
+### SPARQL Query Builders
 
-### Integration Tests (Mocked)
+- Query construction with filters (birthday, nationality, founding date, country, types, headquarter)
+- Label-to-SPARQL translation for nationality, country, and institution types
+- SPARQL sub-templates for reusable query fragments
+- Security and SPARQL injection protection
 
-- ✅ SPARQL query execution
-- ✅ Caching behavior
-- ✅ Error handling (429, 502, 503, 504)
-- ✅ Retry logic
-- ✅ Complete endpoint flows
-- ✅ Network error handling
+### Data Models & Normalizers
 
-### Integration Tests (Live - Optional)
+- Pydantic v2 model validation for `PublicFigure` and `PublicInstitution`
+- Supporting types: `WebsiteEntry`, `AccountEntry`, `Identifier`
+- Multi-valued attribute handling (nationalities, professions, types)
+- Normalizers mapping SPARQL rows to Pydantic models
 
-- ✅ Live SPARQL query execution
-- ✅ Entity expansion
-- ✅ Keyset pagination
+### Proxy & Resilience
+
+- Proxy configuration and fail-closed behavior
+- Upstream timeout and error handling
+- Structured logging schema validation
+- Retry logic and error categorization
 
 ## Writing New Tests
 
-1. Follow the existing test structure
-2. Use fixtures from `conftest.py` when possible
-3. Mock external dependencies (SPARQL endpoint)
-4. Test both success and error cases
-5. Add docstrings explaining what each test validates
+1. Follow TDD: write tests first, ensure they fail, then implement
+2. Use fixtures from `conftest.py` for shared setup
+3. Mock external dependencies (SPARQL endpoint, HTTP requests)
+4. Test both success paths and error/edge cases
+5. Add descriptive docstrings explaining test purpose
+6. Use `@pytest.mark.iterator` for new iterator-focused tests
+7. Use `@pytest.mark.integration` for tests requiring external systems
 
 ## Continuous Integration
 
-Tests should be run in CI/CD pipelines:
+The CI pipeline (`.github/workflows/ci.yml`) runs:
 
-```yaml
-# Example GitHub Actions workflow
-- name: Run tests
-  run: |
-    pip install -r requirements.txt
-    pytest --cov=. --cov-report=xml
-```
+1. Type checking via `pyright`
+2. Linting via `ruff`
+3. Unit tests with coverage reporting
+4. Integration tests (non-live only)
+
+All checks must pass before merging to main.
 
 

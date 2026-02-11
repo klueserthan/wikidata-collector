@@ -6,22 +6,28 @@ with no FastAPI dependencies. It can be used standalone or as part of the API wr
 """
 
 from .client import WikidataClient
-from .models import PublicFigure, PublicInstitution, SubInstitution
 from .exceptions import (
-    WikidataCollectorError,
-    InvalidQIDError,
     EntityNotFoundError,
+    InvalidFilterError,
+    InvalidQIDError,
     QueryExecutionError,
+    WikidataCollectorError,
+)
+from .models import (
+    PublicFigureNormalizedRecord,
+    PublicInstitutionNormalizedRecord,
+    SubInstitution,
 )
 
 __version__ = "1.0.0"
 __all__ = [
     "WikidataClient",
-    "PublicFigure",
-    "PublicInstitution",
+    "PublicFigureNormalizedRecord",
+    "PublicInstitutionNormalizedRecord",
     "SubInstitution",
     "WikidataCollectorError",
     "InvalidQIDError",
     "EntityNotFoundError",
     "QueryExecutionError",
+    "InvalidFilterError",
 ]

@@ -2,18 +2,35 @@
 
 A pure Python library for fetching public figures and institutions from Wikidata using SPARQL queries with robust proxy rotation, caching, and security features.
 
+## Data Sources
+
+This library fetches data from **Wikidata's public APIs**. No local documents are processed - all data is retrieved from the following endpoints:
+
+- **SPARQL Endpoint**: `https://query.wikidata.org/sparql`
+  - Primary data source for querying public figures and institutions
+  - Executes SPARQL queries to filter and retrieve entity data
+  - Returns structured data about entities matching your criteria
+
+- **Entity API**: `https://www.wikidata.org/wiki/Special:EntityData/{qid}.json`
+  - Used for retrieving complete entity details by QID (Wikidata identifier)
+  - Returns full entity metadata including labels, claims, and properties
+
+All data originates from Wikidata's open knowledge base and is fetched on-demand via these public HTTP APIs. The library does not store or process local document files.
+
 ## Features
 
 - **Pure Python Module**: No FastAPI or web framework dependencies - use in any Python project
 - **SPARQL Query Builder**: Type-safe query construction with security validation
 - **Keyset Pagination**: Deterministic QID-based cursor pagination (no OFFSET drift)
-- **Multi-Valued Fields**: Correctly returns all professions, awards, nationalities, etc.
+- **Iterator API**: High-level iterators that handle pagination automatically (internal page size: 15 entities)
+- **Multi-Valued Fields**: Correctly returns all occupations, awards, nationalities, etc.
 - **Proxy Rotation**: Round-robin with failure detection, retry/backoff, and Retry-After handling
-- **Comprehensive Filtering**: Birth dates, nationality, profession, institution types, country, jurisdiction
+- **Comprehensive Filtering**: Birth dates, nationality, occupation, institution types, country, jurisdiction
 - **Caching**: TTL-based in-memory cache for SPARQL queries (configurable)
 - **Security**: Built-in SPARQL injection prevention with QID validation and literal escaping
 - **Data Models**: Pydantic models for type-safe data handling
-- **Testing**: Comprehensive test suite with 61 unit tests
+- **Structured Logging**: Comprehensive structured logging for observability and monitoring
+- **Testing**: Comprehensive test suite with 170 tests (125 unit, 42 integration, 3 live)
 
 ## Installation
 
@@ -40,28 +57,39 @@ config = WikidataCollectorConfig(
 )
 client = WikidataClient(config)
 
-# Query public figures
-results, proxy_used = client.get_public_figures(
+# Iterator API (Recommended) - Returns PublicFigureNormalizedRecord objects
+for figure in client.iterate_public_figures(
     birthday_from="1990-01-01",
-    nationality=["Q30"],  # United States (QID preferred for performance)
-    profession=["Q33999"],  # Actor
+    nationality=["US"],  # United States (ISO code or label)
+    max_results=50,
+    lang="en"
+):
+    print(f"{figure.qid}: {figure.name}")
+    print(f"  Birthday: {figure.birthday}")  # Formatted as YYYY-MM-DD string
+    print(f"  Nationalities: {', '.join(figure.nationalities)}")
+    print(f"  Occupations: {', '.join(figure.occupations)}")
+
+# Iterator API for institutions - Returns PublicInstitutionNormalizedRecord objects
+for institution in client.iterate_public_institutions(
+    country="US",  # Single country (ISO code or label)
+    types=["public broadcaster"],  # Institution types
+    max_results=50,
+    lang="en"
+):
+    print(f"{institution.qid}: {institution.name}")
+    print(f"  Founded: {institution.founded_date}")
+    print(f"  Countries: {', '.join(institution.countries)}")
+    print(f"  Types: {', '.join(institution.types)}")
+
+# Lower-level API - For advanced use cases, returns (List[NormalizedRecord], proxy)
+figures, proxy_used = client.get_public_figures(
+    birthday_from="1990-01-01",
+    nationality=["Q30"],  # QID preferred for performance
+    occupation=["Q33999"],  # Actor
     lang="en",
     limit=50
 )
-
-# Process results
-for item in results:
-    qid = item["person"]["value"].split("/")[-1]
-    name = item.get("personLabel", {}).get("value")
-    print(f"{qid}: {name}")
-
-# Query institutions
-results, proxy_used = client.get_public_institutions(
-    type=["Q327333"],  # Government agency (use QID for better performance)
-    country="Q30",  # United States
-    lang="en",
-    limit=50
-)
+# figures is a list of PublicFigureNormalizedRecord objects
 
 # Get single entity by QID
 entity, proxy_used = client.get_entity(
@@ -111,20 +139,42 @@ client = WikidataClient(config)
 
 ## Pagination
 
-### Keyset Pagination (Recommended)
+### Iterator API (Recommended)
+
+The iterator API handles pagination automatically and returns normalized record objects:
 
 ```python
-# First page
-results, proxy = client.get_public_figures(
+# Automatically paginates through all results
+for figure in client.iterate_public_figures(
+    nationality=["US"],
+    max_results=100  # Optional limit
+):
+    print(f"{figure.name}")  # figure is a PublicFigureNormalizedRecord
+
+# Without max_results, yields all matching entities
+for institution in client.iterate_public_institutions(
+    country="US",
+    types=["university"]
+):
+    print(f"{institution.name}")  # institution is a PublicInstitutionNormalizedRecord
+```
+
+### Manual Keyset Pagination (Advanced)
+
+For lower-level control, use keyset pagination with `get_public_figures` or `get_public_institutions`:
+
+```python
+# First page - returns (List[PublicFigureNormalizedRecord], proxy)
+figures, proxy = client.get_public_figures(
     nationality=["Q30"],
     limit=50
 )
 
 # Get last QID for next page
-last_qid = results[-1]["person"]["value"].split("/")[-1]
+last_qid = figures[-1].qid
 
 # Next page
-results, proxy = client.get_public_figures(
+figures, proxy = client.get_public_figures(
     nationality=["Q30"],
     limit=50,
     after_qid=last_qid
@@ -133,12 +183,14 @@ results, proxy = client.get_public_figures(
 
 ### OFFSET Pagination (Fallback)
 
+For simple use cases, OFFSET pagination is also available, but returns normalized records:
+
 ```python
-# Page 1
-results, proxy = client.get_public_figures(nationality=["Q30"], limit=50, cursor=0)
+# Page 1 - returns (List[PublicFigureNormalizedRecord], proxy)
+figures, proxy = client.get_public_figures(nationality=["Q30"], limit=50, cursor=0)
 
 # Page 2
-results, proxy = client.get_public_figures(nationality=["Q30"], limit=50, cursor=50)
+figures, proxy = client.get_public_figures(nationality=["Q30"], limit=50, cursor=50)
 ```
 
 ## Security
@@ -160,31 +212,45 @@ All query builders automatically validate QIDs and escape string literals to pre
 
 ## Data Models
 
-```python
-from wikidata_collector.models import PublicFigure, PublicInstitution
+The library uses Pydantic models for type-safe data handling. All queries return normalized record objects:
 
-# Public Figure
-figure = PublicFigure(
-    id="Q42",
+```python
+from wikidata_collector.models import (
+    PublicFigureNormalizedRecord,
+    PublicInstitutionNormalizedRecord
+)
+
+# Public Figure - aggregated data from multiple SPARQL rows
+figure = PublicFigureNormalizedRecord(
+    qid="Q42",
     entity_kind="public_figure",
     name="Douglas Adams",
-    professions=["writer", "humorist"],
+    occupations=["writer", "humorist"],
     nationalities=["United Kingdom"],
-    birthday="1952-03-11T00:00:00Z",
+    birth_date="1952-03-11T00:00:00Z",
     # ... more fields
 )
 
-# Public Institution
-institution = PublicInstitution(
-    id="Q95",
+# Access via .qid or .id (compatibility alias)
+print(f"QID: {figure.qid}")
+print(f"ID: {figure.id}")  # Same as .qid
+
+# Formatted birthday string
+print(f"Birthday: {figure.birthday}")  # "1952-03-11"
+
+# Public Institution - aggregated data from multiple SPARQL rows
+institution = PublicInstitutionNormalizedRecord(
+    qid="Q95",
     entity_kind="public_institution",
     name="Google",
     types=["business", "public company"],
-    country=["USA"],
-    founded="1998-09-04T00:00:00Z",
+    countries=["USA"],
+    founded_date="1998-09-04T00:00:00Z",
     # ... more fields
 )
 ```
+
+**Note on Data Aggregation**: SPARQL queries return one row per multi-valued field (e.g., each occupation, award, or nationality creates a separate row). The library automatically aggregates these rows by QID and merges multi-valued fields into lists within normalized record objects.
 
 ## Query Builders
 
@@ -198,7 +264,7 @@ from wikidata_collector.query_builders.institutions_query_builder import build_p
 query = build_public_figures_query(
     birthday_from="1990-01-01",
     nationality=["Q30"],
-    profession=["Q33999"],
+    occupation=["Q33999"],
     lang="en",
     limit=50,
     after_qid="Q12345"
@@ -210,23 +276,100 @@ result, proxy = client.execute_sparql_query(query)
 
 ## Error Handling
 
+The library provides specific exception types for different error categories:
+
 ```python
 from wikidata_collector.exceptions import (
     WikidataCollectorError,
     InvalidQIDError,
     EntityNotFoundError,
-    QueryExecutionError
+    QueryExecutionError,
+    ProxyMisconfigurationError,
+    UpstreamUnavailableError,
+    InvalidFilterError,
 )
 
 try:
-    entity, proxy = client.get_entity("INVALID")
-except InvalidQIDError as e:
-    print(f"Invalid QID format: {e}")
-except EntityNotFoundError as e:
-    print(f"Entity not found: {e}")
+    results = list(client.iterate_public_figures(
+        birthday_from="2000-01-01",
+        nationality=["United States"]
+    ))
+except InvalidFilterError as e:
+    print(f"Invalid filter configuration: {e}")
+except ProxyMisconfigurationError as e:
+    print(f"Proxy configuration issue: {e}")
+except UpstreamUnavailableError as e:
+    print(f"Wikidata service unavailable: {e}")
 except QueryExecutionError as e:
-    print(f"Query failed: {e}")
+    print(f"Query failed after retries: {e}")
 ```
+
+## Structured Logging
+
+The library emits structured logs for observability and monitoring:
+
+```python
+import logging
+import json
+
+# Configure structured logging handler
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter('%(message)s'))
+
+logger = logging.getLogger('wikidata_collector')
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+# Now all operations will emit structured logs with extra fields:
+# - query_type: Type of query being executed
+# - result_count: Number of results returned
+# - latency_ms: Query execution time
+# - proxy_used: Proxy URL or "direct"
+# - event: Event type (e.g., "retry", "query_failure")
+# - attempt, max_retries, reason: For retry events
+# - error_category, error_message: For failure events
+
+results = list(client.iterate_public_figures(
+    birthday_from="2000-01-01",
+    nationality="United States",
+    max_results=100
+))
+```
+
+Structured log fields can be accessed via `LogRecord.extra` for parsing and monitoring:
+- Success logs include: `query_type`, `page`, `result_count`, `latency_ms`, `proxy_used`, `params`
+- Retry logs include: `event="retry"`, `attempt`, `max_retries`, `reason`, `wait_time_seconds`, `proxy`
+- Failure logs include: `event="query_failure"`, `error_category`, `error_message`, `attempts`, `filters`
+
+## Performance
+
+### Internal Per-Page Limit: 15 Entities
+
+The library uses an internal per-page limit of 15 entities (`DEFAULT_PAGE_SIZE = 15`) for optimal performance with the Wikidata Query Service:
+
+**Rationale**:
+- Wikidata Query Service has strict timeouts (~60 seconds)
+- Complex queries with multiple OPTIONAL clauses complete faster with smaller pages
+- Memory-efficient streaming for large result sets
+- Predictable latency (typically < 3 seconds per page)
+
+**Performance Guidelines**:
+- Small workloads (< 1,000 entities): Default per-page limit works well
+- Large workloads (> 10,000 entities): Use restrictive filters or off-peak hours
+- Time-sensitive queries: Use `max_results` to limit total results
+- Best throughput: Iterator API uses keyset pagination automatically
+
+**Query Optimization**:
+- Use QIDs instead of labels for faster queries (e.g., `nationality=["Q30"]` vs `["United States"]`)
+- Keyset pagination (automatic) is more efficient than OFFSET pagination
+- Monitor latency using structured logging (`latency_ms` field)
+
+**Measured Performance** (based on live integration tests):
+- Simple queries (1-2 filters): ~1-2 seconds per page
+- Complex queries (multiple filters + labels): ~2-4 seconds per page
+- Empty result queries: < 1 second
+
+The `limit` parameter is available in `iter_public_figures` and `iter_public_institutions` for tuning when needed.
 
 ## Development
 
@@ -248,50 +391,68 @@ pytest tests/unit/test_sparql_builders.py -v
 ```
 wikidata_collector/          # Main module
 ├── __init__.py              # Public API exports
-├── client.py                # WikidataClient
+├── client.py                # WikidataClient with iterators and pagination
 ├── config.py                # Configuration
 ├── exceptions.py            # Custom exceptions
 ├── constants.py             # Type mappings
 ├── security.py              # Security validation
-├── models.py                # Pydantic data models
-├── cache.py                 # TTL cache implementation
+├── models.py                # Pydantic data models (WikiRecord & NormalizedRecord)
 ├── proxy.py                 # Proxy rotation manager
-├── query_builders/          # SPARQL query builders
-│   ├── figures_query_builder.py
-│   └── institutions_query_builder.py
-└── normalizers/             # Data normalizers
-    ├── figure_normalizer.py
-    └── institution_normalizer.py
+└── query_builders/          # SPARQL query builders
+    ├── figures_query_builder.py
+    └── institutions_query_builder.py
 
 tests/                       # Test suite
 ├── conftest.py              # Pytest configuration
-└── unit/                    # Unit tests
-    ├── test_normalizers.py
-    ├── test_sparql_builders.py
-    ├── test_sparql_security.py
-    └── test_proxy_service.py
+├── unit/                    # Unit tests
+│   ├── test_normalizers.py
+│   ├── test_sparql_builders.py
+│   ├── test_sparql_security.py
+│   └── test_proxy_service.py
+└── integration/             # Integration tests
+    └── ...
 ```
 
 ## Best Practices
 
-### Use QIDs for Better Performance
+### Use Iterator API for ETL Workflows
+
+```python
+# ✓ Recommended - handles pagination automatically, returns typed normalized records
+for figure in client.iterate_public_figures(
+    nationality=["US"],
+    max_results=1000
+):
+    process(figure)  # figure is a PublicFigureNormalizedRecord
+
+# ✗ Manual pagination - more code to manage
+figures, _ = client.get_public_figures(nationality=["Q30"], limit=50)
+# Still returns normalized records, but you manage pagination yourself
+```
+
+### Use QIDs for Better Performance (Lower-level API)
 
 ```python
 # ✓ Fast - uses direct QID matching
-client.get_public_figures(nationality=["Q30"])  # United States
+figures, _ = client.get_public_figures(nationality=["Q30"])  # United States
 
 # ✗ Slow - requires label joins in SPARQL
-client.get_public_figures(nationality=["United States"])
+figures, _ = client.get_public_figures(nationality=["United States"])
+
+# Note: Both return List[PublicFigureNormalizedRecord]
+# Iterator API accepts both labels and QIDs and handles translation automatically
 ```
 
-### Prefer Keyset Pagination
+### Prefer Keyset Pagination (Lower-level API)
 
 ```python
 # ✓ Deterministic and efficient
-results, _ = client.get_public_figures(limit=50, after_qid="Q12345")
+figures, _ = client.get_public_figures(limit=50, after_qid="Q12345")
 
 # ✗ Can have drift if data changes
-results, _ = client.get_public_figures(limit=50, cursor=100)
+figures, _ = client.get_public_figures(limit=50, cursor=100)
+
+# Note: Both return List[PublicFigureNormalizedRecord]
 ```
 
 ### Set Contact Email
@@ -303,14 +464,16 @@ config = WikidataCollectorConfig(
 )
 ```
 
-### Use Smaller Page Sizes
+### Use Appropriate Result Limits
 
 ```python
-# ✓ Recommended - avoids WDQS timeouts
-results, _ = client.get_public_figures(limit=50)
+# ✓ Recommended - internal page size is 15, max_results controls total
+for figure in client.iterate_public_figures(max_results=100):
+    process(figure)
 
-# ✗ May timeout for complex queries
-results, _ = client.get_public_figures(limit=500)
+# ✓ Also good - no limit, yields all matches
+for figure in client.iterate_public_figures(nationality=["US"]):
+    process(figure)
 ```
 
 ## Common Use Cases
@@ -318,9 +481,20 @@ results, _ = client.get_public_figures(limit=500)
 ### Finding All Actors Born After 1990
 
 ```python
-results, _ = client.get_public_figures(
+# Using iterator API (recommended)
+for figure in client.iterate_public_figures(
     birthday_from="1990-01-01",
-    profession=["Q33999"],  # Actor QID
+    max_results=100,
+    lang="en"
+):
+    # Filter by occupation in your code or add occupation filter
+    if "actor" in [p.lower() for p in figure.occupations]:
+        print(f"{figure.name} - {figure.birthday}")
+
+# Using lower-level API with QID - returns List[PublicFigureNormalizedRecord]
+figures, _ = client.get_public_figures(
+    birthday_from="1990-01-01",
+    occupation=["Q33999"],  # Actor QID
     lang="en",
     limit=100
 )
@@ -329,7 +503,17 @@ results, _ = client.get_public_figures(
 ### Finding US Government Agencies
 
 ```python
-results, _ = client.get_public_institutions(
+# Using iterator API (recommended)
+for institution in client.iterate_public_institutions(
+    country="US",  # ISO code
+    types=["government agency"],
+    max_results=100,
+    lang="en"
+):
+    print(f"{institution.name} - Founded: {institution.founded_date}")
+
+# Using lower-level API with QID - returns List[PublicInstitutionNormalizedRecord]
+institutions, _ = client.get_public_institutions(
     type=["Q327333"],  # Government agency QID
     country="Q30",  # United States QID
     lang="en",

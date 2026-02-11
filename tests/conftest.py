@@ -1,6 +1,7 @@
 """
 Pytest configuration and shared fixtures.
 """
+
 import pytest
 
 from wikidata_collector import WikidataClient
@@ -24,7 +25,7 @@ def sample_sparql_response():
                     "description": {"value": "English writer and humorist"},
                     "birthDate": {"value": "1952-03-11T00:00:00Z"},
                     "countryLabel": {"value": "United Kingdom"},
-                    "occupationLabel": {"value": "writer"}
+                    "occupationLabel": {"value": "writer"},
                 }
             ]
         }
@@ -44,14 +45,12 @@ def sample_expanded_data():
             {
                 "url": "https://www.douglasadams.com",
                 "source": "wikidata",
-                "retrieved_at": "2024-01-15T10:00:00Z"
+                "retrieved_at": "2024-01-15T10:00:00Z",
             }
         ],
         "accounts": [],
         "affiliations": [],
         "notable_works": ["The Hitchhiker's Guide to the Galaxy"],
         "awards": [],
-        "identifiers": []
+        "identifiers": [],
     }
-
-
