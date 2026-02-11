@@ -2,6 +2,21 @@
 
 A pure Python library for fetching public figures and institutions from Wikidata using SPARQL queries with robust proxy rotation, caching, and security features.
 
+## Data Sources
+
+This library fetches data from **Wikidata's public APIs**. No local documents are processed - all data is retrieved from the following endpoints:
+
+- **SPARQL Endpoint**: `https://query.wikidata.org/sparql`
+  - Primary data source for querying public figures and institutions
+  - Executes SPARQL queries to filter and retrieve entity data
+  - Returns structured data about entities matching your criteria
+
+- **Entity API**: `https://www.wikidata.org/wiki/Special:EntityData/{qid}.json`
+  - Used for retrieving complete entity details by QID (Wikidata identifier)
+  - Returns full entity metadata including labels, claims, and properties
+
+All data originates from Wikidata's open knowledge base and is fetched on-demand via these public HTTP APIs. The library does not store or process local document files.
+
 ## Features
 
 - **Pure Python Module**: No FastAPI or web framework dependencies - use in any Python project
