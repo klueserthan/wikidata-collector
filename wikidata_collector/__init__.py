@@ -10,7 +10,9 @@ from .exceptions import (
     EntityNotFoundError,
     InvalidFilterError,
     InvalidQIDError,
+    ProxyMisconfigurationError,
     QueryExecutionError,
+    UpstreamUnavailableError,
     WikidataCollectorError,
 )
 from .models import (
@@ -30,4 +32,6 @@ __all__ = [
     "EntityNotFoundError",
     "QueryExecutionError",
     "InvalidFilterError",
+    "ProxyMisconfigurationError",
+    "UpstreamUnavailableError",
 ]
