@@ -105,10 +105,10 @@
 
 ### Tests for User Story 3
 
-- [ ] T038 [P] [US3] Add unit tests for proxy configuration and fallback behavior in tests/unit/test_proxy_service.py
-- [ ] T039 [P] [US3] Add unit tests for structured logging payloads and log fields in tests/unit/test_normalizers.py or new tests/unit/test_logging.py
-- [ ] T040 [P] [US3] Add integration test simulating upstream timeouts and proxy failures for figures and institutions in tests/integration/test_resilience_and_logging.py
-- [ ] T041 [P] [US3] Add live integration tests that verify direct connectivity (no proxy) to the official Wikidata SPARQL endpoint, using a dedicated `test_live_sparql_endpoints.py` module in tests/integration/ (marked with `@pytest.mark.live`). At minimum, include:
+- [X] T038 [P] [US3] Add unit tests for proxy configuration and fallback behavior in tests/unit/test_proxy_service.py
+- [X] T039 [P] [US3] Add unit tests for structured logging payloads and log fields in tests/unit/test_normalizers.py or new tests/unit/test_logging.py
+- [X] T040 [P] [US3] Add integration test simulating upstream timeouts and proxy failures for figures and institutions in tests/integration/test_resilience_and_logging.py
+- [X] T041 [P] [US3] Add live integration tests that verify direct connectivity (no proxy) to the official Wikidata SPARQL endpoint, using a dedicated `test_live_sparql_endpoints.py` module in tests/integration/ (marked with `@pytest.mark.live`). At minimum, include:
   - A smoke test that performs a simple SELECT 1-style query against the public endpoint and asserts that a response is returned within a configured timeout.
   - A test that exercises the figures SPARQL query template end-to-end via the existing iterator API (e.g., `iterate_public_figures`) with very restrictive filters (such as a recent birthday range and a single nationality) and asserts that the call completes without errors and returns at least one result in under a configured time budget.
   - A test that exercises the institutions SPARQL query template end-to-end via `iterate_public_institutions` with similarly restrictive filters and asserts that the call completes successfully within the timeout.
@@ -116,11 +116,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T042 [P] [US3] Implement proxy-aware HTTP request handling with fail-closed default in wikidata_collector/proxy.py
-- [ ] T043 [US3] Wire proxy handling into WikidataClient iterator flows in wikidata_collector/client.py
-- [ ] T044 [US3] Implement structured logging for retries, failures, and filter usage (using the agreed schema) in wikidata_collector/client.py
-- [ ] T045 [US3] Extend exceptions for proxy misconfiguration, upstream unavailability, and invalid filters in wikidata_collector/exceptions.py
-- [ ] T052 [US3] Document error categories, logging fields, and live SPARQL connectivity test strategy (including timeouts and markers) in specs/001-wikidata-etl-package/spec.md and specs/001-wikidata-etl-package/research.md
+- [X] T042 [P] [US3] Implement proxy-aware HTTP request handling with fail-closed default in wikidata_collector/proxy.py
+- [X] T043 [US3] Wire proxy handling into WikidataClient iterator flows in wikidata_collector/client.py
+- [X] T044 [US3] Implement structured logging for retries, failures, and filter usage (using the agreed schema) in wikidata_collector/client.py
+- [X] T045 [US3] Extend exceptions for proxy misconfiguration, upstream unavailability, and invalid filters in wikidata_collector/exceptions.py
+- [X] T052 [US3] Document error categories, logging fields, and live SPARQL connectivity test strategy (including timeouts and markers) in specs/001-wikidata-etl-package/spec.md and specs/001-wikidata-etl-package/research.md
 
 **Checkpoint**: All three user stories are independently functional and observable, with proxy support and structured logging in place.
 
