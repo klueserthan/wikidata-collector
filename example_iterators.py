@@ -94,7 +94,7 @@ def iterate_with_logging():
         count += 1
         print(f"  {count}. {figure.name}")
 
-    print("\n  Done. Check the log lines above for query_type, latency_ms, etc.\n")
+    print("\n  Done. Structured log records include query_type, latency_ms, etc.; configure your logging formatter to display those fields.\n")
 
 
 if __name__ == "__main__":
