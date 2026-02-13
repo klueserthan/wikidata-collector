@@ -110,7 +110,7 @@ institutions, proxy = client.get_public_institutions(
 
 ### Lower-Level Iterators
 
-These also handle pagination but without input validation or `max_results`. Used internally by `iterate_*`.
+These also handle pagination and still use the query builders for basic validation (QID formats, mapped keys), but they do not provide higher-level conveniences like ISO-date validation, `max_results` limiting, or wrapping low-level `ValueError`s into `InvalidFilterError`. Used internally by `iterate_*`.
 
 - `client.iter_public_figures(birthday_from, birthday_to, nationality, profession, lang, limit)`
 - `client.iter_public_institutions(country, type, lang, limit)`
