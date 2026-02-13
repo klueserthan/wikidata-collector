@@ -230,7 +230,7 @@ from wikidata_collector.exceptions import (
 
 ## Security
 
-All query builders validate QIDs (`Q` + digits only) and escape string literals to prevent SPARQL injection. Proxy URLs are validated against internal/private IP ranges (SSRF prevention).
+Query builders validate QIDs (`Q` + digits only) and only interpolate mapped, typed parameters; high-level APIs validate date formats. Proxy URLs are checked against localhost and common private IP ranges to reduce SSRF risk, but this should not be relied on as complete SSRF prevention.
 
 ```python
 from wikidata_collector.security import validate_qid, escape_sparql_literal
