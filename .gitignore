@@ -39,6 +39,8 @@ env/
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # IDE
 .vscode/
@@ -58,3 +60,6 @@ metrics.json
 .copilot-tracking/
 *.pdf
 *.rq
+
+# Spec-Kit
+specs/
