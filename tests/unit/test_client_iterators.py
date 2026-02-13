@@ -127,8 +127,8 @@ class TestIterPublicFigures:
             call_kwargs = mock.call_args[1]
             assert call_kwargs["birthday_from"] == "1990-01-01"
             assert call_kwargs["birthday_to"] == "2000-12-31"
-            assert call_kwargs["nationality"] == "Q30"
-            assert call_kwargs["profession"] == ["Q33999"]
+            assert call_kwargs["country"] == "Q30"
+            assert call_kwargs["occupations"] == ["Q33999"]
 
 
 class TestIterPublicInstitutions:

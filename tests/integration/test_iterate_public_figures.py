@@ -106,7 +106,7 @@ class TestIteratePublicFiguresHappyPath:
         )
 
         assert len(results) == 1
-        assert results[0].birthday == "1995-06-15T00:00:00Z"
+        assert results[0].birth_date == datetime(1995, 6, 15)
 
     def test_iterate_with_nationality_filter(self, mocker):
         """Test iteration with nationality filter."""
@@ -133,7 +133,7 @@ class TestIteratePublicFiguresHappyPath:
         assert call_args.kwargs["nationality"] == "United States"
 
         assert len(results) == 1
-        assert results[0].nationalities == ["United States"]
+        assert results[0].countries == ["United States"]
 
 
 @pytest.mark.integration
