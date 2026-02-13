@@ -1,6 +1,6 @@
 # Wikidata Collector
 
-A Python library for querying public figures and institutions from [Wikidata](https://www.wikidata.org/) via SPARQL. Returns typed, normalized Pydantic models with automatic pagination, proxy rotation, and built-in SPARQL injection prevention.
+A Python library for querying public figures and institutions from [Wikidata](https://www.wikidata.org/) via SPARQL. Returns typed, normalized Pydantic models with automatic pagination, proxy rotation, and high-level safeguards against SPARQL injection (validated QIDs, mapped filters, and date validation).
 
 ## Installation
 
