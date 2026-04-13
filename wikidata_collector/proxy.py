@@ -138,6 +138,19 @@ class ProxyManager:
         self.failed_proxies[proxy] = time.time()
         logger.warning(f"Marked proxy {proxy} as failed")
 
+    def reset_proxy(self, proxy: str) -> None:
+        """Clear a proxy's failed status, making it available for selection again.
+
+        Used after a deep-sleep period to allow retrying a single-proxy setup
+        whose rotation service may have recovered.
+
+        Args:
+            proxy: The proxy URL to reset.
+        """
+        if proxy in self.failed_proxies:
+            del self.failed_proxies[proxy]
+            logger.info(f"Reset failed status for proxy {proxy}")
+
     def get_proxy_dict(self, proxy: str) -> Dict[str, str]:
         """Convert proxy URL to requests proxy dict."""
         if proxy.startswith("http://"):

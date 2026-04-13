@@ -20,6 +20,14 @@ RETRY_JITTER_INCREMENT = float(
     os.getenv("RETRY_JITTER_INCREMENT", "0.2")
 )  # Jitter increment per attempt
 
+# Deep-sleep retry constants (single-proxy mode only)
+PROXY_DEEP_SLEEP_SECONDS = int(
+    os.getenv("PROXY_DEEP_SLEEP_SECONDS", "1800")
+)  # Sleep duration between deep-sleep retry cycles (default: 30 minutes)
+PROXY_DEEP_SLEEP_MAX_FAILURES = int(
+    os.getenv("PROXY_DEEP_SLEEP_MAX_FAILURES", "3")
+)  # Maximum consecutive deep-sleep cycles before giving up
+
 # Query pagination constant
 DEFAULT_LIMIT = int(
     os.getenv("DEFAULT_LIMIT", "15")
@@ -45,6 +53,8 @@ class WikidataCollectorConfig:
         retry_max_wait_seconds: int = RETRY_MAX_WAIT_SECONDS,
         retry_jitter_base: float = RETRY_JITTER_BASE,
         retry_jitter_increment: float = RETRY_JITTER_INCREMENT,
+        proxy_deep_sleep_seconds: int = PROXY_DEEP_SLEEP_SECONDS,
+        proxy_deep_sleep_max_failures: int = PROXY_DEEP_SLEEP_MAX_FAILURES,
     ):
         """Initialize configuration.
 
@@ -60,6 +70,10 @@ class WikidataCollectorConfig:
             retry_max_wait_seconds: Maximum wait time for exponential backoff on 5xx errors
             retry_jitter_base: Base jitter time in seconds for request exception retries
             retry_jitter_increment: Jitter increment per attempt
+            proxy_deep_sleep_seconds: Sleep duration (seconds) between deep-sleep retry cycles
+                when a single proxy is unavailable (default: 1800 = 30 minutes)
+            proxy_deep_sleep_max_failures: Maximum consecutive deep-sleep cycles before raising
+                ProxyUnavailableError (default: 3)
         """
         self.contact_email = contact_email or os.getenv("CONTACT_EMAIL", "not-provided")
         self.wikidata_sparql_url = wikidata_sparql_url or os.getenv(
@@ -94,6 +108,14 @@ class WikidataCollectorConfig:
         self.retry_jitter_base = float(os.getenv("RETRY_JITTER_BASE", retry_jitter_base))
         self.retry_jitter_increment = float(
             os.getenv("RETRY_JITTER_INCREMENT", retry_jitter_increment)
+        )
+
+        # Deep-sleep retry settings (single-proxy mode)
+        self.proxy_deep_sleep_seconds = int(
+            os.getenv("PROXY_DEEP_SLEEP_SECONDS", proxy_deep_sleep_seconds)
+        )
+        self.proxy_deep_sleep_max_failures = int(
+            os.getenv("PROXY_DEEP_SLEEP_MAX_FAILURES", proxy_deep_sleep_max_failures)
         )
 
     def get_user_agent(self) -> str:

@@ -15,6 +15,7 @@ from wikidata_collector.client import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.exceptions import (
     ProxyMisconfigurationError,
+    ProxyUnavailableError,
     QueryExecutionError,
     UpstreamUnavailableError,
 )
@@ -42,33 +43,40 @@ class TestUpstreamTimeouts:
         Verifies:
         - Retries are attempted on timeout
         - Structured logs include retry attempts
-        - ProxyMisconfigurationError is raised when all proxies fail due to timeout
+        - ProxyMisconfigurationError is raised when all proxies fail (multi-proxy setup)
+        - Deep-sleep is NOT triggered for multi-proxy setups
         """
         client = WikidataClient(mock_config)
 
-        with patch("requests.get") as mock_get:
+        with patch("requests.get") as mock_get, patch("time.sleep") as mock_sleep:
             # Simulate timeout on all attempts
             mock_get.side_effect = requests.exceptions.Timeout("Connection timeout")
 
             with caplog.at_level(logging.WARNING):
-                # With proxies configured and all failing, should raise ProxyMisconfigurationError
+                # Multi-proxy setup: should still raise ProxyMisconfigurationError (no deep-sleep)
                 with pytest.raises(ProxyMisconfigurationError) as exc_info:
                     client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
 
                 # Verify error message mentions retries
                 assert "after 3 attempts" in str(exc_info.value)
 
-            # Verify retry logs were created
-            retry_logs = [r for r in caplog.records if hasattr(r, "event") and r.event == "retry"]
-            assert len(retry_logs) == 2  # 2 retries after first failure (3 total attempts)
+                # No long deep-sleep calls (would be >= 1800s by default)
+                long_sleeps = [c for c in mock_sleep.call_args_list if c.args[0] >= 60]
+                assert len(long_sleeps) == 0
 
-            # Verify structured fields in retry logs
-            for retry_log in retry_logs:
-                assert hasattr(retry_log, "attempt")
-                assert hasattr(retry_log, "max_retries")
-                assert hasattr(retry_log, "reason")
-                assert hasattr(retry_log, "wait_time_seconds")
-                assert "request_exception" in retry_log.reason
+                # Verify retry logs were created
+                retry_logs = [
+                    r for r in caplog.records if hasattr(r, "event") and r.event == "retry"
+                ]
+                assert len(retry_logs) == 2  # 2 retries after first failure (3 total attempts)
+
+                # Verify structured fields in retry logs
+                for retry_log in retry_logs:
+                    assert hasattr(retry_log, "attempt")
+                    assert hasattr(retry_log, "max_retries")
+                    assert hasattr(retry_log, "reason")
+                    assert hasattr(retry_log, "wait_time_seconds")
+                    assert "request_exception" in retry_log.reason
 
     def test_timeout_without_proxy_raises_query_execution_error(self, caplog):
         """
@@ -209,31 +217,31 @@ class TestProxyFailures:
         Test fail-closed behavior: no automatic fallback to direct connection.
 
         Verifies:
-        - When proxies are configured, they are used exclusively
+        - When a single proxy is configured, it is used exclusively
         - No automatic fallback to direct connection occurs
-        - ProxyMisconfigurationError is raised when all proxies fail
+        - Single-proxy exhaustion enters deep-sleep and eventually raises ProxyUnavailableError
         """
-        # Configure client with proxies
+        # Configure client with a single proxy and minimal deep-sleep cycles for speed
         config = WikidataCollectorConfig(
             proxy_list=["http://proxy1.example.com:8080"],
             sparql_timeout_seconds=5,
             max_retries=2,
+            proxy_deep_sleep_seconds=1,
+            proxy_deep_sleep_max_failures=1,
         )
         client = WikidataClient(config)
 
-        with patch("requests.get") as mock_get:
-            # Proxy fails
+        with patch("requests.get") as mock_get, patch("time.sleep"):
+            # Proxy fails on every attempt
             mock_get.side_effect = requests.exceptions.ConnectionError("Proxy failed")
 
             with caplog.at_level(logging.WARNING):
-                with pytest.raises(ProxyMisconfigurationError):
+                with pytest.raises(ProxyUnavailableError):
                     client.execute_sparql_query("SELECT ?item WHERE { ?item wdt:P31 wd:Q5 }")
 
             # Verify all requests used proxy (no direct fallback)
-            # requests.get should have been called with proxy dict
-            for call in mock_get.call_args_list:
-                # proxies argument should be present
-                assert "proxies" in call.kwargs
+            for call_args in mock_get.call_args_list:
+                assert "proxies" in call_args.kwargs
 
 
 @pytest.mark.integration

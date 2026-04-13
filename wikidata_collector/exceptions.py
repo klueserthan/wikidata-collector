@@ -38,7 +38,13 @@ class InvalidFilterError(WikidataCollectorError):
 
 
 class ProxyMisconfigurationError(WikidataCollectorError):
-    """Raised when proxy configuration is invalid or unreachable."""
+    """Raised when proxy configuration is invalid or unreachable (multi-proxy setups)."""
+
+    pass
+
+
+class ProxyUnavailableError(WikidataCollectorError):
+    """Raised when a single proxy remains unreachable after all deep-sleep retry cycles."""
 
     pass
 

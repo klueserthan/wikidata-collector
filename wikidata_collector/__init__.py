@@ -11,6 +11,7 @@ from .exceptions import (
     InvalidFilterError,
     InvalidQIDError,
     ProxyMisconfigurationError,
+    ProxyUnavailableError,
     QueryExecutionError,
     UpstreamUnavailableError,
     WikidataCollectorError,
@@ -33,5 +34,6 @@ __all__ = [
     "QueryExecutionError",
     "InvalidFilterError",
     "ProxyMisconfigurationError",
+    "ProxyUnavailableError",
     "UpstreamUnavailableError",
 ]

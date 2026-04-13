@@ -15,6 +15,7 @@ from .config import WikidataCollectorConfig
 from .exceptions import (
     InvalidFilterError,
     ProxyMisconfigurationError,
+    ProxyUnavailableError,
     QueryExecutionError,
     UpstreamUnavailableError,
 )
@@ -24,7 +25,7 @@ from .models import (
     PublicInstitutionNormalizedRecord,
     PublicInstitutionWikiRecord,
 )
-from .proxy import ProxyManager
+from .proxy import ProxyManager, validate_proxy_list
 from .query_builders.figures_query_builder import build_public_figures_query
 from .query_builders.institutions_query_builder import build_public_institutions_query
 
@@ -184,6 +185,13 @@ class WikidataClient:
     ) -> Tuple[Dict[str, Any], str]:
         """Execute SPARQL query against Wikidata with proxy support.
 
+        For single-proxy setups (exactly one effective validated proxy), proxy
+        exhaustion triggers a deep-sleep retry loop: the client sleeps for
+        ``config.proxy_deep_sleep_seconds`` and retries up to
+        ``config.proxy_deep_sleep_max_failures`` times before raising.
+
+        For multi-proxy setups or no-proxy setups, failure is immediate.
+
         Args:
             query: SPARQL query string
             override_proxies: Optional list of proxy URLs to use instead of configured ones
@@ -192,7 +200,136 @@ class WikidataClient:
             Tuple of (result_dict, used_proxy) where used_proxy is "direct" or proxy URL
 
         Raises:
-            QueryExecutionError: If query execution fails after retries
+            QueryExecutionError: If query execution fails after retries (no proxy configured)
+            UpstreamUnavailableError: If Wikidata returns 502/503/504 after all retries
+            ProxyMisconfigurationError: If all proxies in a multi-proxy setup fail
+            ProxyUnavailableError: If the single configured proxy fails across all deep-sleep cycles
+        """
+        # Determine the effective validated proxy list for this call.
+        # override_proxies (when given) fully replaces the configured proxy list;
+        # ProxyManager.get_available_proxies already handles validation for overrides,
+        # but we need the full (pre-cooldown-filter) effective list to decide whether
+        # we are in single-proxy mode.  For overrides we validate them directly; for
+        # configured proxies we use the already-validated self.proxy_manager.proxies.
+        if override_proxies is not None:
+            effective_proxy_list: List[str] = validate_proxy_list(override_proxies)
+        else:
+            effective_proxy_list = list(self.proxy_manager.proxies)
+
+        # Single-proxy deep-sleep is only eligible when exactly one effective proxy exists.
+        single_proxy: Optional[str] = (
+            effective_proxy_list[0] if len(effective_proxy_list) == 1 else None
+        )
+
+        if single_proxy is not None:
+            return self._execute_sparql_with_deep_sleep(query, override_proxies, single_proxy)
+        else:
+            return self._execute_sparql_attempt(query, override_proxies)
+
+    def _execute_sparql_with_deep_sleep(
+        self,
+        query: str,
+        override_proxies: Optional[List[str]],
+        single_proxy: str,
+    ) -> Tuple[Dict[str, Any], str]:
+        """Outer deep-sleep retry loop for single-proxy mode.
+
+        Calls ``_execute_sparql_attempt`` and, on proxy exhaustion, sleeps and
+        retries up to ``config.proxy_deep_sleep_max_failures`` times.
+
+        Args:
+            query: SPARQL query string
+            override_proxies: Proxy override list passed through to the attempt helper
+            single_proxy: The one validated effective proxy URL (used for reset and logging)
+
+        Returns:
+            Tuple of (result_dict, used_proxy)
+
+        Raises:
+            ProxyUnavailableError: When all deep-sleep cycles are exhausted
+            UpstreamUnavailableError: Propagated immediately from the attempt helper
+            QueryExecutionError: Propagated immediately from the attempt helper
+        """
+        # First attempt (before any deep sleep)
+        try:
+            return self._execute_sparql_attempt(query, override_proxies)
+        except ProxyMisconfigurationError as first_err:
+            last_err: Exception = first_err
+
+        # Normal retries failed — enter deep-sleep cycle
+        for deep_attempt in range(self.config.proxy_deep_sleep_max_failures):
+            sleep_s = self.config.proxy_deep_sleep_seconds
+            logger.warning(
+                f"Single proxy unavailable, deep sleeping for {sleep_s}s "
+                f"(cycle {deep_attempt + 1}/{self.config.proxy_deep_sleep_max_failures})",
+                extra={
+                    "event": "proxy_deep_sleep_started",
+                    "proxy": single_proxy,
+                    "deep_sleep_attempt": deep_attempt + 1,
+                    "deep_sleep_max": self.config.proxy_deep_sleep_max_failures,
+                    "deep_sleep_seconds": sleep_s,
+                },
+            )
+            time.sleep(sleep_s)
+            # Clear the proxy's failed status so the inner retry loop can use it again
+            self.proxy_manager.reset_proxy(single_proxy)
+            try:
+                return self._execute_sparql_attempt(query, override_proxies)
+            except ProxyMisconfigurationError as retry_err:
+                logger.warning(
+                    f"Deep-sleep recovery attempt {deep_attempt + 1} failed: {retry_err}",
+                    extra={
+                        "event": "proxy_deep_sleep_recovery_failed",
+                        "proxy": single_proxy,
+                        "deep_sleep_attempt": deep_attempt + 1,
+                        "error": str(retry_err),
+                    },
+                )
+                last_err = retry_err
+                continue
+
+        # All deep-sleep cycles exhausted
+        _log_query_failure(
+            query_type="sparql_query",
+            error_category="proxy_unavailable",
+            error_message=str(last_err),
+            attempts=self.config.proxy_deep_sleep_max_failures,
+        )
+        logger.error(
+            f"Single proxy remained unavailable after "
+            f"{self.config.proxy_deep_sleep_max_failures} deep-sleep cycles",
+            extra={
+                "event": "proxy_deep_sleep_exhausted",
+                "proxy": single_proxy,
+                "deep_sleep_cycles": self.config.proxy_deep_sleep_max_failures,
+                "deep_sleep_seconds": self.config.proxy_deep_sleep_seconds,
+            },
+        )
+        raise ProxyUnavailableError(
+            f"Single proxy {single_proxy!r} remained unavailable after "
+            f"{self.config.proxy_deep_sleep_max_failures} deep-sleep cycles "
+            f"({self.config.proxy_deep_sleep_seconds}s each): {last_err}"
+        )
+
+    def _execute_sparql_attempt(
+        self, query: str, override_proxies: Optional[List[str]] = None
+    ) -> Tuple[Dict[str, Any], str]:
+        """Inner retry loop: attempt the SPARQL query up to max_retries times.
+
+        Does NOT perform deep-sleep — that is handled by the caller
+        (``execute_sparql_query`` / ``_execute_sparql_with_deep_sleep``).
+
+        Args:
+            query: SPARQL query string
+            override_proxies: Optional list of proxy URLs to use instead of configured ones
+
+        Returns:
+            Tuple of (result_dict, used_proxy)
+
+        Raises:
+            UpstreamUnavailableError: If Wikidata returns 502/503/504 on the final attempt
+            ProxyMisconfigurationError: If proxies are configured and all fail
+            QueryExecutionError: If no proxies are configured and execution fails
         """
         sparql_start_time = time.time()
 
@@ -311,10 +448,21 @@ class WikidataClient:
                         raise UpstreamUnavailableError(
                             f"Upstream Wikidata service unavailable after {self.config.max_retries} attempts: {e}"
                         )
-                    # Check if we were using proxies and all failed (proxy misconfiguration)
-                    elif (
-                        self.config.proxy_list
+                    # Check if we were using proxies and all failed.
+                    # For override_proxies: failures are not tracked in proxy_manager.failed_proxies
+                    # (overrides bypass the cooldown system), so we detect exhaustion purely
+                    # from whether override_proxies was non-empty.
+                    # For configured proxies: check that the available list (post-cooldown) is empty.
+                    proxies_were_in_use = override_proxies is not None or bool(
+                        self.proxy_manager.proxies
+                    )
+                    configured_proxies_exhausted = (
+                        override_proxies is None
                         and len(self.proxy_manager.get_available_proxies()) == 0
+                    )
+                    override_proxies_exhausted = override_proxies is not None
+                    if proxies_were_in_use and (
+                        configured_proxies_exhausted or override_proxies_exhausted
                     ):
                         _log_query_failure(
                             query_type="sparql_query",
@@ -346,7 +494,7 @@ class WikidataClient:
         # return a result or raise on the final attempt. If we get here, it
         # indicates a logic error in the retry loop implementation.
         logger.critical(
-            "Unreachable code reached in execute_sparql_query: "
+            "Unreachable code reached in _execute_sparql_attempt: "
             "retry loop exited without returning or raising. "
             "max_retries=%d, used_proxy=%s",
             self.config.max_retries,
@@ -354,7 +502,7 @@ class WikidataClient:
         )
         raise QueryExecutionError(
             "Internal error: retry loop exited without returning or raising; "
-            "this indicates a bug in execute_sparql_query."
+            "this indicates a bug in _execute_sparql_attempt."
         )
 
     def get_public_figures(
