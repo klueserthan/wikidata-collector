@@ -5,6 +5,9 @@ Focus on proxy URL validation and SSRF prevention
 
 import time
 
+import pytest
+
+from wikidata_collector.exceptions import ProxyMisconfigurationError
 from wikidata_collector.proxy import ProxyManager, _is_internal_host, validate_proxy_list
 
 
@@ -64,35 +67,51 @@ class TestValidateProxyList:
         validated = validate_proxy_list(proxies)
         assert len(validated) == 2
 
-    def test_reject_invalid_scheme(self):
-        """Test that proxies with invalid schemes are rejected"""
-        proxies = ["ftp://proxy.example.com:8080", "socks5://proxy.example.com:1080"]
-        validated = validate_proxy_list(proxies)
-        assert len(validated) == 0
+    def test_reject_invalid_scheme_raises(self):
+        """Test that proxies with invalid schemes raise ProxyMisconfigurationError"""
+        with pytest.raises(ProxyMisconfigurationError, match="invalid or missing scheme"):
+            validate_proxy_list(["ftp://proxy.example.com:8080"])
 
-    def test_reject_internal_hosts(self):
-        """Test that internal host proxies are rejected"""
-        proxies = [
-            "http://localhost:8080",
-            "http://127.0.0.1:8080",
-            "http://192.168.1.1:8080",
-            "http://10.0.0.1:8080",
-        ]
-        validated = validate_proxy_list(proxies)
-        assert len(validated) == 0
+    def test_reject_socks_scheme_raises(self):
+        """Test that socks5 scheme raises ProxyMisconfigurationError"""
+        with pytest.raises(ProxyMisconfigurationError, match="invalid or missing scheme"):
+            validate_proxy_list(["socks5://proxy.example.com:1080"])
 
-    def test_mixed_valid_invalid_proxies(self):
-        """Test that only valid proxies are returned from mixed list"""
+    def test_reject_internal_host_raises(self):
+        """Test that internal host proxies raise ProxyMisconfigurationError"""
+        with pytest.raises(ProxyMisconfigurationError, match="internal/private host"):
+            validate_proxy_list(["http://localhost:8080"])
+
+    def test_reject_private_ip_raises(self):
+        """Test that 192.168.x.x proxies raise ProxyMisconfigurationError"""
+        with pytest.raises(ProxyMisconfigurationError, match="internal/private host"):
+            validate_proxy_list(["http://192.168.1.1:8080"])
+
+    def test_reject_10_subnet_raises(self):
+        """Test that 10.x.x.x proxies raise ProxyMisconfigurationError"""
+        with pytest.raises(ProxyMisconfigurationError, match="internal/private host"):
+            validate_proxy_list(["http://10.0.0.1:8080"])
+
+    def test_reject_127_loopback_raises(self):
+        """Test that 127.0.0.1 proxies raise ProxyMisconfigurationError"""
+        with pytest.raises(ProxyMisconfigurationError, match="internal/private host"):
+            validate_proxy_list(["http://127.0.0.1:8080"])
+
+    def test_mixed_list_with_invalid_raises(self):
+        """Test that a mixed list raises on the first invalid proxy encountered"""
         proxies = [
             "http://valid-proxy.example.com:8080",
-            "http://localhost:8080",  # Invalid
+            "http://localhost:8080",  # Invalid — raises
             "https://another-valid.example.com:8443",
-            "ftp://invalid-scheme.example.com:21",  # Invalid
         ]
-        validated = validate_proxy_list(proxies)
-        assert len(validated) == 2
-        assert "http://valid-proxy.example.com:8080" in validated
-        assert "https://another-valid.example.com:8443" in validated
+        with pytest.raises(ProxyMisconfigurationError):
+            validate_proxy_list(proxies)
+
+    def test_malformed_no_scheme_raises(self):
+        """Test that a proxy without a scheme (colon-separated format) raises ProxyMisconfigurationError"""
+        # e.g. rp.scrapegw.com:6060:user:pass — urlparse parses 'user' as scheme
+        with pytest.raises(ProxyMisconfigurationError, match="invalid or missing scheme"):
+            validate_proxy_list(["rp.scrapegw.com:6060:9ift2pyrnt4eg2m:zywcm236fqbpjft"])
 
     def test_empty_and_whitespace_proxies(self):
         """Test that empty strings and whitespace are filtered out"""
@@ -113,16 +132,14 @@ class TestProxyManager:
         assert manager.current_index == 0
         assert len(manager.failed_proxies) == 0
 
-    def test_initialization_with_invalid_proxies(self):
-        """Test ProxyManager filters out invalid proxies during initialization"""
+    def test_initialization_with_invalid_proxies_raises(self):
+        """Test ProxyManager raises ProxyMisconfigurationError for invalid proxies during initialization"""
         proxies = [
             "http://valid.example.com:8080",
-            "http://localhost:8080",  # Invalid
-            "http://192.168.1.1:8080",  # Invalid
+            "http://localhost:8080",  # Invalid — raises
         ]
-        manager = ProxyManager(proxy_list=proxies)
-        assert len(manager.proxies) == 1
-        assert manager.proxies[0] == "http://valid.example.com:8080"
+        with pytest.raises(ProxyMisconfigurationError, match="internal/private host"):
+            ProxyManager(proxy_list=proxies)
 
     def test_initialization_with_empty_list(self):
         """Test ProxyManager initialization with empty proxy list"""

@@ -5,6 +5,8 @@ import time
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
+from .exceptions import ProxyMisconfigurationError
+
 logger = logging.getLogger(__name__)
 
 # Security: Allowed proxy schemes and blocked hosts for SSRF prevention
@@ -33,7 +35,18 @@ def _is_internal_host(hostname: str) -> bool:
 
 
 def validate_proxy_list(proxy_list: List[str]) -> List[str]:
-    """Validate a list of proxy URLs and return only valid ones."""
+    """Validate a list of proxy URLs and return only valid ones.
+
+    Args:
+        proxy_list: List of proxy URLs to validate.
+
+    Returns:
+        List of validated proxy URLs (empty entries are silently skipped).
+
+    Raises:
+        ProxyMisconfigurationError: If any proxy URL is malformed, has an invalid scheme,
+            has no hostname, or targets an internal/private host.
+    """
     validated_proxies = []
     for proxy in proxy_list:
         proxy = proxy.strip()
@@ -44,19 +57,25 @@ def validate_proxy_list(proxy_list: List[str]) -> List[str]:
             parsed = urlparse(proxy)
             # Validate scheme
             if parsed.scheme not in ALLOWED_PROXY_SCHEMES:
-                logger.warning(f"Rejected proxy with invalid scheme: {proxy}")
-                continue
+                raise ProxyMisconfigurationError(
+                    f"Proxy has an invalid or missing scheme (expected 'http' or 'https'): {proxy!r}. "
+                    f"Ensure your proxy URL starts with 'http://' or 'https://'."
+                )
             # Block internal hosts
             hostname = parsed.hostname
             if not hostname:
-                logger.warning(f"Rejected proxy with no hostname: {proxy}")
-                continue
+                raise ProxyMisconfigurationError(f"Proxy URL has no hostname: {proxy!r}.")
             if _is_internal_host(hostname):
-                logger.warning(f"Rejected proxy with internal host: {proxy}")
-                continue
+                raise ProxyMisconfigurationError(
+                    f"Proxy targets an internal/private host '{hostname}', which is not allowed: {proxy!r}."
+                )
             validated_proxies.append(proxy)
+        except ProxyMisconfigurationError:
+            raise
         except Exception as e:
-            logger.warning(f"Rejected malformed proxy: {proxy}, error: {e}")
+            raise ProxyMisconfigurationError(
+                f"Proxy URL could not be parsed: {proxy!r}. Error: {e}"
+            ) from e
 
     return validated_proxies
 

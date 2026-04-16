@@ -323,13 +323,14 @@ class TestMultiProxyUnaffected:
 class TestDeepSleepEdgeCases:
     """Edge-case regression tests for deep-sleep eligibility logic."""
 
-    def test_invalid_proxy_filtered_out_raises_query_execution_error(self):
+    def test_invalid_proxy_raises_at_construction_time(self):
         """
-        Regression: a single proxy that is rejected by ProxyManager validation
-        (bad scheme, internal host, etc.) results in zero effective proxies.
-        The client must NOT enter deep-sleep; it should raise QueryExecutionError
-        because no proxy is actually in use (same as the no-proxy path).
+        An invalid proxy (bad scheme, internal host, etc.) must raise
+        ProxyMisconfigurationError immediately at WikidataClient construction time,
+        not silently be filtered out and cause a hang later.
         """
+        from wikidata_collector.exceptions import ProxyMisconfigurationError
+
         # "ftp://" scheme is rejected by validate_proxy_list
         config = WikidataCollectorConfig(
             proxy_list=["ftp://invalid-scheme.example.com:8080"],
@@ -338,22 +339,8 @@ class TestDeepSleepEdgeCases:
             proxy_deep_sleep_seconds=1,
             proxy_deep_sleep_max_failures=3,
         )
-        client = WikidataClient(config)
-
-        # After validation the effective proxy list is empty, so proxy_manager.proxies == []
-        assert client.proxy_manager.proxies == []
-
-        with patch("requests.get") as mock_get, patch("time.sleep") as mock_sleep:
-            mock_get.side_effect = requests.exceptions.ConnectionError("down")
-
-            from wikidata_collector.exceptions import QueryExecutionError
-
-            with pytest.raises(QueryExecutionError):
-                client.execute_sparql_query(_QUERY)
-
-        # No deep-sleep calls must have been made
-        long_sleeps = [c for c in mock_sleep.call_args_list if c.args[0] >= 1]
-        assert len(long_sleeps) == 0
+        with pytest.raises(ProxyMisconfigurationError, match="invalid or missing scheme"):
+            WikidataClient(config)
 
     def test_override_proxies_single_proxy_triggers_deep_sleep(self):
         """
