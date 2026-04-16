@@ -8,10 +8,6 @@ and inspect the normalized Pydantic models that come back.
 Run: python example.py
 """
 
-import re
-
-from requests import get
-
 from wikidata_collector import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.exceptions import InvalidFilterError

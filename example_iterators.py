@@ -13,14 +13,27 @@ import logging
 from wikidata_collector import WikidataClient
 
 
+def example_default_client():
+    """Initialize with defaults (reads CONTACT_EMAIL from env/.env)."""
+    client = WikidataClient()
+    # Print client configuration to verify
+    print("Client Configuration:")
+    print(f"  Contact Email: {client.config.contact_email}")
+    print(f"  SPARQL Timeout: {client.config.sparql_timeout_seconds} seconds")
+    print(f"  Max Retries: {client.config.max_retries}")
+    print(f"  User-Agent: {client.config.get_user_agent()}")
+    print(f"  Proxy List: {client.config.proxy_list}")
+    return client
+
+
 def iterate_figures_with_max_results():
     """iterate_public_figures: auto-paginated, capped at max_results."""
-    client = WikidataClient()
+    client = example_default_client()
 
     count = 0
     for figure in client.iterate_public_figures(
-        birthday_from="1990-01-01",
-        birthday_to="1995-12-31",
+        birthday_from="1956-01-01",
+        birthday_to="1956-01-31",
         nationality="US",
         max_results=10,
     ):
@@ -36,7 +49,7 @@ def iterate_figures_with_max_results():
 
 def iterate_institutions_with_max_results():
     """iterate_public_institutions: auto-paginated, capped at max_results."""
-    client = WikidataClient()
+    client = example_default_client()
 
     count = 0
     for inst in client.iterate_public_institutions(
@@ -57,7 +70,7 @@ def iterate_with_low_level_iter():
 
     Useful when you want to control the page size and stop condition yourself.
     """
-    client = WikidataClient()
+    client = example_default_client()
 
     count = 0
     for figure in client.iter_public_figures(
@@ -82,7 +95,7 @@ def iterate_with_logging():
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
-    client = WikidataClient()
+    client = example_default_client()
 
     count = 0
     for figure in client.iterate_public_figures(
@@ -94,7 +107,9 @@ def iterate_with_logging():
         count += 1
         print(f"  {count}. {figure.name}")
 
-    print("\n  Done. Structured log records include query_type, latency_ms, etc.; configure your logging formatter to display those fields.\n")
+    print(
+        "\n  Done. Structured log records include query_type, latency_ms, etc.; configure your logging formatter to display those fields.\n"
+    )
 
 
 if __name__ == "__main__":
