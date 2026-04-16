@@ -5,6 +5,8 @@ from typing import List, Optional
 
 from dotenv import find_dotenv, load_dotenv
 
+from random_user_agent.user_agent import UserAgent
+
 # Load environment variables from .env
 load_dotenv(find_dotenv())
 
@@ -119,8 +121,13 @@ class WikidataCollectorConfig:
         )
 
     def get_user_agent(self) -> str:
-        """Get User-Agent string for Wikidata requests."""
-        return (
-            f"WikidataCollectorModule/1.0.0 "
-            f"(https://github.com/klueserthan/wikidata-collector, contact: {self.contact_email})"
-        )
+        """Get User-Agent string for Wikidata requests.
+        If self.contact_email is set, include it in the User-Agent for better transparency and to comply with Wikidata's guidelines.
+        Otherwise, return a random User-Agent string from the random_user_agent library to avoid using a generic default."""
+        if self.contact_email and self.contact_email != "not-provided":
+            return (
+                f"WikidataCollectorModule/1.0.0 "
+                f"(https://github.com/klueserthan/wikidata-collector, contact: {self.contact_email})"
+            )
+        else:
+            return UserAgent().get_random_user_agent()

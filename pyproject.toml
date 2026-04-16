@@ -22,6 +22,7 @@ classifiers = [
 dependencies = [
     "pydantic>=2.12.3",
     "python-dotenv>=1.1.1",
+    "random-user-agent>=1.0.1",
     "requests>=2.32.5",
 ]
 

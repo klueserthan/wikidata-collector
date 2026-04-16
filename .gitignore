@@ -63,3 +63,4 @@ metrics.json
 
 # Spec-Kit
 specs/
+.memsearch/

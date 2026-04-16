@@ -8,6 +8,10 @@ and inspect the normalized Pydantic models that come back.
 Run: python example.py
 """
 
+import re
+
+from requests import get
+
 from wikidata_collector import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.exceptions import InvalidFilterError
@@ -16,29 +20,45 @@ from wikidata_collector.exceptions import InvalidFilterError
 def example_default_client():
     """Initialize with defaults (reads CONTACT_EMAIL from env/.env)."""
     client = WikidataClient()
+    # Print client configuration to verify
+    print("Client Configuration:")
+    print(f"  Contact Email: {client.config.contact_email}")
+    print(f"  SPARQL Timeout: {client.config.sparql_timeout_seconds} seconds")
+    print(f"  Max Retries: {client.config.max_retries}")
+    print(f"  User-Agent: {client.config.get_user_agent()}")
+    print(f"  Proxy List: {client.config.proxy_list}")
     return client
 
 
 def example_custom_config():
     """Initialize with explicit configuration."""
     config = WikidataCollectorConfig(
-        contact_email="you@example.com",
+        # contact_email="you@example.com",
         sparql_timeout_seconds=30,
         max_retries=2,
     )
-    return WikidataClient(config)
+    client = WikidataClient(config)
+
+    # Print client configuration to verify
+    print("Client Configuration:")
+    print(f"  Contact Email: {client.config.contact_email}")
+    print(f"  SPARQL Timeout: {client.config.sparql_timeout_seconds} seconds")
+    print(f"  Max Retries: {client.config.max_retries}")
+    print(f"  User-Agent: {client.config.get_user_agent()}")
+    print(f"  Proxy List: {client.config.proxy_list}")
+    return client
 
 
 def example_get_public_figures():
     """Fetch a single page of public figures using the low-level API."""
-    client = WikidataClient()
+    client = example_default_client()
 
     # get_public_figures returns (List[PublicFigureNormalizedRecord], proxy_used)
     figures, proxy = client.get_public_figures(
-        birthday_from="1990-01-01",
-        birthday_to="1990-12-31",
+        birthday_from="1956-01-01",
+        birthday_to="1956-01-03",
         country="US",  # accepts country names, ISO codes, or QIDs
-        occupations=["politician"],  # mapped key — see constants.py for options
+        # occupations=["politician"],  # mapped key — see constants.py for options
         lang="en",
         limit=5,
     )
@@ -51,7 +71,7 @@ def example_get_public_figures():
 
 def example_get_public_institutions():
     """Fetch a single page of public institutions using the low-level API."""
-    client = WikidataClient()
+    client = example_default_client()
 
     institutions, proxy = client.get_public_institutions(
         type=["government_agency"],  # mapped key
@@ -68,7 +88,7 @@ def example_get_public_institutions():
 
 def example_keyset_pagination():
     """Manually paginate through results using keyset (after_qid) pagination."""
-    client = WikidataClient()
+    client = example_default_client()
 
     # Page 1
     figures, _ = client.get_public_figures(country="Q30", limit=5)
@@ -88,7 +108,7 @@ def example_keyset_pagination():
 
 def example_error_handling():
     """Demonstrate error handling for invalid inputs."""
-    client = WikidataClient()
+    client = example_default_client()
 
     try:
         # This raises InvalidFilterError — bad date format
