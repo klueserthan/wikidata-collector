@@ -37,7 +37,9 @@ def build_public_figures_query(
         SPARQL query string
 
     Raises:
-        ValueError: If QID validation fails or unknown gender label provided
+        ValueError: If any provided Wikidata QID fails validation, or if a provided
+            gender, country, or occupation value is not recognized, or if other
+            input validation fails.
     """
     if limit is None:
         limit = DEFAULT_LIMIT
@@ -98,8 +100,10 @@ def build_public_figures_query(
             mapped = GENDER_MAPPINGS[gender_value]
             if mapped == "other":
                 # "other" means not male AND not female (includes no gender claim)
-                subquery += "      FILTER NOT EXISTS { ?person wdt:P21 wd:Q6581097 }\n"
-                subquery += "      FILTER NOT EXISTS { ?person wdt:P21 wd:Q6581072 }\n"
+                subquery += (
+                    f"      FILTER NOT EXISTS {{ ?person wdt:P21 wd:{GENDER_MAPPINGS['male']} }}\n"
+                )
+                subquery += f"      FILTER NOT EXISTS {{ ?person wdt:P21 wd:{GENDER_MAPPINGS['female']} }}\n"
             else:
                 subquery += f"      ?person wdt:P21 wd:{mapped} .\n"
         else:

@@ -523,7 +523,7 @@ class WikidataClient:
         Args:
             birthday_from: Birth date from (ISO format)
             birthday_to: Birth date to (ISO format)
-            country: List of country filters (QIDs, ISO codes, or labels)
+            country: Country filter (QID, ISO code, or label)
             occupations: List of occupation filters (QIDs or labels)
             gender: Gender filter; one of "male", "female", "other", or a QID
             lang: Language code for labels
@@ -714,10 +714,10 @@ class WikidataClient:
         birthday_to: Optional[str] = None,
         nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
-        gender: Optional[str] = None,
         lang: str = "en",
         limit: Optional[int] = None,
         override_proxies: Optional[List[str]] = None,
+        gender: Optional[str] = None,
     ) -> Iterator[PublicFigureNormalizedRecord]:
         """Iterate over public figures with automatic pagination.
 
@@ -727,12 +727,12 @@ class WikidataClient:
         Args:
             birthday_from: Birth date from (ISO format)
             birthday_to: Birth date to (ISO format)
-            nationality: List of nationality filters (QIDs, ISO codes, or labels)
+            nationality: Nationality filter (QID, ISO code, or label)
             profession: List of profession filters (QIDs or labels)
-            gender: Gender filter; one of "male", "female", "other", or a QID
             lang: Language code for labels
             limit: Results per page (defaults to config.default_page_limit)
             override_proxies: Optional list of proxy URLs
+            gender: Gender filter; one of 'male', 'female', 'other', or a QID
 
         Yields:
             Individual public figure normalized records
