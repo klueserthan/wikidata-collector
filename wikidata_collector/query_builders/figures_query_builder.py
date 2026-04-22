@@ -4,7 +4,7 @@ import os
 from typing import List, Optional
 
 from ..config import DEFAULT_LIMIT
-from ..constants import COUNTRY_MAPPINGS, PROFESSION_MAPPINGS
+from ..constants import COUNTRY_MAPPINGS, GENDER_MAPPINGS, PROFESSION_MAPPINGS
 from ..security import validate_qid
 
 
@@ -13,6 +13,7 @@ def build_public_figures_query(
     birthday_to: Optional[str] = None,
     country: Optional[str] = None,
     occupations: Optional[List[str]] = None,
+    gender: Optional[str] = None,
     lang: str = "en",
     limit: Optional[int] = None,
     cursor: int = 0,
@@ -25,6 +26,8 @@ def build_public_figures_query(
         birthday_to: End date filter (ISO format)
         country: Country filter (country name or QID)
         occupations: List of occupation filters (mapped keys or QIDs)
+        gender: Gender filter; one of "male", "female", "other" (includes no gender info),
+            or a direct Wikidata QID (e.g. "Q6581097")
         lang: Language code for labels
         limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
@@ -34,7 +37,9 @@ def build_public_figures_query(
         SPARQL query string
 
     Raises:
-        ValueError: If QID validation fails
+        ValueError: If any provided Wikidata QID fails validation, or if a provided
+            gender, country, or occupation value is not recognized, or if other
+            input validation fails.
     """
     if limit is None:
         limit = DEFAULT_LIMIT
@@ -83,6 +88,29 @@ def build_public_figures_query(
                 )
 
     subquery += " .\n"
+
+    # Add gender filter to subquery if provided
+    if gender:
+        gender_value = gender.strip()
+        if gender_value.startswith("Q"):
+            # Direct QID - validate it and add as triple pattern
+            validated_qid = validate_qid(gender_value)
+            subquery += f"      ?person wdt:P21 wd:{validated_qid} .\n"
+        elif gender_value in GENDER_MAPPINGS:
+            mapped = GENDER_MAPPINGS[gender_value]
+            if mapped == "other":
+                # "other" means not male AND not female (includes no gender claim)
+                subquery += (
+                    f"      FILTER NOT EXISTS {{ ?person wdt:P21 wd:{GENDER_MAPPINGS['male']} }}\n"
+                )
+                subquery += f"      FILTER NOT EXISTS {{ ?person wdt:P21 wd:{GENDER_MAPPINGS['female']} }}\n"
+            else:
+                subquery += f"      ?person wdt:P21 wd:{mapped} .\n"
+        else:
+            raise ValueError(
+                f"Unknown gender '{gender_value}'. "
+                f"Supported genders: {', '.join(sorted(GENDER_MAPPINGS.keys()))} or a QID"
+            )
 
     # Add date filters to subquery
     if birthday_from:

@@ -4,7 +4,6 @@ import os
 from typing import List, Optional
 
 from dotenv import find_dotenv, load_dotenv
-
 from random_user_agent.user_agent import UserAgent
 
 # Load environment variables from .env

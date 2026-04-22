@@ -115,6 +115,60 @@ class TestBuildPublicFiguresQuery:
         # Should handle US code mapping
         assert "wdt:P27 wd:Q30" in query
 
+    def test_gender_filter_male(self):
+        """Test gender filter for male."""
+        query = build_public_figures_query(gender="male")
+
+        assert "wdt:P21 wd:Q6581097" in query
+        assert "FILTER NOT EXISTS" not in query
+
+    def test_gender_filter_female(self):
+        """Test gender filter for female."""
+        query = build_public_figures_query(gender="female")
+
+        assert "wdt:P21 wd:Q6581072" in query
+        assert "FILTER NOT EXISTS" not in query
+
+    def test_gender_filter_other(self):
+        """Test gender filter for other (includes no gender info)."""
+        query = build_public_figures_query(gender="other")
+
+        assert "FILTER NOT EXISTS { ?person wdt:P21 wd:Q6581097 }" in query
+        assert "FILTER NOT EXISTS { ?person wdt:P21 wd:Q6581072 }" in query
+        assert "wdt:P21 wd:Q6581097 ." not in query
+        assert "wdt:P21 wd:Q6581072 ." not in query
+
+    def test_gender_filter_qid(self):
+        """Test gender filter with a direct QID."""
+        query = build_public_figures_query(gender="Q6581097")
+
+        assert "wdt:P21 wd:Q6581097" in query
+        assert "FILTER NOT EXISTS" not in query
+
+    def test_gender_filter_invalid_raises_error(self):
+        """Test that unknown gender label raises ValueError."""
+        with pytest.raises(ValueError, match="Unknown gender"):
+            build_public_figures_query(gender="helicopter")
+
+    def test_gender_combined_with_country_and_occupation(self):
+        """Test gender combined with country and occupation filters."""
+        query = build_public_figures_query(
+            country="Germany",
+            occupations=["politician"],
+            gender="female",
+        )
+
+        assert "wdt:P27 wd:Q183" in query
+        assert "wdt:P106 wd:Q82955" in query
+        assert "wdt:P21 wd:Q6581072" in query
+
+    def test_gender_none_no_filter_applied(self):
+        """Test that no gender filter is applied when gender=None."""
+        query = build_public_figures_query(gender=None)
+
+        assert "wdt:P21 wd:" not in query.split("OPTIONAL")[0]  # not in subquery triple patterns
+        assert "FILTER NOT EXISTS" not in query
+
 
 class TestBuildPublicInstitutionsQuery:
     """Test build_public_institutions_query method."""
@@ -287,6 +341,7 @@ class TestQueryBuilderEdgeCases:
             birthday_to="2000-12-31",
             country="United States",
             occupations=["Q36180", "writer"],
+            gender="female",
             lang="fr",
             limit=25,
         )
@@ -297,6 +352,7 @@ class TestQueryBuilderEdgeCases:
         assert "wdt:P27 wd:Q30" in query  # United States mapped to Q30
         assert "wdt:P106 wd:Q36180" in query
         assert "wdt:P106 wd:Q36180" in query  # writer also maps to Q36180
+        assert "wdt:P21 wd:Q6581072" in query  # female
         assert "LIMIT 25" in query
 
     def test_institutions_with_limit_one(self):

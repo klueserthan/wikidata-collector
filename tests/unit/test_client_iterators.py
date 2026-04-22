@@ -130,6 +130,18 @@ class TestIterPublicFigures:
             assert call_kwargs["country"] == "Q30"
             assert call_kwargs["occupations"] == ["Q33999"]
 
+    def test_iter_gender_passed_through(self, wikidata_client):
+        """Test that gender filter is forwarded to get_public_figures."""
+        mock_results = [_figure("Q1")]
+
+        with patch.object(
+            wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
+        ) as mock:
+            list(wikidata_client.iter_public_figures(gender="female"))
+
+            call_kwargs = mock.call_args[1]
+            assert call_kwargs["gender"] == "female"
+
 
 class TestIterPublicInstitutions:
     """Test iter_public_institutions method."""
