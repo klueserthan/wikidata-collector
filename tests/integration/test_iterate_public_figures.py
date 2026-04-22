@@ -102,7 +102,11 @@ class TestIteratePublicFiguresHappyPath:
 
         # Verify the underlying iterator was called with correct parameters
         mock_iter.assert_called_once_with(
-            birthday_from="1990-01-01", birthday_to="2000-12-31", nationality=None, lang="en"
+            birthday_from="1990-01-01",
+            birthday_to="2000-12-31",
+            nationality=None,
+            gender=None,
+            lang="en",
         )
 
         assert len(results) == 1
@@ -134,6 +138,23 @@ class TestIteratePublicFiguresHappyPath:
 
         assert len(results) == 1
         assert results[0].countries == ["United States"]
+
+    def test_iterate_with_gender_filter(self, mocker):
+        """Test that gender filter is forwarded to iter_public_figures."""
+        sample_records = [_pf("Q300", "Female Person", birthday="1985-06-01T00:00:00")]
+
+        client = WikidataClient()
+        mock_iter = mocker.patch.object(
+            client, "iter_public_figures", return_value=iter(sample_records)
+        )
+
+        results = list(client.iterate_public_figures(gender="female", lang="en"))
+
+        mock_iter.assert_called_once()
+        call_args = mock_iter.call_args
+        assert call_args.kwargs["gender"] == "female"
+
+        assert len(results) == 1
 
 
 @pytest.mark.integration
@@ -283,3 +304,20 @@ class TestIteratePublicFiguresEdgeCases:
 
         assert len(results) == 1
         assert results[0].id == "Q1"
+
+    def test_invalid_gender_raises_invalid_filter_error(self, mocker):
+        """Test that an unknown gender value raises InvalidFilterError (not raw ValueError)."""
+
+        def error_generator():
+            raise ValueError("Unknown gender 'helicopter'.")
+            yield  # pragma: no cover
+
+        client = WikidataClient()
+        mocker.patch.object(
+            client, "iter_public_figures", side_effect=lambda **kwargs: error_generator()
+        )
+
+        with pytest.raises(InvalidFilterError) as exc_info:
+            list(client.iterate_public_figures(gender="helicopter"))
+
+        assert "Invalid filter parameters" in str(exc_info.value)

@@ -1,5 +1,14 @@
 """Constants for the Wikidata Retriever module."""
 
+# Supported gender mappings (P21 = sex or gender)
+# "other" is a sentinel that triggers FILTER NOT EXISTS logic (not male AND not female),
+# covering non-binary genders as well as entities with no gender claim.
+GENDER_MAPPINGS = {
+    "male": "Q6581097",
+    "female": "Q6581072",
+    "other": "other",
+}
+
 # Supported institution type mappings
 TYPE_MAPPINGS = {
     "political_party": "Q7278",

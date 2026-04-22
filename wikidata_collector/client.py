@@ -511,6 +511,7 @@ class WikidataClient:
         birthday_to: Optional[str] = None,
         country: Optional[str] = None,
         occupations: Optional[List[str]] = None,
+        gender: Optional[str] = None,
         lang: str = "en",
         limit: Optional[int] = None,
         cursor: int = 0,
@@ -524,6 +525,7 @@ class WikidataClient:
             birthday_to: Birth date to (ISO format)
             country: List of country filters (QIDs, ISO codes, or labels)
             occupations: List of occupation filters (QIDs or labels)
+            gender: Gender filter; one of "male", "female", "other", or a QID
             lang: Language code for labels
             limit: Maximum results to return (defaults to config.default_page_limit)
             cursor: Offset for pagination
@@ -540,6 +542,7 @@ class WikidataClient:
             birthday_to=birthday_to,
             country=country,
             occupations=occupations,
+            gender=gender,
             lang=lang,
             limit=limit,
             cursor=cursor,
@@ -711,6 +714,7 @@ class WikidataClient:
         birthday_to: Optional[str] = None,
         nationality: Optional[str] = None,
         profession: Optional[List[str]] = None,
+        gender: Optional[str] = None,
         lang: str = "en",
         limit: Optional[int] = None,
         override_proxies: Optional[List[str]] = None,
@@ -725,6 +729,7 @@ class WikidataClient:
             birthday_to: Birth date to (ISO format)
             nationality: List of nationality filters (QIDs, ISO codes, or labels)
             profession: List of profession filters (QIDs or labels)
+            gender: Gender filter; one of "male", "female", "other", or a QID
             lang: Language code for labels
             limit: Results per page (defaults to config.default_page_limit)
             override_proxies: Optional list of proxy URLs
@@ -741,6 +746,7 @@ class WikidataClient:
                 birthday_to=birthday_to,
                 country=nationality,
                 occupations=profession,
+                gender=gender,
                 lang=lang,
                 limit=limit,
                 after_qid=after_qid,
@@ -755,6 +761,7 @@ class WikidataClient:
                 "birthday_to": birthday_to,
                 "nationality": nationality,
                 "profession": profession,
+                "gender": gender,
                 "lang": lang,
             },
             limit=limit,
@@ -812,12 +819,13 @@ class WikidataClient:
         birthday_from: Optional[str] = None,
         birthday_to: Optional[str] = None,
         nationality: Optional[str] = None,
+        gender: Optional[str] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
     ) -> Iterator[PublicFigureNormalizedRecord]:
         """Yield aggregated public figures matching the given filters.
 
-        Applies filters on birthday and nationality as specified in the feature spec.
+        Applies filters on birthday, nationality, and gender as specified in the feature spec.
         Expects human-readable nationality label (e.g., "US", "Germany") or QID;
         query builders translate these into appropriate SPARQL constraints.
         Uses a stable internal ordering by entity ID.
@@ -829,6 +837,7 @@ class WikidataClient:
             birthday_from: Start date filter (ISO format, e.g., "1990-01-01")
             birthday_to: End date filter (ISO format, e.g., "2000-12-31")
             nationality: Nationality filter (country name like "Germany" or QID)
+            gender: Gender filter; one of "male", "female", "other", or a QID
             max_results: Maximum number of results to yield (None for unlimited)
             lang: Language code for labels (default: "en")
 
@@ -858,7 +867,8 @@ class WikidataClient:
         # Log iteration start
         logger.info(
             f"Starting iterate_public_figures: birthday_from={birthday_from}, "
-            f"birthday_to={birthday_to}, nationality={nationality}, max_results={max_results}",
+            f"birthday_to={birthday_to}, nationality={nationality}, gender={gender}, "
+            f"max_results={max_results}",
             extra={
                 "event": "iteration_started",
                 "entity_kind": "public_figure",
@@ -866,6 +876,7 @@ class WikidataClient:
                     "birthday_from": birthday_from,
                     "birthday_to": birthday_to,
                     "nationality": nationality,
+                    "gender": gender,
                 },
                 "max_results": max_results,
             },
@@ -878,6 +889,7 @@ class WikidataClient:
                 birthday_from=birthday_from,
                 birthday_to=birthday_to,
                 nationality=nationality,
+                gender=gender,
                 lang=lang,
             ):
                 yield record
