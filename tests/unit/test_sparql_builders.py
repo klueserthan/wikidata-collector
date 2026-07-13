@@ -34,14 +34,14 @@ class TestBuildPublicFiguresQuery:
     def test_nationality_filter_qid(self):
         """Test nationality filter with QID."""
         query = build_public_figures_query(
-            country="Q145"  # United Kingdom QID
+            nationality="Q145"  # United Kingdom QID
         )
 
         assert "wdt:P27 wd:Q145" in query
 
     def test_nationality_filter_name(self):
         """Test nationality filter with mapped name."""
-        query = build_public_figures_query(country="United Kingdom", lang="en")
+        query = build_public_figures_query(nationality="United Kingdom", lang="en")
 
         # United Kingdom is mapped to Q145 in constants
         assert "wdt:P27 wd:Q145" in query
@@ -100,7 +100,7 @@ class TestBuildPublicFiguresQuery:
     def test_nationality_filter_mapped_name(self):
         """Test nationality filter with mapped country name."""
         query = build_public_figures_query(
-            country="Germany"  # Maps to Q183
+            nationality="Germany"  # Maps to Q183
         )
 
         # Should translate to mapped QID
@@ -109,7 +109,7 @@ class TestBuildPublicFiguresQuery:
     def test_nationality_filter_short_code(self):
         """Test nationality filter with short country code."""
         query = build_public_figures_query(
-            country="US"  # Maps to Q30
+            nationality="US"  # Maps to Q30
         )
 
         # Should handle US code mapping
@@ -153,7 +153,7 @@ class TestBuildPublicFiguresQuery:
     def test_gender_combined_with_country_and_occupation(self):
         """Test gender combined with country and occupation filters."""
         query = build_public_figures_query(
-            country="Germany",
+            nationality="Germany",
             occupations=["politician"],
             gender="female",
         )
@@ -200,13 +200,13 @@ class TestBuildPublicInstitutionsQuery:
 
     def test_type_filter_mapping(self):
         """Test type filter with mapped type name."""
-        query = build_public_institutions_query(type=["political_party"])
+        query = build_public_institutions_query(types=["political_party"])
 
         assert "wdt:P31 wd:Q7278" in query  # political_party mapping
 
     def test_type_filter_qid(self):
         """Test type filter with QID."""
-        query = build_public_institutions_query(type=["Q7278"])
+        query = build_public_institutions_query(types=["Q7278"])
 
         assert "wdt:P31 wd:Q7278" in query
 
@@ -233,12 +233,12 @@ class TestBuildPublicInstitutionsQuery:
     def test_type_filter_with_unmapped_label_raises_error(self):
         """Test type filter with unmapped label raises error."""
         with pytest.raises(ValueError, match="Unknown institution type"):
-            build_public_institutions_query(type=["government agency"], lang="en")
+            build_public_institutions_query(types=["government agency"], lang="en")
 
     def test_multiple_type_filters(self):
         """Test multiple type filters."""
         query = build_public_institutions_query(
-            type=["political_party", "Q327333"]  # mapped key and QID
+            types=["political_party", "Q327333"]  # mapped key and QID
         )
 
         assert "wdt:P31 wd:Q7278" in query  # political_party mapping
@@ -246,7 +246,7 @@ class TestBuildPublicInstitutionsQuery:
 
     def test_multiple_type_filters_combined(self):
         """Test multiple types combined correctly in subquery."""
-        query = build_public_institutions_query(type=["political_party", "government_agency"])
+        query = build_public_institutions_query(types=["political_party", "government_agency"])
 
         assert "wdt:P31 wd:Q7278" in query  # political_party
         assert "wdt:P31 wd:Q327333" in query  # government_agency
@@ -255,7 +255,7 @@ class TestBuildPublicInstitutionsQuery:
         """Test combining multiple filters."""
         query = build_public_institutions_query(
             country="Q30",  # USA
-            type=["government_agency"],
+            types=["government_agency"],
             lang="en",
         )
 
@@ -300,7 +300,7 @@ class TestBuildPublicInstitutionsQuery:
 
     def test_mixed_type_filters_qid_and_mapping(self):
         """Test type filter with mixed QID and mapping key."""
-        query = build_public_institutions_query(type=["Q7278", "government_agency"], lang="en")
+        query = build_public_institutions_query(types=["Q7278", "government_agency"], lang="en")
 
         # QID
         assert "wdt:P31 wd:Q7278" in query
@@ -310,7 +310,7 @@ class TestBuildPublicInstitutionsQuery:
     def test_type_filter_with_whitespace(self):
         """Test that type filter handles whitespace correctly."""
         query = build_public_institutions_query(
-            type=["  political_party  "]  # with extra spaces
+            types=["  political_party  "]  # with extra spaces
         )
 
         # Should be stripped and matched to mapping
@@ -339,7 +339,7 @@ class TestQueryBuilderEdgeCases:
         query = build_public_figures_query(
             birthday_from="1990-01-01",
             birthday_to="2000-12-31",
-            country="United States",
+            nationality="United States",
             occupations=["Q36180", "writer"],
             gender="female",
             lang="fr",
@@ -366,7 +366,7 @@ class TestQueryBuilderEdgeCases:
         """Test query with all possible filters at once."""
         query = build_public_institutions_query(
             country="Q30",
-            type=["Q327333", "political_party"],
+            types=["Q327333", "political_party"],
             lang="es",
             limit=50,
         )
@@ -379,14 +379,14 @@ class TestQueryBuilderEdgeCases:
 
     def test_figures_none_nationality(self):
         """Test query with None nationality (no filter)."""
-        query = build_public_figures_query(country=None)
+        query = build_public_figures_query(nationality=None)
 
         # Should have OPTIONAL clause for country
         assert "OPTIONAL { ?person wdt:P27  ?country. }" in query
 
     def test_institutions_empty_type_list(self):
         """Test query with empty type list."""
-        query = build_public_institutions_query(type=[])
+        query = build_public_institutions_query(types=[])
 
         # Should still have basic structure
         assert "?institution wdt:P31 ?type" in query

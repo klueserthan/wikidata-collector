@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from logging import getLogger
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Type, overload
 
 from pydantic import BaseModel
 
@@ -32,10 +32,24 @@ def _collect_accounts(record: Any) -> List["AccountEntry"]:
                     platform=platform,
                     handle=handle,
                     source="wikidata",
-                    retrieved_at=datetime.utcnow().isoformat(),
+                    retrieved_at=datetime.now(timezone.utc).isoformat(),
                 )
             )
     return accounts
+
+
+def _merge_accounts(
+    existing: List["AccountEntry"], new_accounts: List["AccountEntry"]
+) -> List["AccountEntry"]:
+    """Return a copy of existing accounts with new ones appended, deduplicated by (platform, handle)."""
+    merged = existing.copy()
+    seen = {(acc.platform, acc.handle) for acc in merged}
+    for account in new_accounts:
+        key = (account.platform, account.handle)
+        if key not in seen:
+            merged.append(account)
+            seen.add(key)
+    return merged
 
 
 # Nested models for structured data
@@ -192,14 +206,7 @@ class PublicFigureNormalizedRecord(PublicFigureBase):
         cls, existing: "PublicFigureNormalizedRecord", new_record: PublicFigureWikiRecord
     ) -> "PublicFigureNormalizedRecord":
         """Add data from multiple value fields to the existing PublicFigureNormalizedRecord."""
-        # Collect social media accounts
-        accounts = existing.accounts.copy()
-        new_accounts = _collect_accounts(new_record)
-        for account in new_accounts:
-            if all(
-                acc.platform != account.platform or acc.handle != account.handle for acc in accounts
-            ):
-                accounts.append(account)
+        accounts = _merge_accounts(existing.accounts, _collect_accounts(new_record))
 
         # Collect countries
         countries = existing.countries.copy()
@@ -342,15 +349,7 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
         cls, existing: "PublicInstitutionNormalizedRecord", new_record: PublicInstitutionWikiRecord
     ) -> "PublicInstitutionNormalizedRecord":
         """Add data from multiple value fields to the existing PublicInstitutionNormalizedRecord."""
-        # Collect social media accounts
-        accounts = existing.accounts.copy()
-        new_accounts = _collect_accounts(new_record)
-        for account in new_accounts:
-            if not any(
-                acc.platform == account.platform and acc.handle == account.handle
-                for acc in accounts
-            ):
-                accounts.append(account)
+        accounts = _merge_accounts(existing.accounts, _collect_accounts(new_record))
 
         # Collect countries
         countries = existing.countries.copy()
@@ -373,3 +372,64 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
             types=types,
             accounts=accounts,
         )
+
+
+@overload
+def normalize_bindings(
+    bindings: List[Dict[str, Any]],
+    wiki_record_cls: Type[PublicFigureWikiRecord],
+    normalized_record_cls: Type[PublicFigureNormalizedRecord],
+) -> List[PublicFigureNormalizedRecord]: ...
+
+
+@overload
+def normalize_bindings(
+    bindings: List[Dict[str, Any]],
+    wiki_record_cls: Type[PublicInstitutionWikiRecord],
+    normalized_record_cls: Type[PublicInstitutionNormalizedRecord],
+) -> List[PublicInstitutionNormalizedRecord]: ...
+
+
+def normalize_bindings(
+    bindings: List[Dict[str, Any]],
+    wiki_record_cls: Any,
+    normalized_record_cls: Any,
+) -> List[Any]:
+    """Aggregate consecutive same-QID SPARQL bindings into normalized records.
+
+    SPARQL row expansion yields one row per value combination, ordered by QID.
+    Consecutive rows sharing a QID are folded into a single normalized record via
+    the record family's ``from_wikidata`` / ``from_wikidata_record`` /
+    ``add_from_wikidata_record`` protocol. Rows that fail to parse are logged and
+    skipped.
+
+    Args:
+        bindings: Raw SPARQL result bindings, ordered by QID
+        wiki_record_cls: Wiki record class that parses a single binding
+        normalized_record_cls: Normalized record class that aggregates same-QID records
+
+    Returns:
+        One normalized record per unique QID, in binding order
+    """
+    results: List[Any] = []
+    current: Optional[Any] = None
+
+    for binding in bindings:
+        try:
+            wiki_record = wiki_record_cls.from_wikidata(binding)
+        except (KeyError, ValueError) as e:
+            logger.warning(f"Failed to parse record: {e}")
+            continue
+
+        if current is None:
+            current = normalized_record_cls.from_wikidata_record(wiki_record)
+        elif wiki_record.qid == current.qid:
+            current = normalized_record_cls.add_from_wikidata_record(current, wiki_record)
+        else:
+            results.append(current)
+            current = normalized_record_cls.from_wikidata_record(wiki_record)
+
+    if current is not None:
+        results.append(current)
+
+    return results

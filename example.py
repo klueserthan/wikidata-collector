@@ -53,7 +53,7 @@ def example_get_public_figures():
     figures, proxy = client.get_public_figures(
         birthday_from="1956-01-01",
         birthday_to="1956-01-03",
-        country="US",  # accepts country names, ISO codes, or QIDs
+        nationality="US",  # accepts country names, ISO codes, or QIDs
         # occupations=["politician"],  # mapped key — see constants.py for options
         lang="en",
         limit=5,
@@ -70,7 +70,7 @@ def example_get_public_institutions():
     client = example_default_client()
 
     institutions, proxy = client.get_public_institutions(
-        type=["government_agency"],  # mapped key
+        types=["government_agency"],  # mapped key
         country="US",
         lang="en",
         limit=5,
@@ -87,7 +87,7 @@ def example_keyset_pagination():
     client = example_default_client()
 
     # Page 1
-    figures, _ = client.get_public_figures(country="Q30", limit=5)
+    figures, _ = client.get_public_figures(nationality="Q30", limit=5)
     print(f"Page 1: {len(figures)} figures")
     for fig in figures:
         print(f"  {fig.qid}: {fig.name}")
@@ -96,7 +96,7 @@ def example_keyset_pagination():
         return
 
     # Page 2 — pass the last QID from the previous page
-    figures, _ = client.get_public_figures(country="Q30", limit=5, after_qid=figures[-1].qid)
+    figures, _ = client.get_public_figures(nationality="Q30", limit=5, after_qid=figures[-1].qid)
     print(f"\nPage 2: {len(figures)} figures")
     for fig in figures:
         print(f"  {fig.qid}: {fig.name}")
@@ -113,8 +113,8 @@ def example_error_handling():
         print(f"Caught InvalidFilterError: {e}")
 
     try:
-        # This raises ValueError — unknown country
-        client.get_public_figures(country="Atlantis")
+        # This raises ValueError — unknown nationality
+        client.get_public_figures(nationality="Atlantis")
     except ValueError as e:
         print(f"Caught ValueError: {e}")
 

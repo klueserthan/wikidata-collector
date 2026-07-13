@@ -2,6 +2,8 @@
 Integration tests for iterate_public_institutions API.
 
 These tests verify the iterator-based API for streaming public institutions.
+The entity pipeline's fetch seam (``_fetch_page``) is substituted with fake
+pages; validation, pagination, and max_results handling run for real.
 They use pytest markers to allow selective execution.
 """
 
@@ -37,7 +39,7 @@ class TestIteratePublicInstitutionsHappyPath:
 
     def test_iterate_returns_public_institution_models(self, mocker):
         """Test that iterator yields PublicInstitution model instances."""
-        # Mock the underlying iter_public_institutions to return normalized models
+        # Substitute the fetch seam with a fake page of normalized models
         sample_records = [
             _pi(
                 "Q123",
@@ -56,7 +58,7 @@ class TestIteratePublicInstitutionsHappyPath:
         ]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_institutions", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Call the iterator API
         results = list(
@@ -73,13 +75,13 @@ class TestIteratePublicInstitutionsHappyPath:
 
     def test_iterate_with_max_results(self, mocker):
         """Test that max_results limits the number of results."""
-        # Create a large list of sample results
+        # Create a large page of sample results
         sample_records = [
             _pi(f"Q{i}", f"Institution {i}", founded="2000-01-01T00:00:00") for i in range(100)
         ]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_institutions", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Request only 10 results
         results = list(client.iterate_public_institutions(country="US", max_results=10))
@@ -95,15 +97,18 @@ class TestIteratePublicInstitutionsHappyPath:
         ]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         # Call with country filter
         results = list(client.iterate_public_institutions(country="Germany", lang="en"))
 
-        # Verify the underlying iterator was called with correct parameters
-        mock_iter.assert_called_once_with(country="Germany", type=None, lang="en")
+        # Verify the fetch seam received the filters under their public names
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters == {"country": "Germany", "types": None}
+        assert mock_fetch.call_args.kwargs["lang"] == "en"
 
         assert len(results) == 1
 
@@ -112,8 +117,8 @@ class TestIteratePublicInstitutionsHappyPath:
         sample_records = [_pi("Q200", "Political Party Example", types=["political party"])]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         # Call with types filter
@@ -123,10 +128,10 @@ class TestIteratePublicInstitutionsHappyPath:
             )
         )
 
-        # Verify the underlying iterator was called with correct parameters
-        mock_iter.assert_called_once()
-        call_args = mock_iter.call_args
-        assert call_args.kwargs["type"] == ["political_party", "government_agency"]
+        # Verify the fetch seam received the types filter
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters["types"] == ["political_party", "government_agency"]
 
         assert len(results) == 1
 
@@ -142,8 +147,8 @@ class TestIteratePublicInstitutionsHappyPath:
         ]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         # Call with combined filters
@@ -151,8 +156,10 @@ class TestIteratePublicInstitutionsHappyPath:
             client.iterate_public_institutions(country="US", types=["government_agency"], lang="en")
         )
 
-        # Verify the underlying iterator was called with all filters
-        mock_iter.assert_called_once_with(country="US", type=["government_agency"], lang="en")
+        # Verify the fetch seam received all filters
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters == {"country": "US", "types": ["government_agency"]}
 
         assert len(results) == 1
         assert results[0].name == "US Government Agency"
@@ -166,7 +173,7 @@ class TestIteratePublicInstitutionsEdgeCases:
     def test_iterate_empty_results(self, mocker):
         """Test iteration with no matching results."""
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_institutions", return_value=iter([]))
+        mocker.patch.object(client, "_fetch_page", return_value=([], "direct"))
 
         # Call the iterator with filters that return no results
         results = list(
@@ -198,16 +205,13 @@ class TestIteratePublicInstitutionsEdgeCases:
         assert "max_results must be >= 1" in str(exc_info.value)
 
     def test_query_execution_error_propagated(self, mocker):
-        """Test that QueryExecutionError from underlying iterator is propagated."""
+        """Test that QueryExecutionError from the fetch seam is propagated."""
         client = WikidataClient()
 
-        # Mock iter_public_institutions to raise QueryExecutionError
-        def error_generator():
-            raise QueryExecutionError("Upstream SPARQL endpoint unavailable")
-            yield  # pragma: no cover
-
         mocker.patch.object(
-            client, "iter_public_institutions", side_effect=lambda **kwargs: error_generator()
+            client,
+            "_fetch_page",
+            side_effect=QueryExecutionError("Upstream SPARQL endpoint unavailable"),
         )
 
         with pytest.raises(QueryExecutionError) as exc_info:
@@ -219,14 +223,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         """Test that ValueError from query builder is converted to InvalidFilterError."""
         client = WikidataClient()
 
-        # Mock iter_public_institutions to raise ValueError
-        def error_generator():
-            raise ValueError("Invalid QID format")
-            yield  # pragma: no cover
-
-        mocker.patch.object(
-            client, "iter_public_institutions", side_effect=lambda **kwargs: error_generator()
-        )
+        mocker.patch.object(client, "_fetch_page", side_effect=ValueError("Invalid QID format"))
 
         with pytest.raises(InvalidFilterError) as exc_info:
             list(client.iterate_public_institutions(country="Q!!!invalid"))
@@ -238,7 +235,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         sample_records = [_pi("Q1", "Institution 1", founded="2000-01-01T00:00:00")]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_institutions", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Call without filters
         results = list(client.iterate_public_institutions())
@@ -251,7 +248,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         sample_records = [_pi("Q1", "Institution 1"), _pi("Q2", "Institution 2")]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_institutions", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         results = list(client.iterate_public_institutions(max_results=1))
 
@@ -263,17 +260,17 @@ class TestIteratePublicInstitutionsEdgeCases:
         sample_records = [_pi("Q999", "US Institution", countries=["United States"])]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         # Call with ISO code
         results = list(client.iterate_public_institutions(country="USA"))
 
         # Verify the ISO code was passed
-        mock_iter.assert_called_once()
-        call_args = mock_iter.call_args
-        assert call_args.kwargs["country"] == "USA"
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters["country"] == "USA"
 
         assert len(results) == 1
 
@@ -282,17 +279,17 @@ class TestIteratePublicInstitutionsEdgeCases:
         sample_records = [_pi("Q888", "UK Institution", countries=["United Kingdom"])]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         # Call with QID
         results = list(client.iterate_public_institutions(country="Q145"))
 
         # Verify the QID was passed
-        mock_iter.assert_called_once()
-        call_args = mock_iter.call_args
-        assert call_args.kwargs["country"] == "Q145"
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters["country"] == "Q145"
 
         assert len(results) == 1
 
@@ -301,8 +298,8 @@ class TestIteratePublicInstitutionsEdgeCases:
         sample_records = [_pi("Q777", "Party Example", types=["political party"])]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         # Call with mapped type keys
@@ -311,32 +308,27 @@ class TestIteratePublicInstitutionsEdgeCases:
         )
 
         # Verify the types were passed
-        mock_iter.assert_called_once()
-        call_args = mock_iter.call_args
-        assert call_args.kwargs["type"] == ["political_party", "municipality"]
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters["types"] == ["political_party", "municipality"]
 
         assert len(results) == 1
 
     def test_empty_types_list(self, mocker):
         """Test with empty types list."""
-        sample_sparql_results = [
-            {
-                "institution": {"value": "http://www.wikidata.org/entity/Q1"},
-                "institutionLabel": {"value": "Institution 1"},
-            }
-        ]
+        sample_records = [_pi("Q1", "Institution 1")]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_institutions", return_value=iter(sample_sparql_results)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
-        # Call with empty types list - should be treated as None
+        # Call with empty types list - should be passed through as is
         results = list(client.iterate_public_institutions(types=[]))
 
-        mock_iter.assert_called_once()
-        call_args = mock_iter.call_args
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
         # Empty list should be passed as is (query builder handles it)
-        assert call_args.kwargs["type"] == []
+        assert filters["types"] == []
 
         assert len(results) == 1

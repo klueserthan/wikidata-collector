@@ -119,14 +119,14 @@ class TestFiguresQueryInjectionPrevention:
     def test_nationality_qid_injection_prevented(self):
         """Test that malicious QID in nationality is rejected."""
         with pytest.raises(ValueError, match="Invalid QID format"):
-            build_public_figures_query(country="Q42; DROP TABLE")
+            build_public_figures_query(nationality="Q42; DROP TABLE")
 
     def test_nationality_label_injection_escaped(self):
         """Test that malicious label in nationality is rejected (not in mappings)."""
         malicious_input = '" . } DROP GRAPH <urn:wikidata> ; { #'
         # This input is not a valid country name or QID, so it should raise an error
-        with pytest.raises(ValueError, match="Unknown country"):
-            build_public_figures_query(country=malicious_input)
+        with pytest.raises(ValueError, match="Unknown nationality"):
+            build_public_figures_query(nationality=malicious_input)
 
     def test_profession_qid_injection_prevented(self):
         """Test that malicious QID in profession is rejected."""
@@ -158,13 +158,13 @@ class TestInstitutionsQueryInjectionPrevention:
     def test_type_qid_injection_prevented(self):
         """Test that malicious QID in type is rejected."""
         with pytest.raises(ValueError, match="Invalid QID format"):
-            build_public_institutions_query(type=["Q42; SELECT *"])
+            build_public_institutions_query(types=["Q42; SELECT *"])
 
     def test_type_label_injection_rejected(self):
         """Test that malicious label in type is rejected (not in mappings)."""
         malicious_input = '"; } FILTER(?x = "bad'
         with pytest.raises(ValueError, match="Unknown institution type"):
-            build_public_institutions_query(type=[malicious_input])
+            build_public_institutions_query(types=[malicious_input])
 
 
 class TestCountryCodeEscaping:
@@ -172,7 +172,7 @@ class TestCountryCodeEscaping:
 
     def test_valid_country_code_mapped(self):
         """Test that valid country codes in the mapping are used."""
-        query = build_public_figures_query(country="US")
+        query = build_public_figures_query(nationality="US")
         # US is mapped to Q30 in COUNTRY_MAPPINGS
         assert "wdt:P27 wd:Q30" in query
 
@@ -180,5 +180,5 @@ class TestCountryCodeEscaping:
         """Test that malicious country codes not in mapping are rejected."""
         # This is not in COUNTRY_MAPPINGS, so it should raise an error
         malicious_input = 'US"'
-        with pytest.raises(ValueError, match="Unknown country"):
-            build_public_figures_query(country=malicious_input)
+        with pytest.raises(ValueError, match="Unknown nationality"):
+            build_public_figures_query(nationality=malicious_input)

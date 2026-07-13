@@ -65,25 +65,29 @@ def iterate_institutions_with_max_results():
     print(f"\n  Yielded {count} total results.\n")
 
 
-def iterate_with_low_level_iter():
-    """iter_public_figures: lower-level iterator without max_results.
+def iterate_with_manual_pagination():
+    """get_public_figures: fetch pages manually with keyset pagination.
 
     Useful when you want to control the page size and stop condition yourself.
     """
     client = example_default_client()
 
     count = 0
-    for figure in client.iter_public_figures(
-        birthday_from="1990-01-01",
-        birthday_to="1990-06-30",
-        nationality="Germany",
-        limit=5,
-    ):
-        count += 1
-        print(f"  {count}. {figure.name} ({figure.qid})")
-        if count >= 10:
-            print("  ... (stopping early)")
+    after_qid = None
+    for _ in range(2):  # fetch two pages
+        figures, _proxy = client.get_public_figures(
+            birthday_from="1990-01-01",
+            birthday_to="1990-06-30",
+            nationality="Germany",
+            limit=5,
+            after_qid=after_qid,
+        )
+        if not figures:
             break
+        for figure in figures:
+            count += 1
+            print(f"  {count}. {figure.name} ({figure.qid})")
+        after_qid = figures[-1].qid
 
     print(f"\n  Iterated through {count} results.\n")
 
@@ -119,8 +123,8 @@ if __name__ == "__main__":
     print("=== iterate_public_institutions (with max_results) ===\n")
     iterate_institutions_with_max_results()
 
-    print("=== iter_public_figures (low-level, manual stop) ===\n")
-    iterate_with_low_level_iter()
+    print("=== get_public_figures (low-level, manual pagination) ===\n")
+    iterate_with_manual_pagination()
 
     print("=== Structured Logging ===\n")
     iterate_with_logging()

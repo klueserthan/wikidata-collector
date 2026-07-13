@@ -30,27 +30,3 @@ def sample_sparql_response():
             ]
         }
     }
-
-
-@pytest.fixture
-def sample_expanded_data():
-    """Sample expanded entity data."""
-    return {
-        "aliases": ["Douglas Noël Adams"],
-        "nationalities": ["United Kingdom"],
-        "gender": "male",
-        "professions": ["writer", "humorist"],
-        "place_of_birth": ["Cambridge"],
-        "website": [
-            {
-                "url": "https://www.douglasadams.com",
-                "source": "wikidata",
-                "retrieved_at": "2024-01-15T10:00:00Z",
-            }
-        ],
-        "accounts": [],
-        "affiliations": [],
-        "notable_works": ["The Hitchhiker's Guide to the Galaxy"],
-        "awards": [],
-        "identifiers": [],
-    }
