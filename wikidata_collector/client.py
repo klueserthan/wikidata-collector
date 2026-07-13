@@ -2,12 +2,28 @@
 WikidataClient - Pure Python client for Wikidata SPARQL queries.
 
 This client has no FastAPI dependencies and can be used standalone.
+
+Entity retrieval is a single generic pipeline (validate filters -> build query ->
+fetch page -> normalize -> keyset-paginate -> honor max_results), parameterized by
+an entity spec. The public per-entity methods are thin delegates onto it.
 """
 
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, Tuple, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    TypeVar,
+)
 
 import requests
 
@@ -24,6 +40,7 @@ from .models import (
     PublicFigureWikiRecord,
     PublicInstitutionNormalizedRecord,
     PublicInstitutionWikiRecord,
+    normalize_bindings,
 )
 from .proxy import ProxyManager, validate_proxy_list
 from .query_builders.figures_query_builder import build_public_figures_query
@@ -156,6 +173,92 @@ def _log_query_failure(
             "event": "query_failure",
         },
     )
+
+
+def _is_valid_date_format(date_str: str) -> bool:
+    """Validate ISO date format (YYYY-MM-DD).
+
+    Args:
+        date_str: Date string to validate
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if not date_str:
+        return False
+
+    try:
+        # Use datetime.strptime for proper validation including leap years
+        datetime.strptime(date_str, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
+def _no_filter_validation(filters: Dict[str, Any]) -> None:
+    """Default entity spec validator: accept all filters."""
+
+
+def _validate_figure_filters(filters: Dict[str, Any]) -> None:
+    """Validate public figure filters (fail-fast on malformed dates).
+
+    Args:
+        filters: Filter dict keyed by the public filter vocabulary
+
+    Raises:
+        InvalidFilterError: If a birthday filter is not a valid ISO date
+    """
+    for field_name in ("birthday_from", "birthday_to"):
+        value = filters.get(field_name)
+        if value and not _is_valid_date_format(value):
+            raise InvalidFilterError(
+                f"Invalid {field_name} format: {value}. Expected ISO format (YYYY-MM-DD)"
+            )
+
+
+def _normalize_figure_bindings(
+    bindings: List[Dict[str, Any]],
+) -> List[PublicFigureNormalizedRecord]:
+    return normalize_bindings(bindings, PublicFigureWikiRecord, PublicFigureNormalizedRecord)
+
+
+def _normalize_institution_bindings(
+    bindings: List[Dict[str, Any]],
+) -> List[PublicInstitutionNormalizedRecord]:
+    return normalize_bindings(
+        bindings, PublicInstitutionWikiRecord, PublicInstitutionNormalizedRecord
+    )
+
+
+@dataclass(frozen=True)
+class _EntitySpec(Generic[TRecord]):
+    """Everything the entity pipeline needs to know about one entity kind.
+
+    Adding an entity kind means adding a spec (plus a record family and a query
+    builder) — not a new pipeline.
+    """
+
+    entity_kind: str
+    query_type: str
+    build_query: Callable[..., str]
+    normalize: Callable[[List[Dict[str, Any]]], List[TRecord]]
+    validate_filters: Callable[[Dict[str, Any]], None] = _no_filter_validation
+
+
+_PUBLIC_FIGURES: "_EntitySpec[PublicFigureNormalizedRecord]" = _EntitySpec(
+    entity_kind="public_figure",
+    query_type="public_figures",
+    build_query=build_public_figures_query,
+    normalize=_normalize_figure_bindings,
+    validate_filters=_validate_figure_filters,
+)
+
+_PUBLIC_INSTITUTIONS: "_EntitySpec[PublicInstitutionNormalizedRecord]" = _EntitySpec(
+    entity_kind="public_institution",
+    query_type="public_institutions",
+    build_query=build_public_institutions_query,
+    normalize=_normalize_institution_bindings,
+)
 
 
 class WikidataClient:
@@ -505,188 +608,96 @@ class WikidataClient:
             "this indicates a bug in _execute_sparql_attempt."
         )
 
-    def get_public_figures(
+    def _fetch_page(
         self,
-        birthday_from: Optional[str] = None,
-        birthday_to: Optional[str] = None,
-        country: Optional[str] = None,
-        occupations: Optional[List[str]] = None,
-        gender: Optional[str] = None,
+        spec: _EntitySpec[TRecord],
+        filters: Dict[str, Any],
+        *,
         lang: str = "en",
         limit: Optional[int] = None,
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
-    ) -> Tuple[List[PublicFigureNormalizedRecord], str]:
-        """Get public figures with optional filters.
+    ) -> Tuple[List[TRecord], str]:
+        """Fetch and normalize one page of results for an entity kind.
+
+        This is the pipeline's fetch seam: tests substitute fake pages here,
+        production builds a SPARQL query and executes it via the proxy layer.
 
         Args:
-            birthday_from: Birth date from (ISO format)
-            birthday_to: Birth date to (ISO format)
-            country: Country filter (QID, ISO code, or label)
-            occupations: List of occupation filters (QIDs or labels)
-            gender: Gender filter; one of "male", "female", "other", or a QID
+            spec: Entity spec for the entity kind being fetched
+            filters: Filter dict keyed by the entity's public filter vocabulary
             lang: Language code for labels
-            limit: Maximum results to return (defaults to config.default_page_limit)
+            limit: Maximum results to return (defaults to config.default_limit)
             cursor: Offset for pagination
             after_qid: QID for keyset pagination
             override_proxies: Optional list of proxy URLs
 
         Returns:
-            Tuple of (List[PublicFigureNormalizedRecord], used_proxy)
+            Tuple of (normalized records, used_proxy)
         """
         if limit is None:
             limit = self.config.default_limit
-        query = build_public_figures_query(
-            birthday_from=birthday_from,
-            birthday_to=birthday_to,
-            country=country,
-            occupations=occupations,
-            gender=gender,
-            lang=lang,
-            limit=limit,
-            cursor=cursor,
-            after_qid=after_qid,
-        )
 
+        query = spec.build_query(
+            **filters, lang=lang, limit=limit, cursor=cursor, after_qid=after_qid
+        )
         result, used_proxy = self.execute_sparql_query(query, override_proxies)
         bindings = result.get("results", {}).get("bindings", [])
-
-        # Aggregate SPARQL bindings by QID (one page of normalized records)
-        results: List[PublicFigureNormalizedRecord] = []
-        current: Optional[PublicFigureNormalizedRecord] = None
-
-        for binding in bindings:
-            try:
-                wiki_record = PublicFigureWikiRecord.from_wikidata(binding)
-            except (KeyError, ValueError) as e:
-                logger.warning(f"Failed to parse record: {e}")
-                continue
-
-            if current is None:
-                current = PublicFigureNormalizedRecord.from_wikidata_record(wiki_record)
-                continue
-
-            if wiki_record.qid == current.qid:
-                current = PublicFigureNormalizedRecord.add_from_wikidata_record(
-                    current, wiki_record
-                )
-                continue
-
-            results.append(current)
-            current = PublicFigureNormalizedRecord.from_wikidata_record(wiki_record)
-
-        if current is not None:
-            results.append(current)
-
-        return results, used_proxy
-
-    def get_public_institutions(
-        self,
-        country: Optional[str] = None,
-        type: Optional[List[str]] = None,
-        lang: str = "en",
-        limit: Optional[int] = None,
-        cursor: int = 0,
-        after_qid: Optional[str] = None,
-        override_proxies: Optional[List[str]] = None,
-    ) -> Tuple[List[PublicInstitutionNormalizedRecord], str]:
-        """Get public institutions with optional filters.
-
-        Args:
-            country: Country filter (QID, ISO code, or label)
-            type: List of institution type filters (mapped keys, QIDs, or labels)
-            lang: Language code for labels
-            limit: Maximum results to return (defaults to config.default_page_limit)
-            cursor: Offset for pagination
-            after_qid: QID for keyset pagination
-            override_proxies: Optional list of proxy URLs
-
-        Returns:
-            Tuple of (List[PublicInstitutionNormalizedRecord], used_proxy)
-        """
-        if limit is None:
-            limit = self.config.default_limit
-        query = build_public_institutions_query(
-            country=country,
-            type=type,
-            lang=lang,
-            limit=limit,
-            cursor=cursor,
-            after_qid=after_qid,
-        )
-
-        result, used_proxy = self.execute_sparql_query(query, override_proxies)
-        bindings = result.get("results", {}).get("bindings", [])
-
-        # Aggregate SPARQL bindings by QID (one page of normalized records)
-        results: List[PublicInstitutionNormalizedRecord] = []
-        current: Optional[PublicInstitutionNormalizedRecord] = None
-
-        for binding in bindings:
-            try:
-                wiki_record = PublicInstitutionWikiRecord.from_wikidata(binding)
-            except (KeyError, ValueError) as e:
-                logger.warning(f"Failed to parse record: {e}")
-                continue
-
-            if current is None:
-                current = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record)
-                continue
-
-            if wiki_record.qid == current.qid:
-                current = PublicInstitutionNormalizedRecord.add_from_wikidata_record(
-                    current, wiki_record
-                )
-                continue
-
-            results.append(current)
-            current = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record)
-
-        if current is not None:
-            results.append(current)
-
-        return results, used_proxy
+        return spec.normalize(bindings), used_proxy
 
     def _paginate_sparql_results(
         self,
-        query_type: str,
-        fetch_page_fn: Callable[[Optional[str]], Tuple[List[TRecord], str]],
-        params: Dict[str, Any],
-        limit: int,
+        spec: _EntitySpec[TRecord],
+        filters: Dict[str, Any],
+        *,
+        lang: str = "en",
+        limit: Optional[int] = None,
+        override_proxies: Optional[List[str]] = None,
     ) -> Iterator[TRecord]:
-        """Generic helper for paginating normalized record pages with keyset pagination.
+        """Yield normalized records across pages using keyset pagination.
+
+        Records can be expanded in the SPARQL query (multi-row per entity), so
+        end-of-results is determined by the number of unique QIDs per page, not
+        the raw record count.
 
         Args:
-            query_type: Type of query (e.g., 'public_figures', 'public_institutions')
-            fetch_page_fn: Function to fetch a page of results, must accept after_qid parameter
-            params: Query parameters for logging
-            limit: Number of results per page
+            spec: Entity spec for the entity kind being paginated
+            filters: Filter dict keyed by the entity's public filter vocabulary
+            lang: Language code for labels
+            limit: Page size (defaults to config.default_limit)
+            override_proxies: Optional list of proxy URLs
 
         Yields:
             Individual normalized records
         """
-        after_qid = None
+        if limit is None:
+            limit = self.config.default_limit
+
+        after_qid: Optional[str] = None
         page_num = 0
 
         while True:
             page_num += 1
             start_time = time.time()
 
-            # Fetch page using provided function
-            results, proxy = fetch_page_fn(after_qid)
+            results, proxy = self._fetch_page(
+                spec,
+                filters,
+                lang=lang,
+                limit=limit,
+                after_qid=after_qid,
+                override_proxies=override_proxies,
+            )
             latency_ms = (time.time() - start_time) * 1000
 
-            # Calculate metrics for logging and pagination control
             raw_count = len(results)
-            unique_qids_in_page = {record.qid for record in results}
-            unique_qid_count = len(unique_qids_in_page)
+            unique_qid_count = len({record.qid for record in results})
 
-            # Log page fetch
-            _log_page_fetch(query_type, page_num, after_qid, raw_count, unique_qid_count)
+            _log_page_fetch(spec.query_type, page_num, after_qid, raw_count, unique_qid_count)
             _log_query_execution(
-                query_type,
-                params,
+                spec.query_type,
+                filters,
                 page_num,
                 raw_count,
                 unique_qid_count,
@@ -697,187 +708,49 @@ class WikidataClient:
             if not results:
                 break
 
-            for result in results:
-                yield result
+            yield from results
 
-            # Records can be expanded in the SPARQL query (e.g., multi-row per entity),
-            # so we must determine end-of-results based on the number of unique QIDs.
             if unique_qid_count < limit:
                 break
 
             # Keyset pagination: use the last record's QID.
             after_qid = results[-1].qid
 
-    def iter_public_figures(
+    def _iterate(
         self,
-        birthday_from: Optional[str] = None,
-        birthday_to: Optional[str] = None,
-        nationality: Optional[str] = None,
-        profession: Optional[List[str]] = None,
-        lang: str = "en",
-        limit: Optional[int] = None,
-        override_proxies: Optional[List[str]] = None,
-        gender: Optional[str] = None,
-    ) -> Iterator[PublicFigureNormalizedRecord]:
-        """Iterate over public figures with automatic pagination.
-
-        Uses keyset pagination with a fixed page size for efficient iteration.
-        Yields individual results one at a time.
-
-        Args:
-            birthday_from: Birth date from (ISO format)
-            birthday_to: Birth date to (ISO format)
-            nationality: Nationality filter (QID, ISO code, or label)
-            profession: List of profession filters (QIDs or labels)
-            lang: Language code for labels
-            limit: Results per page (defaults to config.default_page_limit)
-            override_proxies: Optional list of proxy URLs
-            gender: Gender filter; one of 'male', 'female', 'other', or a QID
-
-        Yields:
-            Individual public figure normalized records
-        """
-        if limit is None:
-            limit = self.config.default_limit
-
-        def fetch_page(after_qid: Optional[str]) -> Tuple[List[PublicFigureNormalizedRecord], str]:
-            return self.get_public_figures(
-                birthday_from=birthday_from,
-                birthday_to=birthday_to,
-                country=nationality,
-                occupations=profession,
-                gender=gender,
-                lang=lang,
-                limit=limit,
-                after_qid=after_qid,
-                override_proxies=override_proxies,
-            )
-
-        yield from self._paginate_sparql_results(
-            query_type="public_figures",
-            fetch_page_fn=fetch_page,
-            params={
-                "birthday_from": birthday_from,
-                "birthday_to": birthday_to,
-                "nationality": nationality,
-                "profession": profession,
-                "gender": gender,
-                "lang": lang,
-            },
-            limit=limit,
-        )
-
-    def iter_public_institutions(
-        self,
-        country: Optional[str] = None,
-        type: Optional[List[str]] = None,
-        lang: str = "en",
-        limit: Optional[int] = None,
-        override_proxies: Optional[List[str]] = None,
-    ) -> Iterator[PublicInstitutionNormalizedRecord]:
-        """Iterate over public institutions with automatic pagination.
-
-        Uses keyset pagination with a fixed page size for efficient iteration.
-        Yields individual results one at a time.
-
-        Args:
-            country: Country filter (QID, ISO code, or label)
-            type: List of institution type filters (mapped keys, QIDs, or labels)
-            jurisdiction: Jurisdiction filter (QID or label)
-            lang: Language code for labels
-            limit: Results per page (defaults to config.default_page_limit)
-            override_proxies: Optional list of proxy URLs
-
-        Yields:
-            Individual public institution results (SPARQL bindings)
-        """
-        if limit is None:
-            limit = self.config.default_limit
-
-        def fetch_page(
-            after_qid: Optional[str],
-        ) -> Tuple[List[PublicInstitutionNormalizedRecord], str]:
-            return self.get_public_institutions(
-                country=country,
-                type=type,
-                lang=lang,
-                limit=limit,
-                after_qid=after_qid,
-                override_proxies=override_proxies,
-            )
-
-        yield from self._paginate_sparql_results(
-            query_type="public_institutions",
-            fetch_page_fn=fetch_page,
-            params={"country": country, "type": type, "lang": lang},
-            limit=limit,
-        )
-
-    def iterate_public_figures(
-        self,
+        spec: _EntitySpec[TRecord],
+        filters: Dict[str, Any],
         *,
-        birthday_from: Optional[str] = None,
-        birthday_to: Optional[str] = None,
-        nationality: Optional[str] = None,
-        gender: Optional[str] = None,
-        max_results: Optional[int] = None,
-        lang: str = "en",
-    ) -> Iterator[PublicFigureNormalizedRecord]:
-        """Yield aggregated public figures matching the given filters.
-
-        Applies filters on birthday, nationality, and gender as specified in the feature spec.
-        Expects human-readable nationality label (e.g., "US", "Germany") or QID;
-        query builders translate these into appropriate SPARQL constraints.
-        Uses a stable internal ordering by entity ID.
-        Hides SPARQL pagination; callers simply iterate over results.
-        Respects `max_results` when provided; otherwise yields all matches subject to
-        environment and upstream constraints.
+        max_results: Optional[int],
+        lang: str,
+    ) -> Iterator[TRecord]:
+        """Run the full entity pipeline: validate, paginate, cap, log lifecycle.
 
         Args:
-            birthday_from: Start date filter (ISO format, e.g., "1990-01-01")
-            birthday_to: End date filter (ISO format, e.g., "2000-12-31")
-            nationality: Nationality filter (country name like "Germany" or QID)
-            gender: Gender filter; one of "male", "female", "other", or a QID
+            spec: Entity spec for the entity kind being iterated
+            filters: Filter dict keyed by the entity's public filter vocabulary
             max_results: Maximum number of results to yield (None for unlimited)
-            lang: Language code for labels (default: "en")
+            lang: Language code for labels
 
         Yields:
-            PublicFigure: Normalized public figure objects
+            Individual normalized records
 
         Raises:
             InvalidFilterError: If filter parameters are invalid or malformed
             QueryExecutionError: If upstream query execution fails
         """
-        # Validate date filters if provided
-        if birthday_from and not self._is_valid_date_format(birthday_from):
-            raise InvalidFilterError(
-                f"Invalid birthday_from format: {birthday_from}. Expected ISO format (YYYY-MM-DD)"
-            )
-        if birthday_to and not self._is_valid_date_format(birthday_to):
-            raise InvalidFilterError(
-                f"Invalid birthday_to format: {birthday_to}. Expected ISO format (YYYY-MM-DD)"
-            )
-
-        # Validate max_results if provided
+        spec.validate_filters(filters)
         self._validate_max_results(max_results)
 
         count = 0
         success = False
 
-        # Log iteration start
         logger.info(
-            f"Starting iterate_public_figures: birthday_from={birthday_from}, "
-            f"birthday_to={birthday_to}, nationality={nationality}, gender={gender}, "
-            f"max_results={max_results}",
+            f"Starting iterate_{spec.query_type}: filters={filters}, max_results={max_results}",
             extra={
                 "event": "iteration_started",
-                "entity_kind": "public_figure",
-                "filters": {
-                    "birthday_from": birthday_from,
-                    "birthday_to": birthday_to,
-                    "nationality": nationality,
-                    "gender": gender,
-                },
+                "entity_kind": spec.entity_kind,
+                "filters": filters,
                 "max_results": max_results,
             },
         )
@@ -885,13 +758,7 @@ class WikidataClient:
         start_time = time.time()
 
         try:
-            for record in self.iter_public_figures(
-                birthday_from=birthday_from,
-                birthday_to=birthday_to,
-                nationality=nationality,
-                gender=gender,
-                lang=lang,
-            ):
+            for record in self._paginate_sparql_results(spec, filters, lang=lang):
                 yield record
                 count += 1
 
@@ -900,7 +767,7 @@ class WikidataClient:
                         f"Reached max_results limit of {max_results}",
                         extra={
                             "event": "max_results_reached",
-                            "entity_kind": "public_figure",
+                            "entity_kind": spec.entity_kind,
                             "result_count": count,
                         },
                     )
@@ -915,7 +782,7 @@ class WikidataClient:
                 f"Invalid filter parameters: {e}",
                 extra={
                     "event": "iteration_failed",
-                    "entity_kind": "public_figure",
+                    "entity_kind": spec.entity_kind,
                     "error_type": "invalid_filters",
                 },
             )
@@ -926,7 +793,7 @@ class WikidataClient:
                 f"Iteration failed: {e}",
                 extra={
                     "event": "iteration_failed",
-                    "entity_kind": "public_figure",
+                    "entity_kind": spec.entity_kind,
                     "error_type": type(e).__name__,
                 },
             )
@@ -936,10 +803,10 @@ class WikidataClient:
             if success:
                 duration_ms = (time.time() - start_time) * 1000
                 logger.info(
-                    f"Completed iterate_public_figures: yielded {count} results in {duration_ms:.2f}ms",
+                    f"Completed iterate_{spec.query_type}: yielded {count} results in {duration_ms:.2f}ms",
                     extra={
                         "event": "iteration_completed",
-                        "entity_kind": "public_figure",
+                        "entity_kind": spec.entity_kind,
                         "result_count": count,
                         "duration_ms": duration_ms,
                         "status": "success",
@@ -958,134 +825,168 @@ class WikidataClient:
         if max_results is not None and max_results < 1:
             raise InvalidFilterError(f"max_results must be >= 1, got {max_results}")
 
-    def _is_valid_date_format(self, date_str: str) -> bool:
-        """Validate ISO date format (YYYY-MM-DD).
+    def get_public_figures(
+        self,
+        birthday_from: Optional[str] = None,
+        birthday_to: Optional[str] = None,
+        nationality: Optional[str] = None,
+        occupations: Optional[List[str]] = None,
+        gender: Optional[str] = None,
+        lang: str = "en",
+        limit: Optional[int] = None,
+        cursor: int = 0,
+        after_qid: Optional[str] = None,
+        override_proxies: Optional[List[str]] = None,
+    ) -> Tuple[List[PublicFigureNormalizedRecord], str]:
+        """Get one page of public figures with optional filters.
 
         Args:
-            date_str: Date string to validate
+            birthday_from: Birth date from (ISO format)
+            birthday_to: Birth date to (ISO format)
+            nationality: Nationality filter (QID, ISO code, or label)
+            occupations: List of occupation filters (QIDs or labels)
+            gender: Gender filter; one of "male", "female", "other", or a QID
+            lang: Language code for labels
+            limit: Maximum results to return (defaults to config.default_limit)
+            cursor: Offset for pagination
+            after_qid: QID for keyset pagination
+            override_proxies: Optional list of proxy URLs
 
         Returns:
-            True if valid, False otherwise
+            Tuple of (List[PublicFigureNormalizedRecord], used_proxy)
         """
-        if not date_str:
-            return False
+        return self._fetch_page(
+            _PUBLIC_FIGURES,
+            {
+                "birthday_from": birthday_from,
+                "birthday_to": birthday_to,
+                "nationality": nationality,
+                "occupations": occupations,
+                "gender": gender,
+            },
+            lang=lang,
+            limit=limit,
+            cursor=cursor,
+            after_qid=after_qid,
+            override_proxies=override_proxies,
+        )
 
-        try:
-            # Use datetime.strptime for proper validation including leap years
-            datetime.strptime(date_str, "%Y-%m-%d")
-            return True
-        except ValueError:
-            return False
+    def get_public_institutions(
+        self,
+        country: Optional[str] = None,
+        types: Optional[List[str]] = None,
+        lang: str = "en",
+        limit: Optional[int] = None,
+        cursor: int = 0,
+        after_qid: Optional[str] = None,
+        override_proxies: Optional[List[str]] = None,
+    ) -> Tuple[List[PublicInstitutionNormalizedRecord], str]:
+        """Get one page of public institutions with optional filters.
+
+        Args:
+            country: Country filter (QID, ISO code, or label)
+            types: List of institution type filters (mapped keys, QIDs, or labels)
+            lang: Language code for labels
+            limit: Maximum results to return (defaults to config.default_limit)
+            cursor: Offset for pagination
+            after_qid: QID for keyset pagination
+            override_proxies: Optional list of proxy URLs
+
+        Returns:
+            Tuple of (List[PublicInstitutionNormalizedRecord], used_proxy)
+        """
+        return self._fetch_page(
+            _PUBLIC_INSTITUTIONS,
+            {"country": country, "types": types},
+            lang=lang,
+            limit=limit,
+            cursor=cursor,
+            after_qid=after_qid,
+            override_proxies=override_proxies,
+        )
+
+    def iterate_public_figures(
+        self,
+        *,
+        birthday_from: Optional[str] = None,
+        birthday_to: Optional[str] = None,
+        nationality: Optional[str] = None,
+        occupations: Optional[List[str]] = None,
+        gender: Optional[str] = None,
+        max_results: Optional[int] = None,
+        lang: str = "en",
+    ) -> Iterator[PublicFigureNormalizedRecord]:
+        """Yield aggregated public figures matching the given filters.
+
+        Expects human-readable filter labels (e.g., "US", "Germany", "writer") or QIDs;
+        query builders translate these into appropriate SPARQL constraints.
+        Uses a stable internal ordering by entity ID.
+        Hides SPARQL pagination; callers simply iterate over results.
+        Respects `max_results` when provided; otherwise yields all matches subject to
+        environment and upstream constraints.
+
+        Args:
+            birthday_from: Start date filter (ISO format, e.g., "1990-01-01")
+            birthday_to: End date filter (ISO format, e.g., "2000-12-31")
+            nationality: Nationality filter (country name like "Germany", ISO code, or QID)
+            occupations: List of occupation filters (labels or QIDs)
+            gender: Gender filter; one of "male", "female", "other", or a QID
+            max_results: Maximum number of results to yield (None for unlimited)
+            lang: Language code for labels (default: "en")
+
+        Yields:
+            PublicFigureNormalizedRecord: Normalized public figure objects
+
+        Raises:
+            InvalidFilterError: If filter parameters are invalid or malformed
+            QueryExecutionError: If upstream query execution fails
+        """
+        yield from self._iterate(
+            _PUBLIC_FIGURES,
+            {
+                "birthday_from": birthday_from,
+                "birthday_to": birthday_to,
+                "nationality": nationality,
+                "occupations": occupations,
+                "gender": gender,
+            },
+            max_results=max_results,
+            lang=lang,
+        )
 
     def iterate_public_institutions(
         self,
         *,
         country: Optional[str] = None,
         types: Optional[List[str]] = None,
-        jurisdiction: Optional[str] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
     ) -> Iterator[PublicInstitutionNormalizedRecord]:
         """Yield aggregated public institutions matching the given filters.
 
-        Note: This is a simplified implementation matching the underlying SPARQL support.
-        The full API contract (founded_from, founded_to, country list, headquarter) will be
-        implemented when the underlying query builder supports these filters.
+        Expects human-readable filter labels (e.g., "US", "government_agency") or QIDs;
+        query builders translate these into appropriate SPARQL constraints.
+        Uses a stable internal ordering by entity ID.
+        Hides SPARQL pagination; callers simply iterate over results.
+        Respects `max_results` when provided; otherwise yields all matches subject to
+        environment and upstream constraints.
 
         Args:
             country: Country filter (single value: QID, ISO code, or label)
-            types: List of institution type filters (labels or codes)
-            jurisdiction: Jurisdiction filter (QID or label)
+            types: List of institution type filters (labels or QIDs)
             max_results: Maximum number of results to yield (None for unlimited)
             lang: Language code for labels (default: "en")
 
         Yields:
-            PublicInstitution: Normalized public institution objects
+            PublicInstitutionNormalizedRecord: Normalized public institution objects
 
         Raises:
             InvalidFilterError: If filter parameters are invalid or malformed
             QueryExecutionError: If upstream query execution fails
         """
-        # Validate max_results if provided
-        self._validate_max_results(max_results)
-
-        count = 0
-        success = False
-
-        # Log iteration start
-        logger.info(
-            f"Starting iterate_public_institutions: country={country}, "
-            f"types={types}, jurisdiction={jurisdiction}, max_results={max_results}",
-            extra={
-                "event": "iteration_started",
-                "entity_kind": "public_institution",
-                "filters": {
-                    "country": country,
-                    "types": types,
-                    "jurisdiction": jurisdiction,
-                },
-                "max_results": max_results,
-            },
+        yield from self._iterate(
+            _PUBLIC_INSTITUTIONS,
+            {"country": country, "types": types},
+            max_results=max_results,
+            lang=lang,
         )
-
-        start_time = time.time()
-
-        try:
-            for record in self.iter_public_institutions(
-                country=country,
-                type=types,
-                lang=lang,
-            ):
-                yield record
-                count += 1
-
-                if max_results is not None and count >= max_results:
-                    logger.info(
-                        f"Reached max_results limit of {max_results}",
-                        extra={
-                            "event": "max_results_reached",
-                            "entity_kind": "public_institution",
-                            "result_count": count,
-                        },
-                    )
-                    break
-
-            # Mark as successful if we completed iteration without exception
-            success = True
-
-        except ValueError as e:
-            # Query builder or validation errors
-            logger.error(
-                f"Invalid filter parameters: {e}",
-                extra={
-                    "event": "iteration_failed",
-                    "entity_kind": "public_institution",
-                    "error_type": "invalid_filters",
-                },
-            )
-            raise InvalidFilterError(f"Invalid filter parameters: {e}")
-        except Exception as e:
-            # Log other errors
-            logger.error(
-                f"Iteration failed: {e}",
-                extra={
-                    "event": "iteration_failed",
-                    "entity_kind": "public_institution",
-                    "error_type": type(e).__name__,
-                },
-            )
-            raise
-        finally:
-            # Log iteration completion only if successful
-            if success:
-                duration_ms = (time.time() - start_time) * 1000
-                logger.info(
-                    f"Completed iterate_public_institutions: yielded {count} results in {duration_ms:.2f}ms",
-                    extra={
-                        "event": "iteration_completed",
-                        "entity_kind": "public_institution",
-                        "result_count": count,
-                        "duration_ms": duration_ms,
-                        "status": "success",
-                    },
-                )

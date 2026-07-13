@@ -10,7 +10,7 @@ from ..security import validate_qid
 
 def build_public_institutions_query(
     country: Optional[str] = None,
-    type: Optional[List[str]] = None,
+    types: Optional[List[str]] = None,
     lang: str = "en",
     limit: Optional[int] = None,
     cursor: int = 0,
@@ -20,7 +20,7 @@ def build_public_institutions_query(
 
     Args:
         country: Country filter (QID or label)
-        type: List of institution type filters (mapped keys, QIDs, or labels)
+        types: List of institution type filters (mapped keys, QIDs, or labels)
         lang: Language code for labels
         limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
@@ -44,8 +44,8 @@ def build_public_institutions_query(
     conditions = []
 
     # Add type filters to subquery if provided
-    if type:
-        for value in type:
+    if types:
+        for value in types:
             value = value.strip()
             if value in TYPE_MAPPINGS:
                 # Use mapped QID

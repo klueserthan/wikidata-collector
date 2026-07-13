@@ -52,6 +52,8 @@ for figure in client.iterate_public_figures(
     birthday_from="1990-01-01",     # Optional: ISO date string
     birthday_to="2000-12-31",       # Optional: ISO date string
     nationality="Germany",          # Optional: country name, ISO code, or QID
+    occupations=["writer"],         # Optional: list of occupation keys or QIDs
+    gender="female",                # Optional: "male", "female", "other", or a QID
     max_results=100,                # Optional: stop after N results
     lang="en",                      # Optional: language for labels (default: "en")
 ):
@@ -84,7 +86,7 @@ For manual pagination control. Return `(List[NormalizedRecord], proxy_used_str)`
 figures, proxy = client.get_public_figures(
     birthday_from="1990-01-01",     # Optional
     birthday_to="2000-12-31",       # Optional
-    country="Q30",                  # Optional: country name or QID
+    nationality="Q30",              # Optional: country name, ISO code, or QID
     occupations=["politician"],     # Optional: list of occupation keys or QIDs
     lang="en",                      # Optional
     limit=15,                       # Optional: page size (default: 15)
@@ -100,20 +102,13 @@ Supported occupation keys: `politician`, `actor`, `musician`, `writer`, `journal
 ```python
 institutions, proxy = client.get_public_institutions(
     country="Q30",                  # Optional
-    type=["Q327333"],               # Optional: list of type QIDs or mapped keys
+    types=["Q327333"],              # Optional: list of type QIDs or mapped keys
     lang="en",                      # Optional
     limit=15,                       # Optional
     cursor=0,                       # Optional
     after_qid=None,                 # Optional
 )
 ```
-
-### Lower-Level Iterators
-
-These also handle pagination and still use the query builders for basic validation (QID formats, mapped keys), but they do not provide higher-level conveniences like ISO-date validation, `max_results` limiting, or wrapping low-level `ValueError`s into `InvalidFilterError`. Used internally by `iterate_*`.
-
-- `client.iter_public_figures(birthday_from, birthday_to, nationality, profession, lang, limit)`
-- `client.iter_public_institutions(country, type, lang, limit)`
 
 ### Raw SPARQL Execution
 
@@ -197,19 +192,19 @@ The iterator APIs use keyset pagination automatically — no manual work needed.
 
 ```python
 # First page
-figures, _ = client.get_public_figures(country="Q30", limit=15)
+figures, _ = client.get_public_figures(nationality="Q30", limit=15)
 
 # Next page — use last QID as cursor
 figures, _ = client.get_public_figures(
-    country="Q30", limit=15, after_qid=figures[-1].qid
+    nationality="Q30", limit=15, after_qid=figures[-1].qid
 )
 ```
 
 ### OFFSET Pagination (Fallback)
 
 ```python
-page1, _ = client.get_public_figures(country="Q30", limit=15, cursor=0)
-page2, _ = client.get_public_figures(country="Q30", limit=15, cursor=15)
+page1, _ = client.get_public_figures(nationality="Q30", limit=15, cursor=0)
+page2, _ = client.get_public_figures(nationality="Q30", limit=15, cursor=15)
 ```
 
 Keyset pagination is more reliable — OFFSET can drift when data changes between requests.

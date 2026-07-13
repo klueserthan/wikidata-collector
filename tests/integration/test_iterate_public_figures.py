@@ -2,6 +2,8 @@
 Integration tests for iterate_public_figures API.
 
 These tests verify the iterator-based API for streaming public figures.
+The entity pipeline's fetch seam (``_fetch_page``) is substituted with fake
+pages; validation, pagination, and max_results handling run for real.
 They use pytest markers to allow selective execution.
 """
 
@@ -35,7 +37,7 @@ class TestIteratePublicFiguresHappyPath:
 
     def test_iterate_returns_public_figure_models(self, mocker):
         """Test that iterator yields PublicFigure model instances."""
-        # Mock the underlying iter_public_figures to return normalized models
+        # Substitute the fetch seam with a fake page of normalized models
         sample_records = [
             _pf(
                 "Q42",
@@ -52,7 +54,7 @@ class TestIteratePublicFiguresHappyPath:
         ]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Call the iterator API
         results = list(
@@ -69,13 +71,13 @@ class TestIteratePublicFiguresHappyPath:
 
     def test_iterate_with_max_results(self, mocker):
         """Test that max_results limits the number of results."""
-        # Create a large list of sample normalized records
+        # Create a large page of sample normalized records
         sample_records = [
             _pf(f"Q{i}", f"Person {i}", birthday="1990-01-01T00:00:00") for i in range(100)
         ]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Request only 10 results
         results = list(client.iterate_public_figures(birthday_from="1990-01-01", max_results=10))
@@ -89,8 +91,8 @@ class TestIteratePublicFiguresHappyPath:
         sample_records = [_pf("Q100", "Modern Person", birthday="1995-06-15T00:00:00")]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_figures", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         # Call with birthday filters
@@ -100,14 +102,17 @@ class TestIteratePublicFiguresHappyPath:
             )
         )
 
-        # Verify the underlying iterator was called with correct parameters
-        mock_iter.assert_called_once_with(
-            birthday_from="1990-01-01",
-            birthday_to="2000-12-31",
-            nationality=None,
-            gender=None,
-            lang="en",
-        )
+        # Verify the fetch seam received the filters under their public names
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters == {
+            "birthday_from": "1990-01-01",
+            "birthday_to": "2000-12-31",
+            "nationality": None,
+            "occupations": None,
+            "gender": None,
+        }
+        assert mock_fetch.call_args.kwargs["lang"] == "en"
 
         assert len(results) == 1
         assert results[0].birth_date == datetime(1995, 6, 15)
@@ -124,35 +129,52 @@ class TestIteratePublicFiguresHappyPath:
         ]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_figures", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         # Call with nationality filter
         results = list(client.iterate_public_figures(nationality="United States", lang="en"))
 
-        # Verify the underlying iterator was called with correct parameters
-        mock_iter.assert_called_once()
-        call_args = mock_iter.call_args
-        assert call_args.kwargs["nationality"] == "United States"
+        # Verify the fetch seam received the nationality filter
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters["nationality"] == "United States"
 
         assert len(results) == 1
         assert results[0].countries == ["United States"]
 
     def test_iterate_with_gender_filter(self, mocker):
-        """Test that gender filter is forwarded to iter_public_figures."""
+        """Test that gender filter reaches the fetch seam."""
         sample_records = [_pf("Q300", "Female Person", birthday="1985-06-01T00:00:00")]
 
         client = WikidataClient()
-        mock_iter = mocker.patch.object(
-            client, "iter_public_figures", return_value=iter(sample_records)
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
         results = list(client.iterate_public_figures(gender="female", lang="en"))
 
-        mock_iter.assert_called_once()
-        call_args = mock_iter.call_args
-        assert call_args.kwargs["gender"] == "female"
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters["gender"] == "female"
+
+        assert len(results) == 1
+
+    def test_iterate_with_occupations_filter(self, mocker):
+        """Test that occupations filter reaches the fetch seam."""
+        sample_records = [_pf("Q400", "Writing Person", birthday="1970-01-01T00:00:00")]
+
+        client = WikidataClient()
+        mock_fetch = mocker.patch.object(
+            client, "_fetch_page", return_value=(sample_records, "direct")
+        )
+
+        results = list(client.iterate_public_figures(occupations=["writer"], lang="en"))
+
+        mock_fetch.assert_called_once()
+        filters = mock_fetch.call_args.args[1]
+        assert filters["occupations"] == ["writer"]
 
         assert len(results) == 1
 
@@ -165,7 +187,7 @@ class TestIteratePublicFiguresEdgeCases:
     def test_iterate_empty_results(self, mocker):
         """Test iteration with no matching results."""
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter([]))
+        mocker.patch.object(client, "_fetch_page", return_value=([], "direct"))
 
         # Call the iterator with filters that return no results
         results = list(
@@ -220,7 +242,7 @@ class TestIteratePublicFiguresEdgeCases:
         client = WikidataClient()
 
         sample_records = [_pf("Q1", "Leap Year Person", birthday="2000-02-29T00:00:00")]
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Should not raise an error
         results = list(client.iterate_public_figures(birthday_from="2000-02-29"))
@@ -245,16 +267,13 @@ class TestIteratePublicFiguresEdgeCases:
         assert "max_results must be >= 1" in str(exc_info.value)
 
     def test_query_execution_error_propagated(self, mocker):
-        """Test that QueryExecutionError from underlying iterator is propagated."""
+        """Test that QueryExecutionError from the fetch seam is propagated."""
         client = WikidataClient()
 
-        # Mock iter_public_figures to raise QueryExecutionError
-        def error_generator():
-            raise QueryExecutionError("Upstream SPARQL endpoint unavailable")
-            yield  # pragma: no cover
-
         mocker.patch.object(
-            client, "iter_public_figures", side_effect=lambda **kwargs: error_generator()
+            client,
+            "_fetch_page",
+            side_effect=QueryExecutionError("Upstream SPARQL endpoint unavailable"),
         )
 
         with pytest.raises(QueryExecutionError) as exc_info:
@@ -266,14 +285,7 @@ class TestIteratePublicFiguresEdgeCases:
         """Test that ValueError from query builder is converted to InvalidFilterError."""
         client = WikidataClient()
 
-        # Mock iter_public_figures to raise ValueError
-        def error_generator():
-            raise ValueError("Invalid QID format")
-            yield  # pragma: no cover
-
-        mocker.patch.object(
-            client, "iter_public_figures", side_effect=lambda **kwargs: error_generator()
-        )
+        mocker.patch.object(client, "_fetch_page", side_effect=ValueError("Invalid QID format"))
 
         with pytest.raises(InvalidFilterError) as exc_info:
             list(client.iterate_public_figures(nationality="Q!!!invalid"))
@@ -285,7 +297,7 @@ class TestIteratePublicFiguresEdgeCases:
         sample_records = [_pf("Q1", "Person 1", birthday="1950-01-01T00:00:00")]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Call without filters
         results = list(client.iterate_public_figures())
@@ -298,7 +310,7 @@ class TestIteratePublicFiguresEdgeCases:
         sample_records = [_pf("Q1", "Person 1"), _pf("Q2", "Person 2")]
 
         client = WikidataClient()
-        mocker.patch.object(client, "iter_public_figures", return_value=iter(sample_records))
+        mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         results = list(client.iterate_public_figures(max_results=1))
 
@@ -307,14 +319,9 @@ class TestIteratePublicFiguresEdgeCases:
 
     def test_invalid_gender_raises_invalid_filter_error(self, mocker):
         """Test that an unknown gender value raises InvalidFilterError (not raw ValueError)."""
-
-        def error_generator():
-            raise ValueError("Unknown gender 'helicopter'.")
-            yield  # pragma: no cover
-
         client = WikidataClient()
         mocker.patch.object(
-            client, "iter_public_figures", side_effect=lambda **kwargs: error_generator()
+            client, "_fetch_page", side_effect=ValueError("Unknown gender 'helicopter'.")
         )
 
         with pytest.raises(InvalidFilterError) as exc_info:

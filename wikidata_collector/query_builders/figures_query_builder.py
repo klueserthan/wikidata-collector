@@ -11,7 +11,7 @@ from ..security import validate_qid
 def build_public_figures_query(
     birthday_from: Optional[str] = None,
     birthday_to: Optional[str] = None,
-    country: Optional[str] = None,
+    nationality: Optional[str] = None,
     occupations: Optional[List[str]] = None,
     gender: Optional[str] = None,
     lang: str = "en",
@@ -24,7 +24,7 @@ def build_public_figures_query(
     Args:
         birthday_from: Start date filter (ISO format)
         birthday_to: End date filter (ISO format)
-        country: Country filter (country name or QID)
+        nationality: Nationality filter (country name, ISO code, or QID)
         occupations: List of occupation filters (mapped keys or QIDs)
         gender: Gender filter; one of "male", "female", "other" (includes no gender info),
             or a direct Wikidata QID (e.g. "Q6581097")
@@ -38,7 +38,7 @@ def build_public_figures_query(
 
     Raises:
         ValueError: If any provided Wikidata QID fails validation, or if a provided
-            gender, country, or occupation value is not recognized, or if other
+            gender, nationality, or occupation value is not recognized, or if other
             input validation fails.
     """
     if limit is None:
@@ -51,21 +51,21 @@ def build_public_figures_query(
               wdt:P569 ?birthDate"""
 
     # Add nationality filter to subquery if provided
-    if country:
-        country_value = country.strip()
-        if country_value.startswith("Q"):
+    if nationality:
+        nationality_value = nationality.strip()
+        if nationality_value.startswith("Q"):
             # Direct QID - validate it
-            validated_qid = validate_qid(country_value)
+            validated_qid = validate_qid(nationality_value)
             subquery += f" ;\n              wdt:P27 wd:{validated_qid}"
-        elif country_value in COUNTRY_MAPPINGS:
+        elif nationality_value in COUNTRY_MAPPINGS:
             # Map country name to QID
-            country_qid = COUNTRY_MAPPINGS[country_value]
+            country_qid = COUNTRY_MAPPINGS[nationality_value]
             subquery += f" ;\n              wdt:P27 wd:{country_qid}"
         else:
-            # Unknown country - skip filter or raise error
+            # Unknown nationality - skip filter or raise error
             raise ValueError(
-                f"Unknown country '{country_value}'. "
-                f"Supported countries: {', '.join(sorted(COUNTRY_MAPPINGS.keys()))}"
+                f"Unknown nationality '{nationality_value}'. "
+                f"Supported values: {', '.join(sorted(COUNTRY_MAPPINGS.keys()))}"
             )
 
     # Add profession filters to subquery if provided

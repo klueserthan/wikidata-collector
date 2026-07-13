@@ -1,8 +1,14 @@
-"""Tests for WikidataClient iterator methods."""
+"""Tests for WikidataClient pagination through the public iterator interface.
+
+The entity pipeline's fetch seam (``_fetch_page``) is substituted with fake
+pages; everything above it — keyset pagination, unique-QID stop condition,
+filter forwarding — runs for real.
+"""
 
 from unittest.mock import patch
 
-from wikidata_collector.config import DEFAULT_LIMIT
+from wikidata_collector import WikidataClient
+from wikidata_collector.config import DEFAULT_LIMIT, WikidataCollectorConfig
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
     PublicInstitutionNormalizedRecord,
@@ -17,79 +23,70 @@ def _institution(qid: str) -> PublicInstitutionNormalizedRecord:
     return PublicInstitutionNormalizedRecord(qid=qid, name=f"Institution {qid}")
 
 
-class TestIterPublicFigures:
-    """Test iter_public_figures method."""
+def _client_with_page_size(page_size: int) -> WikidataClient:
+    return WikidataClient(WikidataCollectorConfig(default_limit=page_size))
 
-    def test_iter_single_page(self, wikidata_client):
-        """Test iteration with results fitting in a single page."""
-        # Mock data for one page
+
+class TestIteratePublicFiguresPagination:
+    """Test pagination behavior of iterate_public_figures."""
+
+    def test_single_page(self, wikidata_client):
+        """Results fitting in a single page are yielded once."""
         mock_results = [
             _figure("Q1"),
             _figure("Q2"),
         ]
 
         with patch.object(
-            wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
-        ):
-            results = list(wikidata_client.iter_public_figures(nationality="Q30"))
+            wikidata_client, "_fetch_page", return_value=(mock_results, "direct")
+        ) as mock:
+            results = list(wikidata_client.iterate_public_figures(nationality="Q30"))
 
-            assert len(results) == 2
-            assert results[0] == mock_results[0]
-            assert results[1] == mock_results[1]
+        mock.assert_called_once()
+        assert results == mock_results
 
-    def test_iter_multiple_pages(self, wikidata_client):
-        """Test iteration across multiple pages."""
-        # Create mock data for two pages
+    def test_multiple_pages(self, wikidata_client):
+        """A full page triggers a keyset-paginated fetch of the next page."""
         page1_results = [_figure(f"Q{i}") for i in range(1, DEFAULT_LIMIT + 1)]
-        page2_results = [
-            _figure("Q100"),
-        ]
-
-        call_count = 0
-
-        def mock_get_figures(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return (page1_results, "direct")
-            else:
-                return (page2_results, "direct")
-
-        with patch.object(wikidata_client, "get_public_figures", side_effect=mock_get_figures):
-            results = list(wikidata_client.iter_public_figures(nationality="Q30"))
-
-            assert len(results) == DEFAULT_LIMIT + 1
-            assert call_count == 2
-
-    def test_iter_empty_results(self, wikidata_client):
-        """Test iteration with no results."""
-        with patch.object(wikidata_client, "get_public_figures", return_value=([], "direct")):
-            results = list(wikidata_client.iter_public_figures(nationality="Q30"))
-
-            assert len(results) == 0
-
-    def test_iter_custom_limit(self, wikidata_client):
-        """Test iteration with custom per-page limit."""
-        # Return 3 results (less than page size of 5) - should only call once
-        mock_results = [
-            _figure(f"Q{i}")
-            for i in range(1, 4)  # 3 results
-        ]
+        page2_results = [_figure("Q100")]
 
         with patch.object(
-            wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
+            wikidata_client,
+            "_fetch_page",
+            side_effect=[(page1_results, "direct"), (page2_results, "direct")],
         ) as mock:
-            results = list(wikidata_client.iter_public_figures(nationality="Q30", limit=5))
+            results = list(wikidata_client.iterate_public_figures(nationality="Q30"))
 
-            # Verify it was called with the custom page size
-            mock.assert_called_once()
-            assert mock.call_args[1]["limit"] == 5
-            assert len(results) == 3
+        assert len(results) == DEFAULT_LIMIT + 1
+        assert mock.call_count == 2
+        # Second fetch paginates after the last QID of page 1
+        assert mock.call_args.kwargs["after_qid"] == f"Q{DEFAULT_LIMIT}"
 
-    def test_iter_stops_on_unique_qids_less_than_limit(self, wikidata_client):
+    def test_empty_results(self, wikidata_client):
+        """No results yields an empty iteration."""
+        with patch.object(wikidata_client, "_fetch_page", return_value=([], "direct")):
+            results = list(wikidata_client.iterate_public_figures(nationality="Q30"))
+
+        assert results == []
+
+    def test_custom_page_size_from_config(self):
+        """Page size comes from config.default_limit."""
+        client = _client_with_page_size(5)
+        mock_results = [_figure(f"Q{i}") for i in range(1, 4)]  # 3 results
+
+        with patch.object(client, "_fetch_page", return_value=(mock_results, "direct")) as mock:
+            results = list(client.iterate_public_figures(nationality="Q30"))
+
+        # 3 unique QIDs < page size 5 — one fetch only
+        mock.assert_called_once()
+        assert mock.call_args.kwargs["limit"] == 5
+        assert len(results) == 3
+
+    def test_stops_on_unique_qids_less_than_limit(self):
         """Stop condition must be based on unique QIDs, not raw record count."""
         # Simulate SPARQL expansion: more rows/records than limit, but fewer unique QIDs.
         # If stop condition incorrectly checks len(results) < limit, we'd fetch another page.
+        client = _client_with_page_size(5)
         page_results = [
             _figure("Q1"),
             _figure("Q1"),
@@ -99,121 +96,95 @@ class TestIterPublicFigures:
             _figure("Q3"),
         ]
 
-        with patch.object(
-            wikidata_client, "get_public_figures", return_value=(page_results, "direct")
-        ) as mock:
-            results = list(wikidata_client.iter_public_figures(nationality="Q30", limit=5))
+        with patch.object(client, "_fetch_page", return_value=(page_results, "direct")) as mock:
+            results = list(client.iterate_public_figures(nationality="Q30"))
 
-            mock.assert_called_once()
-            assert len(results) == len(page_results)
+        mock.assert_called_once()
+        assert len(results) == len(page_results)
 
-    def test_iter_with_filters(self, wikidata_client):
-        """Test iteration with various filters."""
+    def test_filters_forwarded(self, wikidata_client):
+        """All public filters reach the fetch seam under their public names."""
         mock_results = [_figure("Q1")]
 
         with patch.object(
-            wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
+            wikidata_client, "_fetch_page", return_value=(mock_results, "direct")
         ) as mock:
             list(
-                wikidata_client.iter_public_figures(
+                wikidata_client.iterate_public_figures(
                     birthday_from="1990-01-01",
                     birthday_to="2000-12-31",
                     nationality="Q30",
-                    profession=["Q33999"],
+                    occupations=["Q33999"],
+                    gender="female",
                 )
             )
 
-            # Verify filters were passed through
-            call_kwargs = mock.call_args[1]
-            assert call_kwargs["birthday_from"] == "1990-01-01"
-            assert call_kwargs["birthday_to"] == "2000-12-31"
-            assert call_kwargs["country"] == "Q30"
-            assert call_kwargs["occupations"] == ["Q33999"]
-
-    def test_iter_gender_passed_through(self, wikidata_client):
-        """Test that gender filter is forwarded to get_public_figures."""
-        mock_results = [_figure("Q1")]
-
-        with patch.object(
-            wikidata_client, "get_public_figures", return_value=(mock_results, "direct")
-        ) as mock:
-            list(wikidata_client.iter_public_figures(gender="female"))
-
-            call_kwargs = mock.call_args[1]
-            assert call_kwargs["gender"] == "female"
+        filters = mock.call_args.args[1]
+        assert filters == {
+            "birthday_from": "1990-01-01",
+            "birthday_to": "2000-12-31",
+            "nationality": "Q30",
+            "occupations": ["Q33999"],
+            "gender": "female",
+        }
 
 
-class TestIterPublicInstitutions:
-    """Test iter_public_institutions method."""
+class TestIteratePublicInstitutionsPagination:
+    """Test pagination behavior of iterate_public_institutions."""
 
-    def test_iter_single_page(self, wikidata_client):
-        """Test iteration with results fitting in a single page."""
+    def test_single_page(self, wikidata_client):
+        """Results fitting in a single page are yielded once."""
         mock_results = [
             _institution("Q1"),
             _institution("Q2"),
         ]
 
         with patch.object(
-            wikidata_client, "get_public_institutions", return_value=(mock_results, "direct")
-        ):
-            results = list(wikidata_client.iter_public_institutions(country="Q30"))
-
-            assert len(results) == 2
-            assert results[0] == mock_results[0]
-            assert results[1] == mock_results[1]
-
-    def test_iter_multiple_pages(self, wikidata_client):
-        """Test iteration across multiple pages."""
-        page1_results = [_institution(f"Q{i}") for i in range(1, DEFAULT_LIMIT + 1)]
-        page2_results = [
-            _institution("Q100"),
-        ]
-
-        call_count = 0
-
-        def mock_get_institutions(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return (page1_results, "direct")
-            else:
-                return (page2_results, "direct")
-
-        with patch.object(
-            wikidata_client, "get_public_institutions", side_effect=mock_get_institutions
-        ):
-            results = list(wikidata_client.iter_public_institutions(country="Q30"))
-
-            assert len(results) == DEFAULT_LIMIT + 1
-            assert call_count == 2
-
-    def test_iter_empty_results(self, wikidata_client):
-        """Test iteration with no results."""
-        with patch.object(wikidata_client, "get_public_institutions", return_value=([], "direct")):
-            results = list(wikidata_client.iter_public_institutions(country="Q30"))
-
-            assert len(results) == 0
-
-    def test_iter_custom_limit(self, wikidata_client):
-        """Test iteration with custom per-page limit."""
-        # Return 8 results (less than page size of 10) - should only call once
-        mock_results = [
-            _institution(f"Q{i}")
-            for i in range(1, 9)  # 8 results
-        ]
-
-        with patch.object(
-            wikidata_client, "get_public_institutions", return_value=(mock_results, "direct")
+            wikidata_client, "_fetch_page", return_value=(mock_results, "direct")
         ) as mock:
-            results = list(wikidata_client.iter_public_institutions(country="Q30", limit=10))
+            results = list(wikidata_client.iterate_public_institutions(country="Q30"))
 
-            # Verify it was called with the custom page size
-            mock.assert_called_once()
-            assert mock.call_args[1]["limit"] == 10
-            assert len(results) == 8
+        mock.assert_called_once()
+        assert results == mock_results
 
-    def test_iter_stops_on_unique_qids_less_than_limit(self, wikidata_client):
+    def test_multiple_pages(self, wikidata_client):
+        """A full page triggers a keyset-paginated fetch of the next page."""
+        page1_results = [_institution(f"Q{i}") for i in range(1, DEFAULT_LIMIT + 1)]
+        page2_results = [_institution("Q100")]
+
+        with patch.object(
+            wikidata_client,
+            "_fetch_page",
+            side_effect=[(page1_results, "direct"), (page2_results, "direct")],
+        ) as mock:
+            results = list(wikidata_client.iterate_public_institutions(country="Q30"))
+
+        assert len(results) == DEFAULT_LIMIT + 1
+        assert mock.call_count == 2
+        assert mock.call_args.kwargs["after_qid"] == f"Q{DEFAULT_LIMIT}"
+
+    def test_empty_results(self, wikidata_client):
+        """No results yields an empty iteration."""
+        with patch.object(wikidata_client, "_fetch_page", return_value=([], "direct")):
+            results = list(wikidata_client.iterate_public_institutions(country="Q30"))
+
+        assert results == []
+
+    def test_custom_page_size_from_config(self):
+        """Page size comes from config.default_limit."""
+        client = _client_with_page_size(10)
+        mock_results = [_institution(f"Q{i}") for i in range(1, 9)]  # 8 results
+
+        with patch.object(client, "_fetch_page", return_value=(mock_results, "direct")) as mock:
+            results = list(client.iterate_public_institutions(country="Q30"))
+
+        mock.assert_called_once()
+        assert mock.call_args.kwargs["limit"] == 10
+        assert len(results) == 8
+
+    def test_stops_on_unique_qids_less_than_limit(self):
         """Stop condition must be based on unique QIDs, not raw record count."""
+        client = _client_with_page_size(5)
         page_results = [
             _institution("Q1"),
             _institution("Q1"),
@@ -223,29 +194,57 @@ class TestIterPublicInstitutions:
             _institution("Q3"),
         ]
 
-        with patch.object(
-            wikidata_client,
-            "get_public_institutions",
-            return_value=(page_results, "direct"),
-        ) as mock:
-            results = list(wikidata_client.iter_public_institutions(country="Q30", limit=5))
+        with patch.object(client, "_fetch_page", return_value=(page_results, "direct")) as mock:
+            results = list(client.iterate_public_institutions(country="Q30"))
 
-            mock.assert_called_once()
-            assert len(results) == len(page_results)
+        mock.assert_called_once()
+        assert len(results) == len(page_results)
 
-    def test_iter_with_filters(self, wikidata_client):
-        """Test iteration with various filters."""
+    def test_filters_forwarded(self, wikidata_client):
+        """All public filters reach the fetch seam under their public names."""
         mock_results = [_institution("Q1")]
 
         with patch.object(
-            wikidata_client, "get_public_institutions", return_value=(mock_results, "direct")
+            wikidata_client, "_fetch_page", return_value=(mock_results, "direct")
         ) as mock:
-            list(wikidata_client.iter_public_institutions(country="Q30", type=["Q327333"]))
+            list(wikidata_client.iterate_public_institutions(country="Q30", types=["Q327333"]))
 
-            # Verify filters were passed through
-            call_kwargs = mock.call_args[1]
-            assert call_kwargs["country"] == "Q30"
-            assert call_kwargs["type"] == ["Q327333"]
+        filters = mock.call_args.args[1]
+        assert filters == {"country": "Q30", "types": ["Q327333"]}
+
+
+class TestGetPageDelegates:
+    """Test that the lower-level get_* methods delegate onto the fetch seam."""
+
+    def test_get_public_figures_forwards_filters(self, wikidata_client):
+        with patch.object(
+            wikidata_client, "_fetch_page", return_value=([_figure("Q1")], "direct")
+        ) as mock:
+            records, proxy = wikidata_client.get_public_figures(
+                nationality="Q30", occupations=["Q36180"], limit=7, after_qid="Q5"
+            )
+
+        assert proxy == "direct"
+        assert len(records) == 1
+        filters = mock.call_args.args[1]
+        assert filters["nationality"] == "Q30"
+        assert filters["occupations"] == ["Q36180"]
+        assert mock.call_args.kwargs["limit"] == 7
+        assert mock.call_args.kwargs["after_qid"] == "Q5"
+
+    def test_get_public_institutions_forwards_filters(self, wikidata_client):
+        with patch.object(
+            wikidata_client, "_fetch_page", return_value=([_institution("Q1")], "direct")
+        ) as mock:
+            records, proxy = wikidata_client.get_public_institutions(
+                country="Q30", types=["Q327333"], limit=3
+            )
+
+        assert proxy == "direct"
+        assert len(records) == 1
+        filters = mock.call_args.args[1]
+        assert filters == {"country": "Q30", "types": ["Q327333"]}
+        assert mock.call_args.kwargs["limit"] == 3
 
 
 class TestDefaultPageSize:
