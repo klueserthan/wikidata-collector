@@ -7,7 +7,9 @@ filter forwarding — runs for real.
 
 from unittest.mock import patch
 
-from wikidata_collector import WikidataClient
+import pytest
+
+from wikidata_collector import InvalidFilterError, WikidataClient
 from wikidata_collector.config import DEFAULT_LIMIT, WikidataCollectorConfig
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
@@ -245,6 +247,18 @@ class TestGetPageDelegates:
         filters = mock.call_args.args[1]
         assert filters == {"country": "Q30", "types": ["Q327333"]}
         assert mock.call_args.kwargs["limit"] == 3
+
+    def test_get_public_figures_validates_dates(self, wikidata_client):
+        """Date filters are validated at the fetch seam, before SPARQL interpolation."""
+        with pytest.raises(InvalidFilterError) as exc_info:
+            wikidata_client.get_public_figures(birthday_from="not-a-date")
+
+        assert "Invalid birthday_from format" in str(exc_info.value)
+
+        with pytest.raises(InvalidFilterError) as exc_info:
+            wikidata_client.get_public_figures(birthday_to="2000/12/31")
+
+        assert "Invalid birthday_to format" in str(exc_info.value)
 
 
 class TestDefaultPageSize:

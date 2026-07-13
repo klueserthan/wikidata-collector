@@ -43,11 +43,12 @@ def _merge_accounts(
 ) -> List["AccountEntry"]:
     """Return a copy of existing accounts with new ones appended, deduplicated by (platform, handle)."""
     merged = existing.copy()
+    seen = {(acc.platform, acc.handle) for acc in merged}
     for account in new_accounts:
-        if not any(
-            acc.platform == account.platform and acc.handle == account.handle for acc in merged
-        ):
+        key = (account.platform, account.handle)
+        if key not in seen:
             merged.append(account)
+            seen.add(key)
     return merged
 
 

@@ -191,7 +191,7 @@ def _is_valid_date_format(date_str: str) -> bool:
         # Use datetime.strptime for proper validation including leap years
         datetime.strptime(date_str, "%Y-%m-%d")
         return True
-    except ValueError:
+    except (TypeError, ValueError):
         return False
 
 
@@ -623,6 +623,8 @@ class WikidataClient:
 
         This is the pipeline's fetch seam: tests substitute fake pages here,
         production builds a SPARQL query and executes it via the proxy layer.
+        Filters are validated here so every entry point (get_* and iterate_*)
+        fails fast before anything is interpolated into SPARQL.
 
         Args:
             spec: Entity spec for the entity kind being fetched
@@ -635,7 +637,12 @@ class WikidataClient:
 
         Returns:
             Tuple of (normalized records, used_proxy)
+
+        Raises:
+            InvalidFilterError: If filter parameters are invalid or malformed
         """
+        spec.validate_filters(filters)
+
         if limit is None:
             limit = self.config.default_limit
 

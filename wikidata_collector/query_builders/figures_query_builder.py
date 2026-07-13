@@ -58,9 +58,9 @@ def build_public_figures_query(
             validated_qid = validate_qid(nationality_value)
             subquery += f" ;\n              wdt:P27 wd:{validated_qid}"
         elif nationality_value in COUNTRY_MAPPINGS:
-            # Map country name to QID
-            country_qid = COUNTRY_MAPPINGS[nationality_value]
-            subquery += f" ;\n              wdt:P27 wd:{country_qid}"
+            # Map nationality (country name or ISO code) to QID
+            nationality_qid = COUNTRY_MAPPINGS[nationality_value]
+            subquery += f" ;\n              wdt:P27 wd:{nationality_qid}"
         else:
             # Unknown nationality - skip filter or raise error
             raise ValueError(
