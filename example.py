@@ -8,13 +8,13 @@ and inspect the normalized Pydantic models that come back.
 Run: python example.py
 """
 
-from wikidata_collector import WikidataClient
+from wikidata_collector import WikidataClient, load_env_file
 from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.exceptions import InvalidFilterError
 
 
 def example_default_client():
-    """Initialize with defaults (reads CONTACT_EMAIL from env/.env)."""
+    """Initialize with defaults (reads CONTACT_EMAIL from the process environment)."""
     client = WikidataClient()
     # Print client configuration to verify
     print("Client Configuration:")
@@ -120,6 +120,9 @@ def example_error_handling():
 
 
 if __name__ == "__main__":
+    # The library never reads .env files by itself; scripts opt in explicitly.
+    load_env_file()
+
     print("=== Public Figures (single page) ===\n")
     example_get_public_figures()
 

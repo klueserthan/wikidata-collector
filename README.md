@@ -157,7 +157,14 @@ Both models have a `.generate_pretty_string()` method for human-readable output 
 
 ## Configuration
 
+Configuration comes from two places: the **process environment** (`os.environ`) and
+**explicit parameters** to `WikidataCollectorConfig`. The library does **not** read `.env`
+files on its own — see [`.env` files](#env-files) below.
+
 ### Environment Variables
+
+Export these in the shell, a systemd `EnvironmentFile`, a container env spec, or whatever
+your process manager uses:
 
 ```bash
 CONTACT_EMAIL="you@example.com"       # User-Agent contact (recommended by Wikidata)
@@ -166,7 +173,38 @@ SPARQL_TIMEOUT_SECONDS=60             # Request timeout (default: 60)
 MAX_RETRIES=3                         # Retry attempts (default: 3)
 PROXY_COOLDOWN_SECONDS=300            # Failed proxy cooldown (default: 300)
 DEFAULT_LIMIT=15                      # Page size for iterators (default: 15)
+DEBUG_QUERIES=false                   # "true"/"1"/"yes" writes SPARQL queries to files
 ```
+
+`WikidataCollectorConfig` reads the environment when it is **instantiated**, so exporting a
+variable any time before `WikidataCollectorConfig()` is enough.
+
+### `.env` files
+
+Importing `wikidata_collector` has **no side effects on `os.environ`**. Earlier versions
+called `load_dotenv(find_dotenv())` at import time, which promoted every key of the nearest
+`.env` — typically the *consuming application's* `.env`, found by walking up from the
+installed package — into real environment variables. Real environment variables are the
+highest-precedence source for most settings loaders, so importing this library could
+silently outrank an application's own environment layering, with the outcome depending on
+import order.
+
+Applications that want `.env` support call the loader explicitly, at their own entry point:
+
+```python
+from wikidata_collector import load_env_file
+
+load_env_file()                       # nearest .env at or above the CWD
+load_env_file("config/prod.env")      # or an explicit path
+load_env_file(".env", override=True)  # let the file win over exported vars
+```
+
+`load_env_file` returns `True` when the resolved file exists and is readable — including an
+empty or comments-only `.env`, which is a valid file that simply defines nothing — and `False`
+only when there is no readable file at that location, so `False` reliably means "no `.env`
+here". It never overrides existing process variables unless you pass `override=True`. Applications with their own settings
+loader (pydantic-settings, Django, Dynaconf, …) should simply keep using it — this library
+reads whatever ends up in `os.environ`, and takes explicit parameters for everything else.
 
 ### Programmatic
 

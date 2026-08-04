@@ -1,4 +1,12 @@
-"""Configuration for the Wikidata Collector module (no FastAPI dependencies)."""
+"""Configuration for the Wikidata Collector module (no FastAPI dependencies).
+
+Configuration is read from the *process* environment (``os.environ``) or passed
+explicitly to :class:`WikidataCollectorConfig`. Importing this module has no
+side effects on ``os.environ``: as a library it never loads ``.env`` files on
+its own, because promoting file values into real environment variables would
+silently outrank the environment layering of the importing application.
+Applications that want ``.env`` support call :func:`load_env_file` themselves.
+"""
 
 import os
 from typing import List, Optional
@@ -6,8 +14,35 @@ from typing import List, Optional
 from dotenv import find_dotenv, load_dotenv
 from random_user_agent.user_agent import UserAgent
 
-# Load environment variables from .env
-load_dotenv(find_dotenv())
+
+def load_env_file(path: Optional[str] = None, *, override: bool = False) -> bool:
+    """Load a ``.env`` file into ``os.environ`` — explicit opt-in for applications.
+
+    The library never calls this itself. Call it from an application or script
+    entry point *before* constructing :class:`WikidataCollectorConfig`, which
+    reads the environment when it is instantiated.
+
+    Args:
+        path: Path to the ``.env`` file. When ``None``, the nearest ``.env``
+            at or above the current working directory is used.
+        override: When ``True``, file values replace variables already present
+            in ``os.environ``. Defaults to ``False`` so the real process
+            environment keeps precedence.
+
+    Returns:
+        ``True`` if the resolved ``.env`` file exists and is readable — including
+        a file that is empty or contains only comments, which is a valid
+        configuration that happens to define nothing. ``False`` only when no
+        file was found at the resolved location or it cannot be read, so a
+        caller may treat ``False`` as "there is no ``.env`` here".
+    """
+    dotenv_path = path or find_dotenv(usecwd=True)
+    if not dotenv_path or not os.path.isfile(dotenv_path):
+        return False
+    if not os.access(dotenv_path, os.R_OK):
+        return False
+    load_dotenv(dotenv_path, override=override)
+    return True
 
 
 # Retry behavior constants
