@@ -194,3 +194,45 @@ class TestLoadEnvFile:
         monkeypatch.setattr("wikidata_collector.config.find_dotenv", lambda **_: "")
 
         assert load_env_file() is False
+
+    def test_returns_false_for_missing_explicit_path(self, tmp_path, preserved_environ):
+        """An explicit path to a file that does not exist reports ``False``."""
+        assert load_env_file(str(tmp_path / "absent.env")) is False
+
+    def test_returns_true_for_existing_but_empty_file(self, tmp_path, preserved_environ):
+        """An empty ``.env`` exists, so it must not be reported as missing."""
+        env_file = tmp_path / "empty.env"
+        env_file.write_text("", encoding="utf-8")
+
+        assert load_env_file(str(env_file)) is True
+
+    def test_returns_true_for_comments_only_file(self, tmp_path, preserved_environ):
+        """A ``.env`` holding only comments is a valid file that defines nothing."""
+        env_file = tmp_path / "comments.env"
+        env_file.write_text("# nothing set here\n\n# still nothing\n", encoding="utf-8")
+
+        assert load_env_file(str(env_file)) is True
+
+    def test_empty_file_is_distinguishable_from_missing_file(self, tmp_path, preserved_environ):
+        """The return value separates "no file" from "file defining no variables"."""
+        present = tmp_path / "present.env"
+        present.write_text("# only a comment\n", encoding="utf-8")
+
+        assert load_env_file(str(present)) is True
+        assert load_env_file(str(tmp_path / "absent.env")) is False
+
+    def test_returns_false_for_unreadable_file(self, tmp_path, preserved_environ):
+        """A file that cannot be read is reported as unavailable."""
+        env_file = tmp_path / "locked.env"
+        env_file.write_text(f"{SENTINEL_KEY}=unreadable\n", encoding="utf-8")
+        env_file.chmod(0o000)
+        if os.access(env_file, os.R_OK):  # pragma: no cover - e.g. running as root
+            env_file.chmod(0o600)
+            pytest.skip("file permissions are not enforced for this user")
+        os.environ.pop(SENTINEL_KEY, None)
+
+        try:
+            assert load_env_file(str(env_file)) is False
+            assert SENTINEL_KEY not in os.environ
+        finally:
+            env_file.chmod(0o600)

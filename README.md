@@ -199,8 +199,10 @@ load_env_file("config/prod.env")      # or an explicit path
 load_env_file(".env", override=True)  # let the file win over exported vars
 ```
 
-`load_env_file` returns `True` if a file was found and read. It never overrides existing
-process variables unless you pass `override=True`. Applications with their own settings
+`load_env_file` returns `True` when the resolved file exists and is readable — including an
+empty or comments-only `.env`, which is a valid file that simply defines nothing — and `False`
+only when there is no readable file at that location, so `False` reliably means "no `.env`
+here". It never overrides existing process variables unless you pass `override=True`. Applications with their own settings
 loader (pydantic-settings, Django, Dynaconf, …) should simply keep using it — this library
 reads whatever ends up in `os.environ`, and takes explicit parameters for everything else.
 

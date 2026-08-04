@@ -30,12 +30,19 @@ def load_env_file(path: Optional[str] = None, *, override: bool = False) -> bool
             environment keeps precedence.
 
     Returns:
-        ``True`` if a ``.env`` file was found and read, ``False`` otherwise.
+        ``True`` if the resolved ``.env`` file exists and is readable — including
+        a file that is empty or contains only comments, which is a valid
+        configuration that happens to define nothing. ``False`` only when no
+        file was found at the resolved location or it cannot be read, so a
+        caller may treat ``False`` as "there is no ``.env`` here".
     """
     dotenv_path = path or find_dotenv(usecwd=True)
-    if not dotenv_path:
+    if not dotenv_path or not os.path.isfile(dotenv_path):
         return False
-    return load_dotenv(dotenv_path, override=override)
+    if not os.access(dotenv_path, os.R_OK):
+        return False
+    load_dotenv(dotenv_path, override=override)
+    return True
 
 
 # Retry behavior constants
