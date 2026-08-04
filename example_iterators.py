@@ -10,11 +10,11 @@ Run: python example_iterators.py
 
 import logging
 
-from wikidata_collector import WikidataClient
+from wikidata_collector import WikidataClient, load_env_file
 
 
 def example_default_client():
-    """Initialize with defaults (reads CONTACT_EMAIL from env/.env)."""
+    """Initialize with defaults (reads CONTACT_EMAIL from the process environment)."""
     client = WikidataClient()
     # Print client configuration to verify
     print("Client Configuration:")
@@ -117,6 +117,9 @@ def iterate_with_logging():
 
 
 if __name__ == "__main__":
+    # The library never reads .env files by itself; scripts opt in explicitly.
+    load_env_file()
+
     print("=== iterate_public_figures (with max_results) ===\n")
     iterate_figures_with_max_results()
 

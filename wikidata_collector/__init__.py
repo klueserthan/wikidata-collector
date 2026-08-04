@@ -6,6 +6,7 @@ with no FastAPI dependencies. It can be used standalone or as part of the API wr
 """
 
 from .client import WikidataClient
+from .config import WikidataCollectorConfig, load_env_file
 from .exceptions import (
     EntityNotFoundError,
     InvalidFilterError,
@@ -25,6 +26,8 @@ from .models import (
 __version__ = "1.0.0"
 __all__ = [
     "WikidataClient",
+    "WikidataCollectorConfig",
+    "load_env_file",
     "PublicFigureNormalizedRecord",
     "PublicInstitutionNormalizedRecord",
     "SubInstitution",

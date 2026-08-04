@@ -114,7 +114,7 @@ uv run pytest --cov=wikidata_collector --cov-report=term
 wikidata_collector/
 ├── __init__.py              # Public API exports
 ├── client.py                # WikidataClient — main entry point, iterators, pagination
-├── config.py                # WikidataCollectorConfig (env vars + dotenv)
+├── config.py                # WikidataCollectorConfig (process env vars; opt-in load_env_file)
 ├── constants.py             # COUNTRY_MAPPINGS, TYPE_MAPPINGS, PROFESSION_MAPPINGS
 ├── exceptions.py            # Custom exception hierarchy
 ├── models.py                # Pydantic models (WikiRecord + NormalizedRecord)
