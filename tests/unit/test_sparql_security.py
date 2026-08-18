@@ -1,13 +1,14 @@
 """Tests for SPARQL security utilities and query injection prevention."""
 
+from typing import Any, Dict
+
 import pytest
 
+from wikidata_collector import InvalidFilterError, WikidataClient
 from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
 from wikidata_collector.query_builders.institutions_query_builder import (
     build_public_institutions_query,
 )
-
-# Test the NEW secure implementations from wikidata_collector module
 from wikidata_collector.security import escape_sparql_literal, validate_pid, validate_qid
 
 
@@ -182,3 +183,77 @@ class TestCountryCodeEscaping:
         malicious_input = 'US"'
         with pytest.raises(ValueError, match="Unknown nationality"):
             build_public_figures_query(nationality=malicious_input)
+
+
+class TestGenderFilterInjectionPrevention:
+    """The gender filter reached SPARQL without an injection test of its own."""
+
+    def test_gender_qid_injection_prevented(self):
+        """A QID-shaped gender value with a payload is rejected."""
+        with pytest.raises(ValueError, match="Invalid QID format"):
+            build_public_figures_query(gender="Q6581097 . } DROP GRAPH <urn:x> ; {")
+
+    def test_unknown_gender_label_is_rejected(self):
+        """Anything outside GENDER_MAPPINGS never reaches the query."""
+        with pytest.raises(ValueError, match="Unknown gender"):
+            build_public_figures_query(gender='" . } #')
+
+    def test_mapped_gender_emits_only_the_mapped_qid(self):
+        """A known label resolves to its QID and nothing else."""
+        query = build_public_figures_query(gender="female")
+
+        assert "wdt:P21 wd:Q6581072" in query
+
+    def test_other_gender_emits_negated_patterns_not_a_literal(self):
+        """The 'other' sentinel becomes FILTER NOT EXISTS, never an interpolation."""
+        query = build_public_figures_query(gender="other")
+
+        assert "FILTER NOT EXISTS { ?person wdt:P21 wd:Q6581097 }" in query
+        assert "FILTER NOT EXISTS { ?person wdt:P21 wd:Q6581072 }" in query
+        assert "wd:other" not in query
+
+
+class TestKeysetPaginationInjectionPrevention:
+    """`after_qid` is caller-supplied and lands inside a numeric FILTER."""
+
+    @pytest.mark.parametrize(
+        "builder", [build_public_figures_query, build_public_institutions_query]
+    )
+    def test_malicious_after_qid_is_rejected(self, builder):
+        """A QID-prefixed payload fails validation instead of being interpolated."""
+        with pytest.raises(ValueError, match="Invalid QID format"):
+            builder(after_qid="Q1) } DROP GRAPH <urn:wikidata> ; SELECT * WHERE { (")
+
+    @pytest.mark.parametrize(
+        "builder", [build_public_figures_query, build_public_institutions_query]
+    )
+    def test_valid_after_qid_becomes_a_numeric_comparison(self, builder):
+        """A well-formed QID is reduced to its integer suffix."""
+        query = builder(after_qid="Q42")
+
+        assert "FILTER(?qidNum > 42)" in query
+
+
+class TestDateFilterHandling:
+    """Birthday bounds are interpolated as xsd:dateTime literals."""
+
+    def test_valid_dates_are_emitted_as_typed_literals(self):
+        """A well-formed range produces both bounds as typed literals."""
+        query = build_public_figures_query(birthday_from="1990-01-01", birthday_to="1999-12-31")
+
+        assert '"1990-01-01T00:00:00Z"^^xsd:dateTime' in query
+        assert '"1999-12-31T23:59:59Z"^^xsd:dateTime' in query
+
+    @pytest.mark.parametrize("field", ["birthday_from", "birthday_to"])
+    def test_client_rejects_a_malformed_date_before_the_builder_sees_it(self, field: str):
+        """The client validates dates so no payload can reach the builder.
+
+        The builder itself does not parse dates, so this boundary is the only
+        thing standing between a caller string and a SPARQL literal.
+        """
+        client = WikidataClient()
+        payload = '1990-01-01T00:00:00Z"^^xsd:dateTime) } DROP GRAPH <urn:x> ; #'
+        filters: Dict[str, Any] = {field: payload}
+
+        with pytest.raises(InvalidFilterError, match="Expected ISO format"):
+            list(client.iterate_public_figures(**filters))
