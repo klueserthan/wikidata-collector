@@ -328,6 +328,28 @@ class TestOrganizationFilterValidation:
 
         fetch.assert_called_once()
 
+    def test_unknown_country_label_raises_invalid_filter_error_on_get(self, wikidata_client):
+        """A value-level builder failure (unknown country label) surfaces as
+        `InvalidFilterError` from `get_public_organizations`, honoring its
+        documented contract and matching `iterate_public_organizations`. The
+        type-only validator passes it through, so the builder's `ValueError`
+        must be translated at the shared fetch boundary before it escapes."""
+        with patch.object(wikidata_client, "execute_sparql_query") as execute:
+            with pytest.raises(InvalidFilterError, match="Unknown country"):
+                wikidata_client.get_public_organizations(types=["newspaper"], country="Atlantis")
+
+        execute.assert_not_called()
+
+    def test_unknown_country_label_raises_invalid_filter_error_on_iterate(self, wikidata_client):
+        """The same value-level builder failure is `InvalidFilterError` from
+        the iterator too — get_ and iterate_ stay symmetric."""
+        with pytest.raises(InvalidFilterError, match="Unknown country"):
+            list(
+                wikidata_client.iterate_public_organizations(
+                    types=["newspaper"], country="Atlantis"
+                )
+            )
+
 
 class TestOrganizationFilterDecomposition:
     """Multi-type iteration runs one keyset stream per type, sharing a single

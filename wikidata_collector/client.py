@@ -721,9 +721,17 @@ class WikidataClient:
         if limit is None:
             limit = self.config.default_limit
 
-        query = spec.build_query(
-            **filters, lang=lang, limit=limit, cursor=cursor, after_qid=after_qid
-        )
+        # The type-only validator above cannot catch value-level filter errors
+        # (unknown labels, malformed QIDs); those surface here as the builder's
+        # plain ValueError. Translate them to InvalidFilterError at this shared
+        # boundary so every entry point — get_* and iterate_* alike — honors its
+        # documented InvalidFilterError contract instead of leaking a ValueError.
+        try:
+            query = spec.build_query(
+                **filters, lang=lang, limit=limit, cursor=cursor, after_qid=after_qid
+            )
+        except ValueError as e:
+            raise InvalidFilterError(f"Invalid filter parameters: {e}") from e
         result, used_proxy = self.execute_sparql_query(query, override_proxies)
         bindings = result.get("results", {}).get("bindings", [])
         return spec.normalize(bindings), used_proxy
