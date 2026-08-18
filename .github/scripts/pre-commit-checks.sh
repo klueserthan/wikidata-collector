@@ -12,6 +12,9 @@ TARGETS=(wikidata_collector tests)
 FIX=0
 [ "${1:-}" = "--fix" ] && FIX=1
 
+SMOKE_DIR="$(mktemp -d)"
+trap 'rm -rf "$SMOKE_DIR"' EXIT
+
 step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 
 step "Sync dependencies"
@@ -43,5 +46,18 @@ uv run pytest tests/integration --no-cov
 
 step "Lockfile check"
 uv lock --check
+
+# Mirrors the `package` job: a library that builds but does not import is broken
+# for every consumer, and no other check here would notice.
+step "Package builds, installs, and imports"
+uv build --out-dir "$SMOKE_DIR/dist"
+uv venv "$SMOKE_DIR/venv"
+uv pip install --quiet --python "$SMOKE_DIR/venv/bin/python" "$SMOKE_DIR"/dist/*.whl
+"$SMOKE_DIR/venv/bin/python" -c "
+import wikidata_collector as wc
+missing = [name for name in wc.__all__ if not hasattr(wc, name)]
+assert not missing, f'exported but missing: {missing}'
+print('imported', wc.__name__, wc.__version__, '-', len(wc.__all__), 'exports')
+"
 
 printf '\n\033[32mAll checks passed.\033[0m\n'

@@ -1,55 +1,97 @@
 """Unit tests for WikidataCollectorConfig."""
 
+import importlib
+import threading
+from types import ModuleType
+from typing import Iterator, List
+
+import dotenv
 import pytest
 
 from wikidata_collector import config as config_module
 from wikidata_collector.config import WikidataCollectorConfig
+
+CONFIG_ENV_VARS = (
+    "CONTACT_EMAIL",
+    "WIKIDATA_SPARQL_URL",
+    "WIKIDATA_ENTITY_API_URL",
+    "PROXY_LIST",
+    "SPARQL_TIMEOUT_SECONDS",
+    "MAX_RETRIES",
+    "PROXY_COOLDOWN_SECONDS",
+    "DEFAULT_LIMIT",
+    "RETRY_MAX_WAIT_SECONDS",
+    "RETRY_JITTER_BASE",
+    "RETRY_JITTER_INCREMENT",
+    "PROXY_DEEP_SLEEP_SECONDS",
+    "PROXY_DEEP_SLEEP_MAX_FAILURES",
+)
+
+# Enough threads that an unsynchronised lazy cache loses the race reliably.
+THREAD_COUNT = 8
 
 
 @pytest.fixture(autouse=True)
 def clean_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Remove every config env var so tests see constructor defaults.
 
-    `WikidataCollectorConfig` reads process env vars, and `load_dotenv` may have
-    populated them from a developer's `.env`. Clearing them keeps these tests
-    independent of the machine they run on.
+    `WikidataCollectorConfig` reads process env vars at construction time, and
+    `load_dotenv` may have populated them from a developer's `.env`. Clearing
+    them keeps these tests independent of the machine they run on.
 
     Args:
         monkeypatch: Pytest monkeypatch fixture.
     """
-    for name in (
-        "CONTACT_EMAIL",
-        "WIKIDATA_SPARQL_URL",
-        "WIKIDATA_ENTITY_API_URL",
-        "PROXY_LIST",
-        "SPARQL_TIMEOUT_SECONDS",
-        "MAX_RETRIES",
-        "PROXY_COOLDOWN_SECONDS",
-        "DEFAULT_LIMIT",
-        "RETRY_MAX_WAIT_SECONDS",
-        "RETRY_JITTER_BASE",
-        "RETRY_JITTER_INCREMENT",
-        "PROXY_DEEP_SLEEP_SECONDS",
-        "PROXY_DEEP_SLEEP_MAX_FAILURES",
-    ):
+    for name in CONFIG_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
 
 
-class TestDefaults:
-    """Values a caller gets when nothing is configured."""
+@pytest.fixture
+def pristine_config(monkeypatch: pytest.MonkeyPatch) -> Iterator[ModuleType]:
+    """Reimport `config` with no config env vars set, then restore it.
 
-    def test_endpoint_defaults_to_public_wikidata(self):
+    Several settings are read into module constants at import time and bound as
+    constructor defaults (`default_limit=DEFAULT_LIMIT`, and the retry and
+    deep-sleep values). Deleting the env vars during a test is too late for
+    those — the module already evaluated them — so asserting on shipped defaults
+    requires a reimport under a clean environment.
+
+    `load_dotenv` is neutralised for the reimport: it would otherwise repopulate
+    from a developer's `.env` exactly the variables just cleared.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+
+    Yields:
+        The `wikidata_collector.config` module, reloaded with clean constants.
+    """
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: None)
+    yield importlib.reload(config_module)
+
+    # Restore the module under the real environment for the rest of the session.
+    monkeypatch.undo()
+    importlib.reload(config_module)
+
+
+class TestDefaults:
+    """Values a caller gets when nothing is configured.
+
+    These use `pristine_config` because several defaults are baked in at import
+    time; see the fixture's docstring.
+    """
+
+    def test_endpoint_defaults_to_public_wikidata(self, pristine_config):
         """The SPARQL and Entity API URLs default to the public endpoints."""
-        config = WikidataCollectorConfig()
+        config = pristine_config.WikidataCollectorConfig()
 
         assert config.wikidata_sparql_url == "https://query.wikidata.org/sparql"
         assert config.wikidata_entity_api_url == (
             "https://www.wikidata.org/wiki/Special:EntityData/{qid}.json"
         )
 
-    def test_retry_and_pagination_defaults(self):
+    def test_retry_and_pagination_defaults(self, pristine_config):
         """Retry, cooldown, and page-size defaults match the documented values."""
-        config = WikidataCollectorConfig()
+        config = pristine_config.WikidataCollectorConfig()
 
         assert config.max_retries == 3
         assert config.sparql_timeout_seconds == 60
@@ -59,16 +101,16 @@ class TestDefaults:
         assert config.retry_jitter_base == 0.5
         assert config.retry_jitter_increment == 0.2
 
-    def test_deep_sleep_defaults(self):
+    def test_deep_sleep_defaults(self, pristine_config):
         """Deep-sleep defaults are 30 minutes across at most three cycles."""
-        config = WikidataCollectorConfig()
+        config = pristine_config.WikidataCollectorConfig()
 
         assert config.proxy_deep_sleep_seconds == 1800
         assert config.proxy_deep_sleep_max_failures == 3
 
-    def test_proxy_list_defaults_to_empty(self):
+    def test_proxy_list_defaults_to_empty(self, pristine_config):
         """With no PROXY_LIST set, the collector runs without proxies."""
-        assert WikidataCollectorConfig().proxy_list == []
+        assert pristine_config.WikidataCollectorConfig().proxy_list == []
 
 
 class TestConstructorOverrides:
@@ -184,6 +226,43 @@ class TestUserAgent:
             second.get_user_agent()
 
         assert len(constructions) == 1
+
+    def test_concurrent_first_calls_build_the_pool_only_once(self, monkeypatch):
+        """Threads racing on the first call must not each build their own pool.
+
+        Regression guard: an unsynchronised lazy cache lets every thread that
+        arrives before the first assignment construct its own copy, multiplying
+        the very cost the cache exists to avoid.
+        """
+        constructions: List[int] = []
+        ready = threading.Barrier(THREAD_COUNT)
+
+        def _slow_pool() -> "_FakeUserAgentPool":
+            constructions.append(1)
+            # Stand in for the real dataset parse: long enough that an
+            # unsynchronised implementation reliably lets other threads in.
+            # threading.Event().wait sleeps without going through time.sleep,
+            # which the unit suite replaces with a recorder.
+            threading.Event().wait(0.02)
+            return _FakeUserAgentPool("Mozilla/5.0 (fake)")
+
+        monkeypatch.setattr(config_module, "_user_agent_pool", None)
+        monkeypatch.setattr(config_module, "UserAgent", _slow_pool)
+        config = WikidataCollectorConfig()
+        results: List[str] = []
+
+        def _worker() -> None:
+            ready.wait(timeout=5)
+            results.append(config.get_user_agent())
+
+        threads = [threading.Thread(target=_worker) for _ in range(THREAD_COUNT)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        assert len(constructions) == 1
+        assert results == ["Mozilla/5.0 (fake)"] * THREAD_COUNT
 
     def test_contact_email_path_never_builds_the_pool(self, monkeypatch):
         """A configured contact email must not pay for the random-UA dataset."""
