@@ -76,6 +76,10 @@ addopts = [
     "--import-mode=importlib",
     "--tb=short",
     "-ra",
+    # Live tests hit the real Wikidata endpoint and are therefore opt-in.
+    # A `-m` on the command line replaces this one, so `pytest -m live` works.
+    "-m",
+    "not live",
 ]
 # Warnings are failures: a DeprecationWarning from a dependency is a migration we
 # have not done yet, not background noise. Add a narrow ignore with a reason if a
@@ -95,7 +99,7 @@ source = ["wikidata_collector", "*/wikidata_collector"]
 show_missing = true
 skip_covered = true
 # Raise this floor as coverage improves; never lower it to make a build pass.
-fail_under = 90
+fail_under = 95
 exclude_also = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
