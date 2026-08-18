@@ -421,6 +421,76 @@ class TestOrganizationFilterDecomposition:
         assert [record.qid for record in results] == ["Q1", "Q2", "Q3"]
         assert paginate.call_count == 2
 
+    def test_duplicate_type_entries_collapse_to_one_stream(self, wikidata_client):
+        """A repeated type does not spawn a second, wholly redundant keyset
+        stream: the second stream would paginate the entire (potentially slow)
+        WDQS result set only for every record to be dropped by de-duplication.
+        Duplicates are collapsed, order-preserving, before sub-streams are built."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1", "Q2"))],
+        ) as paginate:
+            results = list(
+                wikidata_client.iterate_public_organizations(types=["newspaper", "newspaper"])
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2"]
+        assert paginate.call_count == 1
+        sub_filters = [call.args[1] for call in paginate.call_args_list]
+        assert sub_filters == [{"country": None, "types": ["newspaper"]}]
+
+    def test_duplicate_types_are_collapsed_but_distinct_ones_kept_in_order(self, wikidata_client):
+        """Collapsing duplicates preserves the first occurrence and the order of
+        the remaining distinct types."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1")), iter(_organizations("Q2"))],
+        ) as paginate:
+            list(
+                wikidata_client.iterate_public_organizations(
+                    types=["newspaper", "parliament", "newspaper"]
+                )
+            )
+
+        sub_filters = [call.args[1] for call in paginate.call_args_list]
+        assert sub_filters == [
+            {"country": None, "types": ["newspaper"]},
+            {"country": None, "types": ["parliament"]},
+        ]
+
+
+class TestOrganizationTypesMustBeAList:
+    """`types` must be an actual list, not just any iterable. A one-shot
+    iterable (generator) would be consumed by validation and then arrive at
+    decomposition already exhausted, yielding zero streams and silently
+    returning no records with no request made — a silent fallback the
+    fail-fast contract forbids.
+    """
+
+    def test_generator_types_is_rejected(self, wikidata_client):
+        """A generator is not a list: reject it rather than silently draining it."""
+        with patch.object(wikidata_client, "_paginate_sparql_results") as paginate:
+            with pytest.raises(InvalidFilterError, match="must be a list"):
+                list(
+                    wikidata_client.iterate_public_organizations(
+                        types=(t for t in ["newspaper"])  # type: ignore[arg-type]
+                    )
+                )
+
+        paginate.assert_not_called()
+
+    def test_tuple_types_is_rejected(self, wikidata_client):
+        """Any non-list container (here a tuple) is rejected for the same
+        reason — the public contract is a list of strings."""
+        with pytest.raises(InvalidFilterError, match="must be a list"):
+            list(
+                wikidata_client.iterate_public_organizations(
+                    types=("newspaper",)  # type: ignore[arg-type]
+                )
+            )
+
     def test_duplicate_does_not_count_toward_max_results(self, wikidata_client):
         """A skipped duplicate must not consume the caller's result budget."""
         with patch.object(

@@ -253,6 +253,12 @@ def _validate_organization_filters(filters: Dict[str, Any]) -> None:
             f"did you mean [{types!r}]?"
         )
 
+    # Require an actual list, not just any iterable. A one-shot iterable (e.g. a
+    # generator) would be drained by the loop below and then reach decomposition
+    # already exhausted, yielding zero streams and silently returning nothing.
+    if not isinstance(types, list):
+        raise InvalidFilterError(f"types must be a list of strings, got {type(types).__name__}")
+
     for value in types:
         if not isinstance(value, str):
             raise InvalidFilterError(f"types entries must be strings, got {value!r}")
@@ -281,11 +287,15 @@ def _decompose_organization_filters(filters: Dict[str, Any]) -> List[Dict[str, A
             holds one or more values.
 
     Returns:
-        One filter dict per type value, in the original order, each carrying
-        a single-element `types` list and every other filter unchanged.
+        One filter dict per distinct type value, in the original order, each
+        carrying a single-element `types` list and every other filter
+        unchanged. Repeated type values are collapsed: a duplicate would spawn
+        a second, wholly redundant keyset stream whose every record is later
+        dropped by cross-stream de-duplication.
     """
     types = filters.get("types") or []
-    return [{**filters, "types": [one_type]} for one_type in types]
+    unique_types = list(dict.fromkeys(types))
+    return [{**filters, "types": [one_type]} for one_type in unique_types]
 
 
 def _normalize_figure_bindings(
