@@ -139,6 +139,84 @@ class TestLiveSparqlConnectivity:
             assert first_result.id is not None, "Result should have an ID"
             assert first_result.name is not None, "Result should have a name"
 
+    def test_iterate_public_organizations_newspapers_in_switzerland_live_endpoint(self):
+        """
+        Live smoke test for a single-type organization query.
+
+        Verifies:
+        - iterate_public_organizations(types=["newspaper"], country="Switzerland")
+          works end-to-end against live Wikidata
+        - At least one result is returned
+        - Every result is a PublicOrganizationNormalizedRecord with
+          entity_kind == "public_organization" and a non-empty `countries` list
+        """
+        # Create client with no proxies and reasonable timeout
+        config = WikidataCollectorConfig(
+            proxy_list=[],  # No proxies - direct connection only
+            sparql_timeout_seconds=55,  # Allow enough time for query execution
+            max_retries=1,  # Single attempt for live test
+        )
+        client = WikidataClient(config)
+
+        results = list(
+            client.iterate_public_organizations(
+                types=["newspaper"],
+                country="Switzerland",
+                max_results=5,  # Limit results to keep test fast
+                lang="en",
+            )
+        )
+
+        assert len(results) >= 1, (
+            "Expected at least 1 result with types=['newspaper'], "
+            f"country='Switzerland', but got {len(results)}"
+        )
+
+        assert all(isinstance(r, PublicOrganizationNormalizedRecord) for r in results), (
+            "All results should be PublicOrganizationNormalizedRecord instances"
+        )
+        assert all(r.entity_kind == "public_organization" for r in results), (
+            "All results should have entity_kind 'public_organization'"
+        )
+        assert all(r.countries for r in results), (
+            "All results should have a non-empty countries list"
+        )
+
+    def test_iterate_public_organizations_parliaments_in_germany_live_endpoint(self):
+        """
+        Live smoke test for a single-type organization query in a different
+        country, mirroring the Switzerland/newspaper test above.
+
+        Verifies:
+        - iterate_public_organizations(types=["parliament"], country="Germany")
+          works end-to-end against live Wikidata
+        - At least one result is returned
+        """
+        config = WikidataCollectorConfig(
+            proxy_list=[],
+            sparql_timeout_seconds=55,
+            max_retries=1,
+        )
+        client = WikidataClient(config)
+
+        results = list(
+            client.iterate_public_organizations(
+                types=["parliament"],
+                country="Germany",
+                max_results=5,
+                lang="en",
+            )
+        )
+
+        assert len(results) >= 1, (
+            "Expected at least 1 result with types=['parliament'], "
+            f"country='Germany', but got {len(results)}"
+        )
+
+        assert all(isinstance(r, PublicOrganizationNormalizedRecord) for r in results), (
+            "All results should be PublicOrganizationNormalizedRecord instances"
+        )
+
     def test_iterate_public_organizations_live_endpoint(self):
         """
         End-to-end test for organizations SPARQL query template and iterator.

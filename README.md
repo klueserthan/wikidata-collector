@@ -28,10 +28,10 @@ for figure in client.iterate_public_figures(
     print(f"  Countries: {', '.join(figure.countries)}")
     print(f"  Occupations: {', '.join(figure.occupations)}")
 
-# Iterate over public organizations
+# Iterate over public organizations — `types` is required (see below)
 for inst in client.iterate_public_organizations(
-    country="US",
     types=["government_agency"],
+    country="US",
     max_results=10,
 ):
     print(f"{inst.qid}: {inst.name}")
@@ -66,15 +66,27 @@ Supported nationality values: country names (`"Germany"`, `"United States"`), IS
 
 ```python
 for inst in client.iterate_public_organizations(
+    types=["government_agency"],  # Required: at least one type key or QID
     country="US",  # Optional: country name, ISO code, or QID
-    types=["government_agency"],  # Optional: list of type keys or QIDs
     max_results=100,  # Optional: stop after N results
     lang="en",  # Optional: language for labels (default: "en")
 ):
     ...  # inst is a PublicOrganizationNormalizedRecord
 ```
 
-Supported type keys: `political_party`, `government_agency`, `municipality`, `media_outlet`, `ngo`, `ministry`, `parliament`, `legislature`, `newspaper`, `broadcaster`, `news_agency`, `international_organization`, `court`, `university`, `trade_union`. Or pass QIDs directly (e.g., `"Q327333"`).
+`types` is **required** — Wikidata has no bounded "organization" umbrella
+class an unfiltered scan can complete without timing out on WDQS, so the
+library refuses to build that query. Multiple type values are combined with
+**OR** semantics via a single `VALUES` clause plus a `wdt:P31/wdt:P279*`
+subclass-closure triple — passing `types=["newspaper", "parliament"]` matches
+organizations that are (or are a subclass of) *either* class, e.g. "daily
+newspaper" matches under `newspaper` through the closure. See
+[`docs/adr/0001-organization-query-design.md`](docs/adr/0001-organization-query-design.md)
+for the live-benchmarked reasoning behind these constraints, including how
+`iterate_public_organizations` handles multiple types (one query stream per
+type, de-duplicated) versus `get_public_organizations` (one combined query).
+
+Supported type keys (15 total): `political_party`, `government_agency`, `municipality`, `media_outlet`, `ngo`, `ministry`, `parliament`, `legislature`, `newspaper`, `broadcaster`, `news_agency`, `international_organization`, `court`, `university`, `trade_union`. Or pass QIDs directly (e.g., `"Q327333"`). See `constants.py` (`ORGANIZATION_TYPE_MAPPINGS`) for the full mapping.
 
 ### Low-Level Page Methods
 
@@ -101,14 +113,18 @@ Supported occupation keys: `politician`, `actor`, `musician`, `writer`, `journal
 
 ```python
 organizations, proxy = client.get_public_organizations(
+    types=["Q327333"],  # Required: list of type QIDs or mapped keys
     country="Q30",  # Optional
-    types=["Q327333"],  # Optional: list of type QIDs or mapped keys
     lang="en",  # Optional
     limit=15,  # Optional
     cursor=0,  # Optional
     after_qid=None,  # Optional
 )
 ```
+
+`types` is required here too (see above); multiple values are OR-ed together
+in a single query — `get_public_organizations` never decomposes into multiple
+streams the way `iterate_public_organizations` does.
 
 ### Raw SPARQL Execution
 

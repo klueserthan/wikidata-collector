@@ -8,6 +8,7 @@ They use pytest markers to allow selective execution.
 """
 
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -16,6 +17,7 @@ from wikidata_collector import (
     PublicOrganizationNormalizedRecord,
     WikidataClient,
 )
+from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.exceptions import QueryExecutionError
 
 
@@ -361,3 +363,93 @@ class TestIteratePublicOrganizationsEdgeCases:
 
         with pytest.raises(InvalidFilterError, match="types filter is required"):
             list(client.iterate_public_organizations(types=None))  # type: ignore[arg-type]
+
+
+@pytest.mark.integration
+@pytest.mark.iterator
+class TestIteratePublicOrganizationsMultiTypeOverMockedHTTP:
+    """Round-trip multi-type OR / decomposition through the real client, with
+    only the HTTP transport (``requests.get``) mocked — no ``_fetch_page``
+    substitution. Proves the decomposition seam (``_decompose_organization_filters``)
+    actually drives one real SPARQL query per type, each with exactly that
+    type's QID in its ``VALUES`` clause, and that de-duplication and
+    ``max_results`` behave correctly across those real streams.
+    """
+
+    def _client(self) -> WikidataClient:
+        """Return a client with no proxies (direct connection only) and a
+        single retry, matching mocked-HTTP integration tests elsewhere in
+        this suite."""
+        config = WikidataCollectorConfig(proxy_list=[], sparql_timeout_seconds=5, max_retries=1)
+        return WikidataClient(config)
+
+    @staticmethod
+    def _http_get(pages: list):
+        """Build a `requests.get` stand-in that pops one mocked page per call."""
+
+        def _get(url, params=None, headers=None, proxies=None, timeout=None):
+            response = MagicMock()
+            response.status_code = 200
+            response.json.return_value = pages.pop(0)
+            return response
+
+        return _get
+
+    def test_multi_type_issues_one_query_per_type_each_with_one_qid_in_values(
+        self, organization_page
+    ):
+        """types=["newspaper", "parliament"] must issue two HTTP requests, one
+        per type, each carrying exactly one QID in its VALUES clause — never
+        both QIDs OR-ed into a single combined query."""
+        client = self._client()
+        pages = [organization_page(["Q10"]), organization_page(["Q20"])]
+
+        with patch("requests.get", side_effect=self._http_get(pages)) as mock_get:
+            results = list(
+                client.iterate_public_organizations(
+                    types=["newspaper", "parliament"], country="Switzerland"
+                )
+            )
+
+        assert mock_get.call_count == 2
+        queries = [call.kwargs["params"]["query"] for call in mock_get.call_args_list]
+
+        assert "VALUES ?orgClass { wd:Q11032 }" in queries[0]
+        assert "wd:Q35749" not in queries[0]
+        assert "VALUES ?orgClass { wd:Q35749 }" in queries[1]
+        assert "wd:Q11032" not in queries[1]
+        # The country filter reaches every stream's query.
+        assert all("wdt:P17 wd:Q39" in query for query in queries)
+
+        assert [record.qid for record in results] == ["Q10", "Q20"]
+
+    def test_duplicate_across_streams_yielded_once(self, organization_page):
+        """The same entity returned by two type streams (it matches both
+        classes) is de-duplicated to a single yielded record, end to end
+        through the real HTTP -> normalize -> pagination -> decomposition
+        path."""
+        client = self._client()
+        pages = [organization_page(["Q10", "Q20"]), organization_page(["Q20", "Q30"])]
+
+        with patch("requests.get", side_effect=self._http_get(pages)):
+            results = list(client.iterate_public_organizations(types=["newspaper", "parliament"]))
+
+        assert [record.qid for record in results] == ["Q10", "Q20", "Q30"]
+
+    def test_max_results_caps_across_streams(self, organization_page):
+        """max_results is a single global budget spanning every stream, not a
+        per-stream one: 2 types x 2 results each, capped at 3 total."""
+        client = self._client()
+        pages = [organization_page(["Q10", "Q20"]), organization_page(["Q30", "Q40"])]
+
+        with patch("requests.get", side_effect=self._http_get(pages)) as mock_get:
+            results = list(
+                client.iterate_public_organizations(
+                    types=["newspaper", "parliament"], max_results=3
+                )
+            )
+
+        assert [record.qid for record in results] == ["Q10", "Q20", "Q30"]
+        # Both streams' first pages are fetched (the cap is hit mid-second
+        # stream); no further page beyond that is fetched.
+        assert mock_get.call_count == 2
