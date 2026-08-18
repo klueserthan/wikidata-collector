@@ -1,14 +1,14 @@
-"""SPARQL query builder for public institutions."""
+"""SPARQL query builder for public organizations."""
 
 import os
 from typing import List, Optional
 
 from ..config import DEFAULT_LIMIT
-from ..constants import COUNTRY_MAPPINGS, TYPE_MAPPINGS
+from ..constants import COUNTRY_MAPPINGS, ORGANIZATION_TYPE_MAPPINGS
 from ..security import validate_qid
 
 
-def build_public_institutions_query(
+def build_public_organizations_query(
     country: Optional[str] = None,
     types: Optional[List[str]] = None,
     lang: str = "en",
@@ -16,11 +16,11 @@ def build_public_institutions_query(
     cursor: int = 0,
     after_qid: Optional[str] = None,
 ) -> str:
-    """Build SPARQL query for public institutions with optional filters.
+    """Build SPARQL query for public organizations with optional filters.
 
     Args:
         country: Country filter (QID or label)
-        types: List of institution type filters (mapped keys, QIDs, or labels)
+        types: List of organization type filters (mapped keys, QIDs, or labels)
         lang: Language code for labels
         limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
@@ -38,7 +38,7 @@ def build_public_institutions_query(
     # available for keyset pagination and ordering in the outer query.
     subquery = """
   {
-    SELECT ?institution ?qidNum WHERE {"""
+    SELECT ?organization ?qidNum WHERE {"""
 
     # Build the WHERE clause conditions
     conditions = []
@@ -47,9 +47,9 @@ def build_public_institutions_query(
     if types:
         for value in types:
             value = value.strip()
-            if value in TYPE_MAPPINGS:
+            if value in ORGANIZATION_TYPE_MAPPINGS:
                 # Use mapped QID
-                mapped_qid = TYPE_MAPPINGS[value]
+                mapped_qid = ORGANIZATION_TYPE_MAPPINGS[value]
                 conditions.append(f"wdt:P31 wd:{mapped_qid}")
             elif value.startswith("Q"):
                 # Validate QID format
@@ -58,8 +58,8 @@ def build_public_institutions_query(
             else:
                 # Unknown type - skip or raise error
                 raise ValueError(
-                    f"Unknown institution type '{value}'. "
-                    f"Supported types: {', '.join(sorted(TYPE_MAPPINGS.keys()))}"
+                    f"Unknown organization type '{value}'. "
+                    f"Supported types: {', '.join(sorted(ORGANIZATION_TYPE_MAPPINGS.keys()))}"
                 )
 
     # Add country filter to subquery if provided
@@ -81,16 +81,16 @@ def build_public_institutions_query(
 
     # Build the triple pattern
     if conditions:
-        subquery += "\n      ?institution " + conditions[0]
+        subquery += "\n      ?organization " + conditions[0]
         for condition in conditions[1:]:
             subquery += " ;\n                   " + condition
         subquery += " .\n"
     else:
-        # If no filters, just match any institution with a type
-        subquery += "\n      ?institution wdt:P31 ?type .\n"
+        # If no filters, just match any organization with a type
+        subquery += "\n      ?organization wdt:P31 ?type .\n"
 
     # Add quidNum for keyset pagination and outer ordering
-    subquery += '      BIND(xsd:integer(STRAFTER(STR(?institution), "/entity/Q")) AS ?qidNum)\n'
+    subquery += '      BIND(xsd:integer(STRAFTER(STR(?organization), "/entity/Q")) AS ?qidNum)\n'
 
     # Add keyset pagination to subquery if provided
     if after_qid and after_qid.startswith("Q"):
@@ -112,7 +112,7 @@ def build_public_institutions_query(
 
     # Build outer query with optional properties
     query = (
-        "SELECT ?institution ?institutionLabel ?description\n"
+        "SELECT ?organization ?organizationLabel ?description\n"
         "       ?typeLabel ?countryLabel\n"
         "       ?foundedDate ?dissolvedDate\n"
         "       ?image\n"
@@ -121,20 +121,20 @@ def build_public_institutions_query(
     )
     query += subquery
     query += """
-  OPTIONAL { ?institution wdt:P31 ?type. }
-  OPTIONAL { ?institution wdt:P17 ?country. }
-  OPTIONAL { ?institution wdt:P571 ?foundedDate. }
-  OPTIONAL { ?institution wdt:P576 ?dissolvedDate. }
-  OPTIONAL { ?institution wdt:P18 ?image. }
+  OPTIONAL { ?organization wdt:P31 ?type. }
+  OPTIONAL { ?organization wdt:P17 ?country. }
+  OPTIONAL { ?organization wdt:P571 ?foundedDate. }
+  OPTIONAL { ?organization wdt:P576 ?dissolvedDate. }
+  OPTIONAL { ?organization wdt:P18 ?image. }
 
-  OPTIONAL { ?institution wdt:P2003 ?instagramHandle. }
-  OPTIONAL { ?institution wdt:P2002 ?twitterHandle. }
-  OPTIONAL { ?institution wdt:P2013 ?facebookHandle. }
-  OPTIONAL { ?institution wdt:P2397 ?youtubeHandle. }
-  OPTIONAL { ?institution wdt:P7085 ?tiktokHandle. }
+  OPTIONAL { ?organization wdt:P2003 ?instagramHandle. }
+  OPTIONAL { ?organization wdt:P2002 ?twitterHandle. }
+  OPTIONAL { ?organization wdt:P2013 ?facebookHandle. }
+  OPTIONAL { ?organization wdt:P2397 ?youtubeHandle. }
+  OPTIONAL { ?organization wdt:P7085 ?tiktokHandle. }
 
   OPTIONAL {
-    ?institution schema:description ?description.
+    ?organization schema:description ?description.
     FILTER(LANG(?description) = "%s")
   }
 
@@ -145,7 +145,7 @@ ORDER BY ?qidNum
 
     # Write query to file for debugging if DEBUG_QUERIES environment variable is set
     if os.getenv("DEBUG_QUERIES", "").lower() in ("true", "1", "yes"):
-        with open("query_institution.rq", "w", encoding="utf-8") as f:
+        with open("query_organization.rq", "w", encoding="utf-8") as f:
             f.write(query)
 
     return query

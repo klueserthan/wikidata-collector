@@ -1,6 +1,6 @@
 # Wikidata Collector
 
-A Python library for querying public figures and institutions from [Wikidata](https://www.wikidata.org/) via SPARQL. Returns typed, normalized Pydantic models with automatic pagination, proxy rotation, and high-level safeguards against SPARQL injection (validated QIDs, mapped filters, and date validation).
+A Python library for querying public figures and organizations from [Wikidata](https://www.wikidata.org/) via SPARQL. Returns typed, normalized Pydantic models with automatic pagination, proxy rotation, and high-level safeguards against SPARQL injection (validated QIDs, mapped filters, and date validation).
 
 ## Installation
 
@@ -28,8 +28,8 @@ for figure in client.iterate_public_figures(
     print(f"  Countries: {', '.join(figure.countries)}")
     print(f"  Occupations: {', '.join(figure.occupations)}")
 
-# Iterate over public institutions
-for inst in client.iterate_public_institutions(
+# Iterate over public organizations
+for inst in client.iterate_public_organizations(
     country="US",
     types=["government_agency"],
     max_results=10,
@@ -49,29 +49,29 @@ These handle pagination automatically and yield normalized Pydantic model object
 
 ```python
 for figure in client.iterate_public_figures(
-    birthday_from="1990-01-01",     # Optional: ISO date string
-    birthday_to="2000-12-31",       # Optional: ISO date string
-    nationality="Germany",          # Optional: country name, ISO code, or QID
-    occupations=["writer"],         # Optional: list of occupation keys or QIDs
-    gender="female",                # Optional: "male", "female", "other", or a QID
-    max_results=100,                # Optional: stop after N results
-    lang="en",                      # Optional: language for labels (default: "en")
+    birthday_from="1990-01-01",  # Optional: ISO date string
+    birthday_to="2000-12-31",  # Optional: ISO date string
+    nationality="Germany",  # Optional: country name, ISO code, or QID
+    occupations=["writer"],  # Optional: list of occupation keys or QIDs
+    gender="female",  # Optional: "male", "female", "other", or a QID
+    max_results=100,  # Optional: stop after N results
+    lang="en",  # Optional: language for labels (default: "en")
 ):
     ...  # figure is a PublicFigureNormalizedRecord
 ```
 
 Supported nationality values: country names (`"Germany"`, `"United States"`), ISO codes (`"US"`, `"UK"`), or QIDs (`"Q30"`). See `constants.py` for the full mapping.
 
-#### `client.iterate_public_institutions(...)`
+#### `client.iterate_public_organizations(...)`
 
 ```python
-for inst in client.iterate_public_institutions(
-    country="US",                   # Optional: country name, ISO code, or QID
-    types=["government_agency"],    # Optional: list of type keys or QIDs
-    max_results=100,                # Optional: stop after N results
-    lang="en",                      # Optional: language for labels (default: "en")
+for inst in client.iterate_public_organizations(
+    country="US",  # Optional: country name, ISO code, or QID
+    types=["government_agency"],  # Optional: list of type keys or QIDs
+    max_results=100,  # Optional: stop after N results
+    lang="en",  # Optional: language for labels (default: "en")
 ):
-    ...  # inst is a PublicInstitutionNormalizedRecord
+    ...  # inst is a PublicOrganizationNormalizedRecord
 ```
 
 Supported type keys: `political_party`, `government_agency`, `municipality`, `media_outlet`, `ngo`, `ministry`. Or pass QIDs directly (e.g., `"Q327333"`).
@@ -84,29 +84,29 @@ For manual pagination control. Return `(List[NormalizedRecord], proxy_used_str)`
 
 ```python
 figures, proxy = client.get_public_figures(
-    birthday_from="1990-01-01",     # Optional
-    birthday_to="2000-12-31",       # Optional
-    nationality="Q30",              # Optional: country name, ISO code, or QID
-    occupations=["politician"],     # Optional: list of occupation keys or QIDs
-    lang="en",                      # Optional
-    limit=15,                       # Optional: page size (default: 15)
-    cursor=0,                       # Optional: OFFSET pagination
-    after_qid="Q12345",            # Optional: keyset pagination (preferred)
+    birthday_from="1990-01-01",  # Optional
+    birthday_to="2000-12-31",  # Optional
+    nationality="Q30",  # Optional: country name, ISO code, or QID
+    occupations=["politician"],  # Optional: list of occupation keys or QIDs
+    lang="en",  # Optional
+    limit=15,  # Optional: page size (default: 15)
+    cursor=0,  # Optional: OFFSET pagination
+    after_qid="Q12345",  # Optional: keyset pagination (preferred)
 )
 ```
 
 Supported occupation keys: `politician`, `actor`, `musician`, `writer`, `journalist`, `scientist`, `athlete`, and many more. See `constants.py` for the full mapping.
 
-#### `client.get_public_institutions(...)`
+#### `client.get_public_organizations(...)`
 
 ```python
-institutions, proxy = client.get_public_institutions(
-    country="Q30",                  # Optional
-    types=["Q327333"],              # Optional: list of type QIDs or mapped keys
-    lang="en",                      # Optional
-    limit=15,                       # Optional
-    cursor=0,                       # Optional
-    after_qid=None,                 # Optional
+organizations, proxy = client.get_public_organizations(
+    country="Q30",  # Optional
+    types=["Q327333"],  # Optional: list of type QIDs or mapped keys
+    lang="en",  # Optional
+    limit=15,  # Optional
+    cursor=0,  # Optional
+    after_qid=None,  # Optional
 )
 ```
 
@@ -136,7 +136,7 @@ All query methods return Pydantic models. Key fields:
 | `accounts` | `List[AccountEntry]` | Social media accounts |
 | `websites` | `List[WebsiteEntry]` | Associated websites |
 
-### `PublicInstitutionNormalizedRecord`
+### `PublicOrganizationNormalizedRecord`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -147,7 +147,7 @@ All query methods return Pydantic models. Key fields:
 | `dissolved_date` | `Optional[datetime]` | Date dissolved |
 | `image` | `Optional[str]` | Image URL |
 | `countries` | `List[str]` | Country labels |
-| `types` | `List[str]` | Institution type labels |
+| `types` | `List[str]` | Organization type labels |
 | `accounts` | `List[AccountEntry]` | Social media accounts |
 | `websites` | `List[WebsiteEntry]` | Associated websites |
 
@@ -199,9 +199,7 @@ The iterator APIs use keyset pagination automatically — no manual work needed.
 figures, _ = client.get_public_figures(nationality="Q30", limit=15)
 
 # Next page — use last QID as cursor
-figures, _ = client.get_public_figures(
-    nationality="Q30", limit=15, after_qid=figures[-1].qid
-)
+figures, _ = client.get_public_figures(nationality="Q30", limit=15, after_qid=figures[-1].qid)
 ```
 
 ### OFFSET Pagination (Fallback)
@@ -217,13 +215,13 @@ Keyset pagination is more reliable — OFFSET can drift when data changes betwee
 
 ```python
 from wikidata_collector.exceptions import (
-    WikidataCollectorError,       # Base exception
-    InvalidQIDError,              # Malformed QID
-    InvalidFilterError,           # Bad filter params (dates, max_results)
-    QueryExecutionError,          # SPARQL query failed after retries
-    ProxyMisconfigurationError,   # All proxies failed
-    UpstreamUnavailableError,     # Wikidata returned 502/503/504
-    EntityNotFoundError,          # Entity not found
+    WikidataCollectorError,  # Base exception
+    InvalidQIDError,  # Malformed QID
+    InvalidFilterError,  # Bad filter params (dates, max_results)
+    QueryExecutionError,  # SPARQL query failed after retries
+    ProxyMisconfigurationError,  # All proxies failed
+    UpstreamUnavailableError,  # Wikidata returned 502/503/504
+    EntityNotFoundError,  # Entity not found
 )
 ```
 
@@ -234,8 +232,8 @@ Query builders validate QIDs (`Q` + digits only) and only interpolate mapped, ty
 ```python
 from wikidata_collector.security import validate_qid, escape_sparql_literal
 
-validate_qid("Q42")                    # OK
-validate_qid("Q42; DROP")              # Raises ValueError
+validate_qid("Q42")  # OK
+validate_qid("Q42; DROP")  # Raises ValueError
 escape_sparql_literal('test" inject')  # Returns: 'test\" inject'
 ```
 
@@ -245,6 +243,7 @@ The library uses Python's `logging` module under the `wikidata_collector` namesp
 
 ```python
 import logging
+
 logging.basicConfig(level=logging.INFO)
 ```
 
@@ -270,12 +269,12 @@ wikidata_collector/
 ├── config.py                # WikidataCollectorConfig
 ├── models.py                # Pydantic models (WikiRecord + NormalizedRecord)
 ├── exceptions.py            # Exception hierarchy
-├── constants.py             # Country, profession, institution type mappings
+├── constants.py             # Country, profession, organization type mappings
 ├── security.py              # QID validation, SPARQL literal escaping
 ├── proxy.py                 # Proxy rotation with failure detection
 └── query_builders/
     ├── figures_query_builder.py
-    └── institutions_query_builder.py
+    └── organizations_query_builder.py
 ```
 
 ## Development

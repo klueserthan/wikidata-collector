@@ -6,8 +6,8 @@ import pytest
 
 from wikidata_collector import InvalidFilterError, WikidataClient
 from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
-from wikidata_collector.query_builders.institutions_query_builder import (
-    build_public_institutions_query,
+from wikidata_collector.query_builders.organizations_query_builder import (
+    build_public_organizations_query,
 )
 from wikidata_collector.security import escape_sparql_literal, validate_pid, validate_qid
 
@@ -142,30 +142,30 @@ class TestFiguresQueryInjectionPrevention:
             build_public_figures_query(occupations=[malicious_input])
 
 
-class TestInstitutionsQueryInjectionPrevention:
-    """Test that institutions query builder prevents injection attacks."""
+class TestOrganizationsQueryInjectionPrevention:
+    """Test that organizations query builder prevents injection attacks."""
 
     def test_country_qid_injection_prevented(self):
         """Test that malicious QID in country is rejected."""
         with pytest.raises(ValueError, match="Invalid QID format"):
-            build_public_institutions_query(country="Q42; DROP")
+            build_public_organizations_query(country="Q42; DROP")
 
     def test_country_label_injection_rejected(self):
         """Test that malicious label in country is rejected (only QIDs accepted)."""
         malicious_input = '" . } DROP GRAPH <urn:wikidata> ; { #'
         with pytest.raises(ValueError, match="Country filter must be a QID"):
-            build_public_institutions_query(country=malicious_input)
+            build_public_organizations_query(country=malicious_input)
 
     def test_type_qid_injection_prevented(self):
         """Test that malicious QID in type is rejected."""
         with pytest.raises(ValueError, match="Invalid QID format"):
-            build_public_institutions_query(types=["Q42; SELECT *"])
+            build_public_organizations_query(types=["Q42; SELECT *"])
 
     def test_type_label_injection_rejected(self):
         """Test that malicious label in type is rejected (not in mappings)."""
         malicious_input = '"; } FILTER(?x = "bad'
-        with pytest.raises(ValueError, match="Unknown institution type"):
-            build_public_institutions_query(types=[malicious_input])
+        with pytest.raises(ValueError, match="Unknown organization type"):
+            build_public_organizations_query(types=[malicious_input])
 
 
 class TestCountryCodeEscaping:
@@ -217,7 +217,7 @@ class TestKeysetPaginationInjectionPrevention:
     """`after_qid` is caller-supplied and lands inside a numeric FILTER."""
 
     @pytest.mark.parametrize(
-        "builder", [build_public_figures_query, build_public_institutions_query]
+        "builder", [build_public_figures_query, build_public_organizations_query]
     )
     def test_malicious_after_qid_is_rejected(self, builder):
         """A QID-prefixed payload fails validation instead of being interpolated."""
@@ -225,7 +225,7 @@ class TestKeysetPaginationInjectionPrevention:
             builder(after_qid="Q1) } DROP GRAPH <urn:wikidata> ; SELECT * WHERE { (")
 
     @pytest.mark.parametrize(
-        "builder", [build_public_figures_query, build_public_institutions_query]
+        "builder", [build_public_figures_query, build_public_organizations_query]
     )
     def test_valid_after_qid_becomes_a_numeric_comparison(self, builder):
         """A well-formed QID is reduced to its integer suffix."""

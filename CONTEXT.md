@@ -6,10 +6,10 @@ Shared vocabulary for wikidata-collector. Use these terms exactly in code, docs,
 
 - **Public figure** — a human Wikidata entity (`wdt:P31 wd:Q5`), filterable by birthday range,
   nationality (P27, country of citizenship), occupations (P106), and gender (P21).
-- **Public institution** — an organizational Wikidata entity, filterable by country (P17) and
+- **Public organization** — an organizational Wikidata entity, filterable by country (P17) and
   types (P31).
 - **Entity kind** — the discriminator string on every model (`"public_figure"` /
-  `"public_institution"`).
+  `"public_organization"`).
 
 ## Records
 
@@ -43,8 +43,8 @@ One name per concept, end to end (public method → pipeline → query builder):
 | Occupations (P106) | `occupations` | public figures |
 | Gender (P21) | `gender` | public figures |
 | Birth date range (P569) | `birthday_from` / `birthday_to` | public figures |
-| Country (P17) | `country` | public institutions |
-| Institution types (P31) | `types` | public institutions |
+| Country (P17) | `country` | public organizations |
+| Organization types (P31) | `types` | public organizations |
 
 Human-readable filter labels resolve to QIDs only via the mappings in `constants.py`; unknown
 labels are rejected (never interpolated into SPARQL).

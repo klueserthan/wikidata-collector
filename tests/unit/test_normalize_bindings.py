@@ -8,17 +8,17 @@ than only through the pipeline.
 
 import logging
 
-from tests.conftest import figure_binding, institution_binding
+from tests.conftest import figure_binding, organization_binding
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
     PublicFigureWikiRecord,
-    PublicInstitutionNormalizedRecord,
-    PublicInstitutionWikiRecord,
+    PublicOrganizationNormalizedRecord,
+    PublicOrganizationWikiRecord,
 )
 from wikidata_collector.models import normalize_bindings as normalize
 
 FIGURE_FAMILY = (PublicFigureWikiRecord, PublicFigureNormalizedRecord)
-INSTITUTION_FAMILY = (PublicInstitutionWikiRecord, PublicInstitutionNormalizedRecord)
+ORGANIZATION_FAMILY = (PublicOrganizationWikiRecord, PublicOrganizationNormalizedRecord)
 
 
 class TestFolding:
@@ -134,18 +134,18 @@ class TestMalformedRows:
         assert records[0].birth_date is None
 
 
-class TestInstitutionFamily:
+class TestOrganizationFamily:
     """The same folding contract holds for the other entity kind."""
 
     def test_consecutive_rows_fold_and_collect_types(self):
-        """Institution rows expand over P31 types and fold into one record."""
+        """Organization rows expand over P31 types and fold into one record."""
         records = normalize(
             [
-                institution_binding("Q1", typeLabel="international organization"),
-                institution_binding("Q1", typeLabel="intergovernmental organization"),
-                institution_binding("Q2", countryLabel="Germany"),
+                organization_binding("Q1", typeLabel="international organization"),
+                organization_binding("Q1", typeLabel="intergovernmental organization"),
+                organization_binding("Q2", countryLabel="Germany"),
             ],
-            *INSTITUTION_FAMILY,
+            *ORGANIZATION_FAMILY,
         )
 
         assert [record.qid for record in records] == ["Q1", "Q2"]
@@ -155,12 +155,12 @@ class TestInstitutionFamily:
         ]
         assert records[1].countries == ["Germany"]
 
-    def test_a_row_without_an_institution_iri_is_skipped(self, caplog):
-        """The institution family drops malformed rows the same way."""
+    def test_a_row_without_an_organization_iri_is_skipped(self, caplog):
+        """The organization family drops malformed rows the same way."""
         with caplog.at_level(logging.WARNING):
             records = normalize(
-                [{"institutionLabel": {"value": "No IRI"}}, institution_binding("Q1")],
-                *INSTITUTION_FAMILY,
+                [{"organizationLabel": {"value": "No IRI"}}, organization_binding("Q1")],
+                *ORGANIZATION_FAMILY,
             )
 
         assert [record.qid for record in records] == ["Q1"]

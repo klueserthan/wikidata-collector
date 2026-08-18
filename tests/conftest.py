@@ -45,22 +45,22 @@ def figure_binding(qid: str = "Q42", name: str = "Douglas Adams", **fields: Any)
     return binding
 
 
-def institution_binding(
+def organization_binding(
     qid: str = "Q1", name: str = "United Nations", **fields: Any
 ) -> Dict[str, Any]:
-    """Build one SPARQL result row for a public institution.
+    """Build one SPARQL result row for a public organization.
 
     Args:
-        qid: Entity QID; becomes the ``institution`` IRI.
-        name: Value for ``institutionLabel``.
+        qid: Entity QID; becomes the ``organization`` IRI.
+        name: Value for ``organizationLabel``.
         **fields: Any further SPARQL variables to bind (``None`` omits one).
 
     Returns:
         One binding row.
     """
     binding: Dict[str, Any] = {
-        "institution": {"value": f"{WIKIDATA_ENTITY_PREFIX}{qid}"},
-        "institutionLabel": {"value": name},
+        "organization": {"value": f"{WIKIDATA_ENTITY_PREFIX}{qid}"},
+        "organizationLabel": {"value": name},
     }
     binding.update({key: {"value": value} for key, value in fields.items() if value is not None})
     return binding

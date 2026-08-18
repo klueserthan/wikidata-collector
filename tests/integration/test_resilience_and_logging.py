@@ -415,9 +415,9 @@ class TestStructuredLoggingInIterators:
                 assert hasattr(log, "raw_count")
                 assert hasattr(log, "unique_qid_count")
 
-    def test_iterate_public_institutions_logs_filters(self, caplog):
+    def test_iterate_public_organizations_logs_filters(self, caplog):
         """
-        Test that iterate_public_institutions logs filter usage.
+        Test that iterate_public_organizations logs filter usage.
 
         Verifies:
         - Query execution logs include filter parameters
@@ -437,7 +437,7 @@ class TestStructuredLoggingInIterators:
             with caplog.at_level(logging.INFO):
                 # Consume iterator with filters
                 list(
-                    client.iterate_public_institutions(
+                    client.iterate_public_organizations(
                         country="Q30", types=["government_agency"], max_results=5
                     )
                 )

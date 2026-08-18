@@ -80,7 +80,7 @@ class TestLogQueryExecution:
         """Test logging when using direct connection (no proxy)"""
         with log_capture.at_level(logging.INFO):
             _log_query_execution(
-                query_type="public_institutions",
+                query_type="public_organizations",
                 params={"country": "Q30"},
                 page_num=2,
                 raw_count=12,
@@ -133,7 +133,7 @@ class TestLogPageFetch:
         """Test page fetch logging for first page (no after_qid)"""
         with log_capture.at_level(logging.DEBUG):
             _log_page_fetch(
-                query_type="public_institutions",
+                query_type="public_organizations",
                 page_num=1,
                 after_qid=None,
                 raw_count=15,
@@ -249,7 +249,7 @@ class TestLogQueryFailure:
         """Test failure logging when no filters are provided"""
         with log_capture.at_level(logging.ERROR):
             _log_query_failure(
-                query_type="public_institutions",
+                query_type="public_organizations",
                 error_category="timeout",
                 error_message="Request timeout",
                 attempts=1,

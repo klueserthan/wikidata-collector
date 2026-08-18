@@ -62,7 +62,7 @@ class TestFilterValidation:
         """Generators are lazy, but validation must still fail fast on first use."""
         with patch.object(wikidata_client, "_fetch_page") as fetch:
             with pytest.raises(InvalidFilterError):
-                list(wikidata_client.iterate_public_institutions(max_results=0))
+                list(wikidata_client.iterate_public_organizations(max_results=0))
 
         fetch.assert_not_called()
 
@@ -163,11 +163,11 @@ class TestFailurePropagation:
                 wikidata_client, "_fetch_page", side_effect=QueryExecutionError("boom")
             ):
                 with pytest.raises(QueryExecutionError):
-                    list(wikidata_client.iterate_public_institutions())
+                    list(wikidata_client.iterate_public_organizations())
 
         failures = [r for r in caplog.records if getattr(r, "event", None) == "iteration_failed"]
         assert failures
-        assert failures[0].entity_kind == "public_institution"
+        assert failures[0].entity_kind == "public_organization"
         assert failures[0].error_type == "QueryExecutionError"
 
     def test_a_failed_iteration_is_not_logged_as_completed(self, wikidata_client, caplog):

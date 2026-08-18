@@ -38,13 +38,13 @@ from .exceptions import (
 from .models import (
     PublicFigureNormalizedRecord,
     PublicFigureWikiRecord,
-    PublicInstitutionNormalizedRecord,
-    PublicInstitutionWikiRecord,
+    PublicOrganizationNormalizedRecord,
+    PublicOrganizationWikiRecord,
     normalize_bindings,
 )
 from .proxy import ProxyManager, validate_proxy_list
 from .query_builders.figures_query_builder import build_public_figures_query
-from .query_builders.institutions_query_builder import build_public_institutions_query
+from .query_builders.organizations_query_builder import build_public_organizations_query
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def _log_query_execution(
     """Log structured information about query execution.
 
     Args:
-        query_type: Type of query (e.g., 'public_figures', 'public_institutions')
+        query_type: Type of query (e.g., 'public_figures', 'public_organizations')
         params: Query parameters used
         page_num: Page number (1-indexed)
         raw_count: Number of normalized records returned (may include duplicates due to SPARQL expansion)
@@ -222,11 +222,11 @@ def _normalize_figure_bindings(
     return normalize_bindings(bindings, PublicFigureWikiRecord, PublicFigureNormalizedRecord)
 
 
-def _normalize_institution_bindings(
+def _normalize_organization_bindings(
     bindings: List[Dict[str, Any]],
-) -> List[PublicInstitutionNormalizedRecord]:
+) -> List[PublicOrganizationNormalizedRecord]:
     return normalize_bindings(
-        bindings, PublicInstitutionWikiRecord, PublicInstitutionNormalizedRecord
+        bindings, PublicOrganizationWikiRecord, PublicOrganizationNormalizedRecord
     )
 
 
@@ -253,11 +253,11 @@ _PUBLIC_FIGURES: "_EntitySpec[PublicFigureNormalizedRecord]" = _EntitySpec(
     validate_filters=_validate_figure_filters,
 )
 
-_PUBLIC_INSTITUTIONS: "_EntitySpec[PublicInstitutionNormalizedRecord]" = _EntitySpec(
-    entity_kind="public_institution",
-    query_type="public_institutions",
-    build_query=build_public_institutions_query,
-    normalize=_normalize_institution_bindings,
+_PUBLIC_ORGANIZATIONS: "_EntitySpec[PublicOrganizationNormalizedRecord]" = _EntitySpec(
+    entity_kind="public_organization",
+    query_type="public_organizations",
+    build_query=build_public_organizations_query,
+    normalize=_normalize_organization_bindings,
 )
 
 
@@ -878,7 +878,7 @@ class WikidataClient:
             override_proxies=override_proxies,
         )
 
-    def get_public_institutions(
+    def get_public_organizations(
         self,
         country: Optional[str] = None,
         types: Optional[List[str]] = None,
@@ -887,12 +887,12 @@ class WikidataClient:
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
-    ) -> Tuple[List[PublicInstitutionNormalizedRecord], str]:
-        """Get one page of public institutions with optional filters.
+    ) -> Tuple[List[PublicOrganizationNormalizedRecord], str]:
+        """Get one page of public organizations with optional filters.
 
         Args:
             country: Country filter (QID, ISO code, or label)
-            types: List of institution type filters (mapped keys, QIDs, or labels)
+            types: List of organization type filters (mapped keys, QIDs, or labels)
             lang: Language code for labels
             limit: Maximum results to return (defaults to config.default_limit)
             cursor: Offset for pagination
@@ -900,10 +900,10 @@ class WikidataClient:
             override_proxies: Optional list of proxy URLs
 
         Returns:
-            Tuple of (List[PublicInstitutionNormalizedRecord], used_proxy)
+            Tuple of (List[PublicOrganizationNormalizedRecord], used_proxy)
         """
         return self._fetch_page(
-            _PUBLIC_INSTITUTIONS,
+            _PUBLIC_ORGANIZATIONS,
             {"country": country, "types": types},
             lang=lang,
             limit=limit,
@@ -961,15 +961,15 @@ class WikidataClient:
             lang=lang,
         )
 
-    def iterate_public_institutions(
+    def iterate_public_organizations(
         self,
         *,
         country: Optional[str] = None,
         types: Optional[List[str]] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
-    ) -> Iterator[PublicInstitutionNormalizedRecord]:
-        """Yield aggregated public institutions matching the given filters.
+    ) -> Iterator[PublicOrganizationNormalizedRecord]:
+        """Yield aggregated public organizations matching the given filters.
 
         Expects human-readable filter labels (e.g., "US", "government_agency") or QIDs;
         query builders translate these into appropriate SPARQL constraints.
@@ -980,19 +980,19 @@ class WikidataClient:
 
         Args:
             country: Country filter (single value: QID, ISO code, or label)
-            types: List of institution type filters (labels or QIDs)
+            types: List of organization type filters (labels or QIDs)
             max_results: Maximum number of results to yield (None for unlimited)
             lang: Language code for labels (default: "en")
 
         Yields:
-            PublicInstitutionNormalizedRecord: Normalized public institution objects
+            PublicOrganizationNormalizedRecord: Normalized public organization objects
 
         Raises:
             InvalidFilterError: If filter parameters are invalid or malformed
             QueryExecutionError: If upstream query execution fails
         """
         yield from self._iterate(
-            _PUBLIC_INSTITUTIONS,
+            _PUBLIC_ORGANIZATIONS,
             {"country": country, "types": types},
             max_results=max_results,
             lang=lang,

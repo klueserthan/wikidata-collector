@@ -1,7 +1,7 @@
 # CLAUDE.md — wikidata-collector
 
 Python library that streams normalized Wikidata entities (public figures, public
-institutions) over SPARQL. Pure library: no web framework, no database, no CLI.
+organizations) over SPARQL. Pure library: no web framework, no database, no CLI.
 
 ## Commands
 

@@ -20,7 +20,7 @@ from .exceptions import (
 )
 from .models import (
     PublicFigureNormalizedRecord,
-    PublicInstitutionNormalizedRecord,
+    PublicOrganizationNormalizedRecord,
     SubInstitution,
 )
 
@@ -28,7 +28,7 @@ __version__ = version("wikidata-collector")
 __all__ = [
     "WikidataClient",
     "PublicFigureNormalizedRecord",
-    "PublicInstitutionNormalizedRecord",
+    "PublicOrganizationNormalizedRecord",
     "SubInstitution",
     "WikidataCollectorError",
     "InvalidQIDError",

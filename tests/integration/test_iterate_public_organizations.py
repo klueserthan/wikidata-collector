@@ -1,7 +1,7 @@
 """
-Integration tests for iterate_public_institutions API.
+Integration tests for iterate_public_organizations API.
 
-These tests verify the iterator-based API for streaming public institutions.
+These tests verify the iterator-based API for streaming public organizations.
 The entity pipeline's fetch seam (``_fetch_page``) is substituted with fake
 pages; validation, pagination, and max_results handling run for real.
 They use pytest markers to allow selective execution.
@@ -11,19 +11,23 @@ from datetime import datetime
 
 import pytest
 
-from wikidata_collector import InvalidFilterError, PublicInstitutionNormalizedRecord, WikidataClient
+from wikidata_collector import (
+    InvalidFilterError,
+    PublicOrganizationNormalizedRecord,
+    WikidataClient,
+)
 from wikidata_collector.exceptions import QueryExecutionError
 
 
 def _pi(
     qid: str,
-    name: str = "Institution",
+    name: str = "Organization",
     *,
     founded: str | None = None,
     countries: list[str] | None = None,
     types: list[str] | None = None,
-) -> PublicInstitutionNormalizedRecord:
-    return PublicInstitutionNormalizedRecord(
+) -> PublicOrganizationNormalizedRecord:
+    return PublicOrganizationNormalizedRecord(
         qid=qid,
         name=name,
         founded_date=datetime.fromisoformat(founded) if founded else None,
@@ -34,11 +38,11 @@ def _pi(
 
 @pytest.mark.integration
 @pytest.mark.iterator
-class TestIteratePublicInstitutionsHappyPath:
-    """Test iterate_public_institutions happy path scenarios."""
+class TestIteratePublicOrganizationsHappyPath:
+    """Test iterate_public_organizations happy path scenarios."""
 
-    def test_iterate_returns_public_institution_models(self, mocker):
-        """Test that iterator yields PublicInstitution model instances."""
+    def test_iterate_returns_public_organization_models(self, mocker):
+        """Test that iterator yields PublicOrganization model instances."""
         # Substitute the fetch seam with a fake page of normalized models
         sample_records = [
             _pi(
@@ -62,12 +66,12 @@ class TestIteratePublicInstitutionsHappyPath:
 
         # Call the iterator API
         results = list(
-            client.iterate_public_institutions(country="US", types=["government_agency"])
+            client.iterate_public_organizations(country="US", types=["government_agency"])
         )
 
         # Verify results
         assert len(results) == 2
-        assert all(isinstance(r, PublicInstitutionNormalizedRecord) for r in results)
+        assert all(isinstance(r, PublicOrganizationNormalizedRecord) for r in results)
         assert results[0].id == "Q123"
         assert results[0].name == "Example Government Agency"
         assert results[1].id == "Q456"
@@ -77,23 +81,23 @@ class TestIteratePublicInstitutionsHappyPath:
         """Test that max_results limits the number of results."""
         # Create a large page of sample results
         sample_records = [
-            _pi(f"Q{i}", f"Institution {i}", founded="2000-01-01T00:00:00") for i in range(100)
+            _pi(f"Q{i}", f"Organization {i}", founded="2000-01-01T00:00:00") for i in range(100)
         ]
 
         client = WikidataClient()
         mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Request only 10 results
-        results = list(client.iterate_public_institutions(country="US", max_results=10))
+        results = list(client.iterate_public_organizations(country="US", max_results=10))
 
         # Verify only 10 results returned
         assert len(results) == 10
-        assert all(isinstance(r, PublicInstitutionNormalizedRecord) for r in results)
+        assert all(isinstance(r, PublicOrganizationNormalizedRecord) for r in results)
 
     def test_iterate_with_country_filter(self, mocker):
         """Test iteration with country filter."""
         sample_records = [
-            _pi("Q100", "German Institution", founded="1990-01-01T00:00:00", countries=["Germany"])
+            _pi("Q100", "German Organization", founded="1990-01-01T00:00:00", countries=["Germany"])
         ]
 
         client = WikidataClient()
@@ -102,7 +106,7 @@ class TestIteratePublicInstitutionsHappyPath:
         )
 
         # Call with country filter
-        results = list(client.iterate_public_institutions(country="Germany", lang="en"))
+        results = list(client.iterate_public_organizations(country="Germany", lang="en"))
 
         # Verify the fetch seam received the filters under their public names
         mock_fetch.assert_called_once()
@@ -123,7 +127,7 @@ class TestIteratePublicInstitutionsHappyPath:
 
         # Call with types filter
         results = list(
-            client.iterate_public_institutions(
+            client.iterate_public_organizations(
                 types=["political_party", "government_agency"], lang="en"
             )
         )
@@ -153,7 +157,9 @@ class TestIteratePublicInstitutionsHappyPath:
 
         # Call with combined filters
         results = list(
-            client.iterate_public_institutions(country="US", types=["government_agency"], lang="en")
+            client.iterate_public_organizations(
+                country="US", types=["government_agency"], lang="en"
+            )
         )
 
         # Verify the fetch seam received all filters
@@ -167,8 +173,8 @@ class TestIteratePublicInstitutionsHappyPath:
 
 @pytest.mark.integration
 @pytest.mark.iterator
-class TestIteratePublicInstitutionsEdgeCases:
-    """Test edge cases and error handling for iterate_public_institutions."""
+class TestIteratePublicOrganizationsEdgeCases:
+    """Test edge cases and error handling for iterate_public_organizations."""
 
     def test_iterate_empty_results(self, mocker):
         """Test iteration with no matching results."""
@@ -177,7 +183,7 @@ class TestIteratePublicInstitutionsEdgeCases:
 
         # Call the iterator with filters that return no results
         results = list(
-            client.iterate_public_institutions(
+            client.iterate_public_organizations(
                 country="NonexistentCountry", types=["nonexistent_type"]
             )
         )
@@ -191,7 +197,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         client = WikidataClient()
 
         with pytest.raises(InvalidFilterError) as exc_info:
-            list(client.iterate_public_institutions(max_results=0))
+            list(client.iterate_public_organizations(max_results=0))
 
         assert "max_results must be >= 1" in str(exc_info.value)
 
@@ -200,7 +206,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         client = WikidataClient()
 
         with pytest.raises(InvalidFilterError) as exc_info:
-            list(client.iterate_public_institutions(max_results=-10))
+            list(client.iterate_public_organizations(max_results=-10))
 
         assert "max_results must be >= 1" in str(exc_info.value)
 
@@ -215,7 +221,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         )
 
         with pytest.raises(QueryExecutionError) as exc_info:
-            list(client.iterate_public_institutions(country="US"))
+            list(client.iterate_public_organizations(country="US"))
 
         assert "Upstream SPARQL endpoint unavailable" in str(exc_info.value)
 
@@ -226,38 +232,38 @@ class TestIteratePublicInstitutionsEdgeCases:
         mocker.patch.object(client, "_fetch_page", side_effect=ValueError("Invalid QID format"))
 
         with pytest.raises(InvalidFilterError) as exc_info:
-            list(client.iterate_public_institutions(country="Q!!!invalid"))
+            list(client.iterate_public_organizations(country="Q!!!invalid"))
 
         assert "Invalid filter parameters" in str(exc_info.value)
 
     def test_iterate_without_filters(self, mocker):
         """Test iteration without any filters."""
-        sample_records = [_pi("Q1", "Institution 1", founded="2000-01-01T00:00:00")]
+        sample_records = [_pi("Q1", "Organization 1", founded="2000-01-01T00:00:00")]
 
         client = WikidataClient()
         mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
         # Call without filters
-        results = list(client.iterate_public_institutions())
+        results = list(client.iterate_public_organizations())
 
         assert len(results) == 1
         assert results[0].id == "Q1"
 
     def test_max_results_one(self, mocker):
         """Test with max_results=1."""
-        sample_records = [_pi("Q1", "Institution 1"), _pi("Q2", "Institution 2")]
+        sample_records = [_pi("Q1", "Organization 1"), _pi("Q2", "Organization 2")]
 
         client = WikidataClient()
         mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
-        results = list(client.iterate_public_institutions(max_results=1))
+        results = list(client.iterate_public_organizations(max_results=1))
 
         assert len(results) == 1
         assert results[0].id == "Q1"
 
     def test_country_iso_code_filter(self, mocker):
         """Test with country as ISO code."""
-        sample_records = [_pi("Q999", "US Institution", countries=["United States"])]
+        sample_records = [_pi("Q999", "US Organization", countries=["United States"])]
 
         client = WikidataClient()
         mock_fetch = mocker.patch.object(
@@ -265,7 +271,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         )
 
         # Call with ISO code
-        results = list(client.iterate_public_institutions(country="USA"))
+        results = list(client.iterate_public_organizations(country="USA"))
 
         # Verify the ISO code was passed
         mock_fetch.assert_called_once()
@@ -276,7 +282,7 @@ class TestIteratePublicInstitutionsEdgeCases:
 
     def test_country_qid_filter(self, mocker):
         """Test with country as QID."""
-        sample_records = [_pi("Q888", "UK Institution", countries=["United Kingdom"])]
+        sample_records = [_pi("Q888", "UK Organization", countries=["United Kingdom"])]
 
         client = WikidataClient()
         mock_fetch = mocker.patch.object(
@@ -284,7 +290,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         )
 
         # Call with QID
-        results = list(client.iterate_public_institutions(country="Q145"))
+        results = list(client.iterate_public_organizations(country="Q145"))
 
         # Verify the QID was passed
         mock_fetch.assert_called_once()
@@ -304,7 +310,7 @@ class TestIteratePublicInstitutionsEdgeCases:
 
         # Call with mapped type keys
         results = list(
-            client.iterate_public_institutions(types=["political_party", "municipality"])
+            client.iterate_public_organizations(types=["political_party", "municipality"])
         )
 
         # Verify the types were passed
@@ -316,7 +322,7 @@ class TestIteratePublicInstitutionsEdgeCases:
 
     def test_empty_types_list(self, mocker):
         """Test with empty types list."""
-        sample_records = [_pi("Q1", "Institution 1")]
+        sample_records = [_pi("Q1", "Organization 1")]
 
         client = WikidataClient()
         mock_fetch = mocker.patch.object(
@@ -324,7 +330,7 @@ class TestIteratePublicInstitutionsEdgeCases:
         )
 
         # Call with empty types list - should be passed through as is
-        results = list(client.iterate_public_institutions(types=[]))
+        results = list(client.iterate_public_organizations(types=[]))
 
         mock_fetch.assert_called_once()
         filters = mock_fetch.call_args.args[1]

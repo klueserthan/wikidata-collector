@@ -9,7 +9,7 @@ from datetime import datetime
 from wikidata_collector.models import (
     AccountEntry,
     PublicFigureNormalizedRecord,
-    PublicInstitutionNormalizedRecord,
+    PublicOrganizationNormalizedRecord,
     WebsiteEntry,
 )
 
@@ -76,18 +76,18 @@ class TestPublicFigureRendering:
         assert "Countries:" not in rendered
 
 
-class TestPublicInstitutionRendering:
-    """Rendering a normalized public institution."""
+class TestPublicOrganizationRendering:
+    """Rendering a normalized public organization."""
 
     def test_minimal_record_renders_only_the_headline(self):
         """With nothing but identity, the output is a single line."""
-        rendered = PublicInstitutionNormalizedRecord(qid="Q1065", name="United Nations")
+        rendered = PublicOrganizationNormalizedRecord(qid="Q1065", name="United Nations")
 
-        assert rendered.generate_pretty_string() == "Public Institution: United Nations (Q1065)"
+        assert rendered.generate_pretty_string() == "Public Organization: United Nations (Q1065)"
 
     def test_every_populated_field_appears(self):
         """A fully populated record surfaces each field exactly once."""
-        record = PublicInstitutionNormalizedRecord(
+        record = PublicOrganizationNormalizedRecord(
             qid="Q1065",
             name="United Nations",
             description="intergovernmental organization",
@@ -102,7 +102,7 @@ class TestPublicInstitutionRendering:
 
         rendered = record.generate_pretty_string()
 
-        assert "Public Institution: United Nations (Q1065)" in rendered
+        assert "Public Organization: United Nations (Q1065)" in rendered
         assert "Description: intergovernmental organization" in rendered
         assert "Founded Date: 1945-10-24T00:00:00" in rendered
         assert "Dissolved Date: 2100-01-01T00:00:00" in rendered
@@ -114,7 +114,7 @@ class TestPublicInstitutionRendering:
 
     def test_empty_collections_do_not_emit_headings(self):
         """No accounts means no dangling "Social Media Accounts:" heading."""
-        rendered = PublicInstitutionNormalizedRecord(
+        rendered = PublicOrganizationNormalizedRecord(
             qid="Q1065", name="United Nations"
         ).generate_pretty_string()
 
