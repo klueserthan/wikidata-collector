@@ -31,6 +31,8 @@ dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.12.0",
+    "pytest-randomly>=3.15.0",
+    "responses>=0.25.0",
     "ruff>=0.14.9",
     "pyright>=1.1.390",
 ]
@@ -57,3 +59,46 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
 ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: full pipeline over mocked HTTP (deselect with -m 'not integration')",
+    "iterator: iterator-based public API (select with -m iterator)",
+    "live: hits the real Wikidata SPARQL endpoint (deselect with -m 'not live')",
+]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
+    "--tb=short",
+    "-ra",
+]
+# Warnings are failures: a DeprecationWarning from a dependency is a migration we
+# have not done yet, not background noise. Add a narrow ignore with a reason if a
+# warning is genuinely outside our control.
+filterwarnings = ["error"]
+log_cli_level = "WARNING"
+
+[tool.coverage.run]
+source = ["wikidata_collector"]
+branch = true
+parallel = true
+
+[tool.coverage.paths]
+source = ["wikidata_collector", "*/wikidata_collector"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# Raise this floor as coverage improves; never lower it to make a build pass.
+fail_under = 90
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "\\.\\.\\.$",
+]
