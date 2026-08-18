@@ -131,16 +131,21 @@ jobs:
 
       # This is a library: a wheel that builds but does not import is broken for
       # every consumer, and no other job would notice.
+      # -P keeps the checkout off sys.path. Without it `python -c` puts the
+      # working directory first, so this would import the source tree sitting
+      # next door and pass even for a wheel that cannot import at all.
       - name: Install the wheel into a clean environment and import it
         run: |
           uv venv /tmp/smoke
           uv pip install --python /tmp/smoke/bin/python dist/*.whl
-          /tmp/smoke/bin/python -c "
+          /tmp/smoke/bin/python -P - <<'SMOKE'
           import wikidata_collector as wc
+
+          assert "site-packages" in wc.__file__, f"not the installed wheel: {wc.__file__}"
           missing = [name for name in wc.__all__ if not hasattr(wc, name)]
-          assert not missing, f'exported but missing: {missing}'
-          print('imported', wc.__name__, wc.__version__, '-', len(wc.__all__), 'exports')
-          "
+          assert not missing, f"exported but missing: {missing}"
+          print("imported", wc.__file__, "-", len(wc.__all__), "exports")
+          SMOKE
 
       - name: Upload distributions
         uses: actions/upload-artifact@v5

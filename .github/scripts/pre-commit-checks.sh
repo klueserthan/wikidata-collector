@@ -53,11 +53,15 @@ step "Package builds, installs, and imports"
 uv build --out-dir "$SMOKE_DIR/dist"
 uv venv "$SMOKE_DIR/venv"
 uv pip install --quiet --python "$SMOKE_DIR/venv/bin/python" "$SMOKE_DIR"/dist/*.whl
-"$SMOKE_DIR/venv/bin/python" -c "
+# -P keeps the checkout off sys.path. Without it this imports the source tree
+# sitting next door instead of the wheel, and passes for any wheel at all.
+"$SMOKE_DIR/venv/bin/python" -P - <<'SMOKE'
 import wikidata_collector as wc
+
+assert "site-packages" in wc.__file__, f"not the installed wheel: {wc.__file__}"
 missing = [name for name in wc.__all__ if not hasattr(wc, name)]
-assert not missing, f'exported but missing: {missing}'
-print('imported', wc.__name__, wc.__version__, '-', len(wc.__all__), 'exports')
-"
+assert not missing, f"exported but missing: {missing}"
+print("imported", wc.__file__, "-", len(wc.__all__), "exports")
+SMOKE
 
 printf '\n\033[32mAll checks passed.\033[0m\n'
