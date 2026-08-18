@@ -485,7 +485,7 @@ class WikidataClient:
                             proxy=proxy,
                         )
                         already_logged_retry = True
-                    time.sleep(wait_s)
+                        time.sleep(wait_s)
                     raise requests.exceptions.HTTPError("429 Too Many Requests", response=response)
 
                 if response.status_code in (502, 503, 504):
@@ -500,7 +500,7 @@ class WikidataClient:
                             proxy=proxy,
                         )
                         already_logged_retry = True
-                    time.sleep(wait_s)
+                        time.sleep(wait_s)
                     raise requests.exceptions.HTTPError(
                         f"{response.status_code} Service Unavailable", response=response
                     )

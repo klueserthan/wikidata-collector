@@ -157,6 +157,10 @@ Both models have a `.generate_pretty_string()` method for human-readable output 
 
 ## Configuration
 
+Every numeric setting resolves in this order: explicit constructor argument >
+environment variable > documented default. Passing an argument always wins,
+even if the matching environment variable is also set.
+
 ### Environment Variables
 
 ```bash

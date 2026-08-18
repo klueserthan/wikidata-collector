@@ -143,6 +143,15 @@ class TestThrottling:
         with pytest.raises(QueryExecutionError):
             make_client().execute_sparql_query(QUERY)
 
+    def test_does_not_sleep_after_the_final_429_attempt(self, make_client, http, recorded_sleeps):
+        """Nothing is retried after the last attempt, so it must not sleep either."""
+        _register(http, 429, 429, 429)
+
+        with pytest.raises(QueryExecutionError):
+            make_client(max_retries=3).execute_sparql_query(QUERY)
+
+        assert len(recorded_sleeps) == 2
+
 
 class TestUpstreamUnavailable:
     """HTTP 502/503/504 handling."""
@@ -164,7 +173,7 @@ class TestUpstreamUnavailable:
         with pytest.raises(UpstreamUnavailableError):
             make_client(max_retries=4, retry_max_wait_seconds=3).execute_sparql_query(QUERY)
 
-        assert recorded_sleeps == [1, 2, 3, 3]
+        assert recorded_sleeps == [1, 2, 3]
 
     def test_a_seen_gateway_status_outranks_a_later_connection_failure(self, make_client, http):
         """Once a gateway status is seen, the failure stays an upstream outage."""
@@ -173,6 +182,15 @@ class TestUpstreamUnavailable:
 
         with pytest.raises(UpstreamUnavailableError):
             make_client().execute_sparql_query(QUERY)
+
+    def test_does_not_sleep_after_the_final_5xx_attempt(self, make_client, http, recorded_sleeps):
+        """Nothing is retried after the last attempt, so it must not sleep either."""
+        _register(http, 503, 503, 503)
+
+        with pytest.raises(UpstreamUnavailableError):
+            make_client(max_retries=3).execute_sparql_query(QUERY)
+
+        assert len(recorded_sleeps) == 2
 
 
 class TestFailureClassification:

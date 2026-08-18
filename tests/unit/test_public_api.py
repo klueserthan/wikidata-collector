@@ -6,6 +6,7 @@ is asserted explicitly rather than left to drift.
 """
 
 import inspect
+from importlib.metadata import version
 
 import pytest
 
@@ -48,6 +49,11 @@ class TestExports:
         """Consumers pin against `__version__`."""
         assert isinstance(wikidata_collector.__version__, str)
         assert wikidata_collector.__version__
+
+    def test_version_matches_the_installed_package_metadata(self):
+        """`__version__` must be derived from packaging metadata, never hand-pinned,
+        so it cannot drift from the version `pyproject.toml` declares."""
+        assert wikidata_collector.__version__ == version("wikidata-collector")
 
 
 class TestExceptionHierarchy:

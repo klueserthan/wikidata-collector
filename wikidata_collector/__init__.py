@@ -5,6 +5,8 @@ This module provides a pure Python interface for querying Wikidata via SPARQL,
 with no FastAPI dependencies. It can be used standalone or as part of the API wrapper.
 """
 
+from importlib.metadata import version
+
 from .client import WikidataClient
 from .exceptions import (
     EntityNotFoundError,
@@ -22,7 +24,7 @@ from .models import (
     SubInstitution,
 )
 
-__version__ = "1.0.0"
+__version__ = version("wikidata-collector")
 __all__ = [
     "WikidataClient",
     "PublicFigureNormalizedRecord",
