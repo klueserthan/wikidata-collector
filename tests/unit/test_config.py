@@ -1,11 +1,8 @@
 """Unit tests for WikidataCollectorConfig."""
 
-import importlib
 import threading
-from types import ModuleType
-from typing import Iterator, List
+from typing import Any, List
 
-import dotenv
 import pytest
 
 from wikidata_collector import config as config_module
@@ -46,52 +43,26 @@ def clean_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-@pytest.fixture
-def pristine_config(monkeypatch: pytest.MonkeyPatch) -> Iterator[ModuleType]:
-    """Reimport `config` with no config env vars set, then restore it.
-
-    Several settings are read into module constants at import time and bound as
-    constructor defaults (`default_limit=DEFAULT_LIMIT`, and the retry and
-    deep-sleep values). Deleting the env vars during a test is too late for
-    those — the module already evaluated them — so asserting on shipped defaults
-    requires a reimport under a clean environment.
-
-    `load_dotenv` is neutralised for the reimport: it would otherwise repopulate
-    from a developer's `.env` exactly the variables just cleared.
-
-    Args:
-        monkeypatch: Pytest monkeypatch fixture.
-
-    Yields:
-        The `wikidata_collector.config` module, reloaded with clean constants.
-    """
-    monkeypatch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: None)
-    yield importlib.reload(config_module)
-
-    # Restore the module under the real environment for the rest of the session.
-    monkeypatch.undo()
-    importlib.reload(config_module)
-
-
 class TestDefaults:
     """Values a caller gets when nothing is configured.
 
-    These use `pristine_config` because several defaults are baked in at import
-    time; see the fixture's docstring.
+    `clean_config_env` (autouse) clears every config env var before each test,
+    and the constructor resolves argument/env/default freshly on every call, so
+    a plain construction is enough to observe the documented defaults.
     """
 
-    def test_endpoint_defaults_to_public_wikidata(self, pristine_config):
+    def test_endpoint_defaults_to_public_wikidata(self):
         """The SPARQL and Entity API URLs default to the public endpoints."""
-        config = pristine_config.WikidataCollectorConfig()
+        config = WikidataCollectorConfig()
 
         assert config.wikidata_sparql_url == "https://query.wikidata.org/sparql"
         assert config.wikidata_entity_api_url == (
             "https://www.wikidata.org/wiki/Special:EntityData/{qid}.json"
         )
 
-    def test_retry_and_pagination_defaults(self, pristine_config):
+    def test_retry_and_pagination_defaults(self):
         """Retry, cooldown, and page-size defaults match the documented values."""
-        config = pristine_config.WikidataCollectorConfig()
+        config = WikidataCollectorConfig()
 
         assert config.max_retries == 3
         assert config.sparql_timeout_seconds == 60
@@ -101,16 +72,16 @@ class TestDefaults:
         assert config.retry_jitter_base == 0.5
         assert config.retry_jitter_increment == 0.2
 
-    def test_deep_sleep_defaults(self, pristine_config):
+    def test_deep_sleep_defaults(self):
         """Deep-sleep defaults are 30 minutes across at most three cycles."""
-        config = pristine_config.WikidataCollectorConfig()
+        config = WikidataCollectorConfig()
 
         assert config.proxy_deep_sleep_seconds == 1800
         assert config.proxy_deep_sleep_max_failures == 3
 
-    def test_proxy_list_defaults_to_empty(self, pristine_config):
+    def test_proxy_list_defaults_to_empty(self):
         """With no PROXY_LIST set, the collector runs without proxies."""
-        assert pristine_config.WikidataCollectorConfig().proxy_list == []
+        assert WikidataCollectorConfig().proxy_list == []
 
 
 class TestConstructorOverrides:
@@ -182,6 +153,93 @@ class TestEnvironmentFallback:
         assert WikidataCollectorConfig().wikidata_sparql_url == (
             "https://sparql.internal.example/query"
         )
+
+
+NUMERIC_SETTINGS = [
+    ("sparql_timeout_seconds", "SPARQL_TIMEOUT_SECONDS", 60, 7, "23"),
+    ("max_retries", "MAX_RETRIES", 3, 9, "8"),
+    ("proxy_cooldown_seconds", "PROXY_COOLDOWN_SECONDS", 300, 11, "99"),
+    ("default_limit", "DEFAULT_LIMIT", 15, 42, "50"),
+    ("retry_max_wait_seconds", "RETRY_MAX_WAIT_SECONDS", 10, 13, "20"),
+    ("retry_jitter_base", "RETRY_JITTER_BASE", 0.5, 1.5, "2.25"),
+    ("retry_jitter_increment", "RETRY_JITTER_INCREMENT", 0.2, 0.75, "0.9"),
+    ("proxy_deep_sleep_seconds", "PROXY_DEEP_SLEEP_SECONDS", 1800, 17, "900"),
+    ("proxy_deep_sleep_max_failures", "PROXY_DEEP_SLEEP_MAX_FAILURES", 3, 5, "7"),
+]
+
+
+class TestPrecedence:
+    """Explicit argument > environment variable > documented default.
+
+    Every numeric setting must honour this order. Regression guard for the bug
+    where `int(os.getenv(NAME, argument))` let a set environment variable beat
+    an explicit constructor argument.
+    """
+
+    @pytest.mark.parametrize(
+        ("kwarg", "env_var", "default", "explicit_value", "env_value"),
+        NUMERIC_SETTINGS,
+    )
+    def test_explicit_argument_wins_over_a_set_env_var(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        kwarg: str,
+        env_var: str,
+        default: Any,
+        explicit_value: Any,
+        env_value: str,
+    ):
+        """A caller-supplied value must not be silently overridden by the environment."""
+        monkeypatch.setenv(env_var, env_value)
+
+        config = WikidataCollectorConfig(**{kwarg: explicit_value})
+
+        assert getattr(config, kwarg) == explicit_value
+
+    @pytest.mark.parametrize(
+        ("kwarg", "env_var", "default", "explicit_value", "env_value"),
+        NUMERIC_SETTINGS,
+    )
+    def test_env_var_is_used_when_no_argument_is_passed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        kwarg: str,
+        env_var: str,
+        default: Any,
+        explicit_value: Any,
+        env_value: str,
+    ):
+        """With no explicit argument, the environment variable supplies the value."""
+        monkeypatch.setenv(env_var, env_value)
+
+        config = WikidataCollectorConfig()
+
+        assert getattr(config, kwarg) == type(default)(env_value)
+
+    @pytest.mark.parametrize(
+        ("kwarg", "env_var", "default", "explicit_value", "env_value"),
+        NUMERIC_SETTINGS,
+    )
+    def test_default_is_used_when_neither_is_present(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        kwarg: str,
+        env_var: str,
+        default: Any,
+        explicit_value: Any,
+        env_value: str,
+    ):
+        """With nothing configured, the documented default applies."""
+        config = WikidataCollectorConfig()
+
+        assert getattr(config, kwarg) == default
+
+    def test_invalid_env_value_fails_fast(self, monkeypatch: pytest.MonkeyPatch):
+        """A non-numeric env var raises instead of being silently swallowed."""
+        monkeypatch.setenv("MAX_RETRIES", "not-a-number")
+
+        with pytest.raises(ValueError):
+            WikidataCollectorConfig()
 
 
 class TestUserAgent:

@@ -11,25 +11,6 @@ from random_user_agent.user_agent import UserAgent
 load_dotenv(find_dotenv())
 
 
-# Retry behavior constants
-RETRY_MAX_WAIT_SECONDS = int(
-    os.getenv("RETRY_MAX_WAIT_SECONDS", "10")
-)  # Maximum wait time for exponential backoff on 5xx errors
-RETRY_JITTER_BASE = float(
-    os.getenv("RETRY_JITTER_BASE", "0.5")
-)  # Base jitter time in seconds for request exception retries
-RETRY_JITTER_INCREMENT = float(
-    os.getenv("RETRY_JITTER_INCREMENT", "0.2")
-)  # Jitter increment per attempt
-
-# Deep-sleep retry constants (single-proxy mode only)
-PROXY_DEEP_SLEEP_SECONDS = int(
-    os.getenv("PROXY_DEEP_SLEEP_SECONDS", "1800")
-)  # Sleep duration between deep-sleep retry cycles (default: 30 minutes)
-PROXY_DEEP_SLEEP_MAX_FAILURES = int(
-    os.getenv("PROXY_DEEP_SLEEP_MAX_FAILURES", "3")
-)  # Maximum consecutive deep-sleep cycles before giving up
-
 # Query pagination constant
 DEFAULT_LIMIT = int(
     os.getenv("DEFAULT_LIMIT", "15")
@@ -75,30 +56,38 @@ class WikidataCollectorConfig:
         wikidata_sparql_url: Optional[str] = None,
         wikidata_entity_api_url: Optional[str] = None,
         proxy_list: Optional[List[str]] = None,
-        sparql_timeout_seconds: int = 60,
-        max_retries: int = 3,
-        proxy_cooldown_seconds: int = 300,
-        default_limit: int = DEFAULT_LIMIT,
-        retry_max_wait_seconds: int = RETRY_MAX_WAIT_SECONDS,
-        retry_jitter_base: float = RETRY_JITTER_BASE,
-        retry_jitter_increment: float = RETRY_JITTER_INCREMENT,
-        proxy_deep_sleep_seconds: int = PROXY_DEEP_SLEEP_SECONDS,
-        proxy_deep_sleep_max_failures: int = PROXY_DEEP_SLEEP_MAX_FAILURES,
+        sparql_timeout_seconds: Optional[int] = None,
+        max_retries: Optional[int] = None,
+        proxy_cooldown_seconds: Optional[int] = None,
+        default_limit: Optional[int] = None,
+        retry_max_wait_seconds: Optional[int] = None,
+        retry_jitter_base: Optional[float] = None,
+        retry_jitter_increment: Optional[float] = None,
+        proxy_deep_sleep_seconds: Optional[int] = None,
+        proxy_deep_sleep_max_failures: Optional[int] = None,
     ):
         """Initialize configuration.
+
+        For every setting below, precedence is: explicit argument > environment
+        variable > documented default. `None` (the default) means "not explicitly
+        provided", so the environment variable is consulted; if that is unset too,
+        the documented default applies.
 
         Args:
             contact_email: Contact email for User-Agent header
             wikidata_sparql_url: SPARQL endpoint URL
             wikidata_entity_api_url: Entity API URL template
             proxy_list: List of proxy URLs
-            sparql_timeout_seconds: Timeout for SPARQL requests
-            max_retries: Maximum retry attempts
-            proxy_cooldown_seconds: Cooldown period for failed proxies
+            sparql_timeout_seconds: Timeout for SPARQL requests (default: 60)
+            max_retries: Maximum retry attempts (default: 3)
+            proxy_cooldown_seconds: Cooldown period for failed proxies (default: 300)
             default_limit: Default limit for SPARQL queries and page size for iterators
+                (default: 15)
             retry_max_wait_seconds: Maximum wait time for exponential backoff on 5xx errors
+                (default: 10)
             retry_jitter_base: Base jitter time in seconds for request exception retries
-            retry_jitter_increment: Jitter increment per attempt
+                (default: 0.5)
+            retry_jitter_increment: Jitter increment per attempt (default: 0.2)
             proxy_deep_sleep_seconds: Sleep duration (seconds) between deep-sleep retry cycles
                 when a single proxy is unavailable (default: 1800 = 30 minutes)
             proxy_deep_sleep_max_failures: Maximum consecutive deep-sleep cycles before raising
@@ -119,32 +108,52 @@ class WikidataCollectorConfig:
         else:
             self.proxy_list = proxy_list
 
-        self.sparql_timeout_seconds = int(
-            os.getenv("SPARQL_TIMEOUT_SECONDS", sparql_timeout_seconds)
+        self.sparql_timeout_seconds = (
+            sparql_timeout_seconds
+            if sparql_timeout_seconds is not None
+            else int(os.getenv("SPARQL_TIMEOUT_SECONDS", "60"))
         )
-        self.max_retries = int(os.getenv("MAX_RETRIES", max_retries))
-        self.proxy_cooldown_seconds = int(
-            os.getenv("PROXY_COOLDOWN_SECONDS", proxy_cooldown_seconds)
+        self.max_retries = (
+            max_retries if max_retries is not None else int(os.getenv("MAX_RETRIES", "3"))
+        )
+        self.proxy_cooldown_seconds = (
+            proxy_cooldown_seconds
+            if proxy_cooldown_seconds is not None
+            else int(os.getenv("PROXY_COOLDOWN_SECONDS", "300"))
         )
 
         # Query pagination settings
-        self.default_limit = int(os.getenv("DEFAULT_LIMIT", default_limit))
+        self.default_limit = (
+            default_limit if default_limit is not None else int(os.getenv("DEFAULT_LIMIT", "15"))
+        )
 
         # Retry behavior settings
-        self.retry_max_wait_seconds = int(
-            os.getenv("RETRY_MAX_WAIT_SECONDS", retry_max_wait_seconds)
+        self.retry_max_wait_seconds = (
+            retry_max_wait_seconds
+            if retry_max_wait_seconds is not None
+            else int(os.getenv("RETRY_MAX_WAIT_SECONDS", "10"))
         )
-        self.retry_jitter_base = float(os.getenv("RETRY_JITTER_BASE", retry_jitter_base))
-        self.retry_jitter_increment = float(
-            os.getenv("RETRY_JITTER_INCREMENT", retry_jitter_increment)
+        self.retry_jitter_base = (
+            retry_jitter_base
+            if retry_jitter_base is not None
+            else float(os.getenv("RETRY_JITTER_BASE", "0.5"))
+        )
+        self.retry_jitter_increment = (
+            retry_jitter_increment
+            if retry_jitter_increment is not None
+            else float(os.getenv("RETRY_JITTER_INCREMENT", "0.2"))
         )
 
         # Deep-sleep retry settings (single-proxy mode)
-        self.proxy_deep_sleep_seconds = int(
-            os.getenv("PROXY_DEEP_SLEEP_SECONDS", proxy_deep_sleep_seconds)
+        self.proxy_deep_sleep_seconds = (
+            proxy_deep_sleep_seconds
+            if proxy_deep_sleep_seconds is not None
+            else int(os.getenv("PROXY_DEEP_SLEEP_SECONDS", "1800"))
         )
-        self.proxy_deep_sleep_max_failures = int(
-            os.getenv("PROXY_DEEP_SLEEP_MAX_FAILURES", proxy_deep_sleep_max_failures)
+        self.proxy_deep_sleep_max_failures = (
+            proxy_deep_sleep_max_failures
+            if proxy_deep_sleep_max_failures is not None
+            else int(os.getenv("PROXY_DEEP_SLEEP_MAX_FAILURES", "3"))
         )
 
     def get_user_agent(self) -> str:
