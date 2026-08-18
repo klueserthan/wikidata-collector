@@ -155,7 +155,7 @@ def build_public_organizations_query(
     FILTER(LANG(?description) = "%s")
   }
 
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "%s". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "%s,en". }
 }
 ORDER BY ?qidNum
 """ % (lang, lang)

@@ -360,6 +360,20 @@ class TestBuildPublicOrganizationsQuery:
         assert "SERVICE wikibase:label" in query
         assert "bd:serviceParam wikibase:language" in query
 
+    def test_label_service_falls_back_to_english(self):
+        """Organizations lacking a label in `lang` must fall back to English:
+        the label service param is a fallback chain, not a single language."""
+        query = build_public_organizations_query(types=["political_party"], lang="fr")
+
+        assert 'bd:serviceParam wikibase:language "fr,en".' in query
+
+    def test_label_service_fallback_chain_default_lang(self):
+        """Default lang="en" still uses the fallback-chain form (`"en,en"`),
+        keeping the label service param shape uniform regardless of lang."""
+        query = build_public_organizations_query(types=["political_party"])
+
+        assert 'bd:serviceParam wikibase:language "en,en".' in query
+
     def test_mixed_type_filters_qid_and_mapping(self):
         """Test type filter with mixed QID and mapping key."""
         query = build_public_organizations_query(types=["Q7278", "government_agency"], lang="en")

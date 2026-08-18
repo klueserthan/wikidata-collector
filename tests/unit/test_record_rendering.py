@@ -106,18 +106,31 @@ class TestPublicOrganizationRendering:
         assert "Description: intergovernmental organization" in rendered
         assert "Founded Date: 1945-10-24T00:00:00" in rendered
         assert "Dissolved Date: 2100-01-01T00:00:00" in rendered
+        assert "Image: https://example.org/un.jpg" in rendered
         assert "Countries: United States" in rendered
         assert "Types: international organization" in rendered
         assert "- https://un.org (source: wikidata)" in rendered
-        assert "Social Media Accounts:" in rendered
+        assert "Accounts:" in rendered
         assert "- twitter: UN" in rendered
 
+    def test_account_heading_matches_public_figure_heading(self):
+        """Both record families render the same 'Accounts:' heading — one name
+        per concept, not a figures/organization synonym pair."""
+        rendered = PublicOrganizationNormalizedRecord(
+            qid="Q1065",
+            name="United Nations",
+            accounts=[_account("twitter", "UN")],
+        ).generate_pretty_string()
+
+        assert "Accounts:" in rendered
+        assert "Social Media Accounts:" not in rendered
+
     def test_empty_collections_do_not_emit_headings(self):
-        """No accounts means no dangling "Social Media Accounts:" heading."""
+        """No accounts means no dangling "Accounts:" heading."""
         rendered = PublicOrganizationNormalizedRecord(
             qid="Q1065", name="United Nations"
         ).generate_pretty_string()
 
-        assert "Social Media Accounts:" not in rendered
+        assert "Accounts:" not in rendered
         assert "Websites:" not in rendered
         assert "Types:" not in rendered

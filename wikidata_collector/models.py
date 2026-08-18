@@ -301,6 +301,8 @@ class PublicOrganizationNormalizedRecord(PublicOrganizationBase):
             lines.append(f"  Founded Date: {self.founded_date.isoformat()}")
         if self.dissolved_date:
             lines.append(f"  Dissolved Date: {self.dissolved_date.isoformat()}")
+        if self.image:
+            lines.append(f"  Image: {self.image}")
         if self.countries:
             lines.append(f"  Countries: {', '.join(self.countries)}")
         if self.types:
@@ -310,9 +312,11 @@ class PublicOrganizationNormalizedRecord(PublicOrganizationBase):
             for website in self.websites:
                 lines.append(f"    - {website.url} (source: {website.source})")
         if self.accounts:
-            lines.append("  Social Media Accounts:")
+            lines.append("  Accounts:")
             for account in self.accounts:
-                lines.append(f"    - {account.platform}: {account.handle}")
+                lines.append(
+                    f"    - {account.platform}: {account.handle} (source: {account.source})"
+                )
         return "\n".join(lines)
 
     @classmethod
