@@ -47,12 +47,12 @@ def iterate_figures_with_max_results():
     print(f"\n  Yielded {count} total results.\n")
 
 
-def iterate_institutions_with_max_results():
-    """iterate_public_institutions: auto-paginated, capped at max_results."""
+def iterate_organizations_with_max_results():
+    """iterate_public_organizations: auto-paginated, capped at max_results."""
     client = example_default_client()
 
     count = 0
-    for inst in client.iterate_public_institutions(
+    for inst in client.iterate_public_organizations(
         country="US",
         types=["government_agency"],
         max_results=10,
@@ -120,8 +120,8 @@ if __name__ == "__main__":
     print("=== iterate_public_figures (with max_results) ===\n")
     iterate_figures_with_max_results()
 
-    print("=== iterate_public_institutions (with max_results) ===\n")
-    iterate_institutions_with_max_results()
+    print("=== iterate_public_organizations (with max_results) ===\n")
+    iterate_organizations_with_max_results()
 
     print("=== get_public_figures (low-level, manual pagination) ===\n")
     iterate_with_manual_pagination()

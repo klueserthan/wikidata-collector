@@ -71,18 +71,6 @@ class Identifier(BaseModel):
     id: str
 
 
-class Coordinates(BaseModel):
-    lat: float
-    lon: float
-
-
-class SubInstitution(BaseModel):
-    _id: str
-    name: Optional[str] = None
-    description: Optional[str] = None
-    image: Optional[str] = None
-
-
 class PublicFigureBase(BaseModel):
     entity_kind: Literal["public_figure"] = "public_figure"
     qid: str
@@ -232,8 +220,8 @@ class PublicFigureNormalizedRecord(PublicFigureBase):
         )
 
 
-class PublicInstitutionBase(BaseModel):
-    entity_kind: Literal["public_institution"] = "public_institution"
+class PublicOrganizationBase(BaseModel):
+    entity_kind: Literal["public_organization"] = "public_organization"
     qid: str
     name: str
 
@@ -243,8 +231,8 @@ class PublicInstitutionBase(BaseModel):
         return self.qid
 
 
-class PublicInstitutionWikiRecord(PublicInstitutionBase):
-    """Normalized view of fields returned by build_public_institutions_query."""
+class PublicOrganizationWikiRecord(PublicOrganizationBase):
+    """Normalized view of fields returned by build_public_organizations_query."""
 
     description: Optional[str] = None  # ?description
     founded_date: Optional[datetime] = None  # ?foundedDate
@@ -259,22 +247,22 @@ class PublicInstitutionWikiRecord(PublicInstitutionBase):
     tiktok_handle: Optional[str] = None  # ?tiktokHandle
 
     @classmethod
-    def from_wikidata(cls, item: Dict[str, Any]) -> "PublicInstitutionWikiRecord":
-        """Create PublicInstitutionWikiRecord from a Wikidata item dictionary.
+    def from_wikidata(cls, item: Dict[str, Any]) -> "PublicOrganizationWikiRecord":
+        """Create PublicOrganizationWikiRecord from a Wikidata item dictionary.
 
         Raises:
             KeyError: If required fields are missing from the item dictionary
             ValueError: If validation fails for the record data
         """
         try:
-            qid = item["institution"]["value"].split("/")[-1]
+            qid = item["organization"]["value"].split("/")[-1]
         except (KeyError, IndexError) as e:
             logger.error(f"Failed to extract QID from item: {e}")
-            raise KeyError(f"Missing or invalid 'institution' field in item: {e}")
+            raise KeyError(f"Missing or invalid 'organization' field in item: {e}")
 
         return cls(
             qid=qid,
-            name=item.get("institutionLabel", {}).get("value"),
+            name=item.get("organizationLabel", {}).get("value"),
             description=item.get("description", {}).get("value"),
             founded_date=_parse_date(item.get("foundedDate", {}).get("value"), qid, "founded date"),
             dissolved_date=_parse_date(
@@ -291,8 +279,8 @@ class PublicInstitutionWikiRecord(PublicInstitutionBase):
         )
 
 
-class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
-    """Fully normalized public institution record that collects multiple values per field in lists.
+class PublicOrganizationNormalizedRecord(PublicOrganizationBase):
+    """Fully normalized public organization record that collects multiple values per field in lists.
     Uses AccountEntry, WebsiteEntry, etc."""
 
     description: Optional[str] = None
@@ -306,13 +294,15 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
 
     def generate_pretty_string(self) -> str:
         """Return a pretty-printed string representation of the record."""
-        lines = [f"Public Institution: {self.name} ({self.qid})"]
+        lines = [f"Public Organization: {self.name} ({self.qid})"]
         if self.description:
             lines.append(f"  Description: {self.description}")
         if self.founded_date:
             lines.append(f"  Founded Date: {self.founded_date.isoformat()}")
         if self.dissolved_date:
             lines.append(f"  Dissolved Date: {self.dissolved_date.isoformat()}")
+        if self.image:
+            lines.append(f"  Image: {self.image}")
         if self.countries:
             lines.append(f"  Countries: {', '.join(self.countries)}")
         if self.types:
@@ -322,16 +312,18 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
             for website in self.websites:
                 lines.append(f"    - {website.url} (source: {website.source})")
         if self.accounts:
-            lines.append("  Social Media Accounts:")
+            lines.append("  Accounts:")
             for account in self.accounts:
-                lines.append(f"    - {account.platform}: {account.handle}")
+                lines.append(
+                    f"    - {account.platform}: {account.handle} (source: {account.source})"
+                )
         return "\n".join(lines)
 
     @classmethod
     def from_wikidata_record(
-        cls, record: PublicInstitutionWikiRecord
-    ) -> "PublicInstitutionNormalizedRecord":
-        """Create PublicInstitutionNormalizedRecord from a PublicInstitutionWikiRecord."""
+        cls, record: PublicOrganizationWikiRecord
+    ) -> "PublicOrganizationNormalizedRecord":
+        """Create PublicOrganizationNormalizedRecord from a PublicOrganizationWikiRecord."""
         return cls(
             qid=record.qid,
             name=record.name,
@@ -346,9 +338,11 @@ class PublicInstitutionNormalizedRecord(PublicInstitutionBase):
 
     @classmethod
     def add_from_wikidata_record(
-        cls, existing: "PublicInstitutionNormalizedRecord", new_record: PublicInstitutionWikiRecord
-    ) -> "PublicInstitutionNormalizedRecord":
-        """Add data from multiple value fields to the existing PublicInstitutionNormalizedRecord."""
+        cls,
+        existing: "PublicOrganizationNormalizedRecord",
+        new_record: PublicOrganizationWikiRecord,
+    ) -> "PublicOrganizationNormalizedRecord":
+        """Add data from multiple value fields to the existing PublicOrganizationNormalizedRecord."""
         accounts = _merge_accounts(existing.accounts, _collect_accounts(new_record))
 
         # Collect countries
@@ -385,9 +379,9 @@ def normalize_bindings(
 @overload
 def normalize_bindings(
     bindings: List[Dict[str, Any]],
-    wiki_record_cls: Type[PublicInstitutionWikiRecord],
-    normalized_record_cls: Type[PublicInstitutionNormalizedRecord],
-) -> List[PublicInstitutionNormalizedRecord]: ...
+    wiki_record_cls: Type[PublicOrganizationWikiRecord],
+    normalized_record_cls: Type[PublicOrganizationNormalizedRecord],
+) -> List[PublicOrganizationNormalizedRecord]: ...
 
 
 def normalize_bindings(

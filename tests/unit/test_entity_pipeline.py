@@ -13,13 +13,22 @@ from unittest.mock import patch
 import pytest
 
 from tests.conftest import figure_binding, sparql_response
+from wikidata_collector.constants import ORGANIZATION_TYPE_MAPPINGS
 from wikidata_collector.exceptions import InvalidFilterError, QueryExecutionError
-from wikidata_collector.models import PublicFigureNormalizedRecord
+from wikidata_collector.models import (
+    PublicFigureNormalizedRecord,
+    PublicOrganizationNormalizedRecord,
+)
 
 
 def _figures(*qids: str) -> List[PublicFigureNormalizedRecord]:
     """Build normalized figure records for the given QIDs."""
     return [PublicFigureNormalizedRecord(qid=qid, name=f"Person {qid}") for qid in qids]
+
+
+def _organizations(*qids: str) -> List[PublicOrganizationNormalizedRecord]:
+    """Build normalized organization records for the given QIDs."""
+    return [PublicOrganizationNormalizedRecord(qid=qid, name=f"Organization {qid}") for qid in qids]
 
 
 def _pages(*pages: List[PublicFigureNormalizedRecord]) -> List[Tuple[Any, str]]:
@@ -62,7 +71,11 @@ class TestFilterValidation:
         """Generators are lazy, but validation must still fail fast on first use."""
         with patch.object(wikidata_client, "_fetch_page") as fetch:
             with pytest.raises(InvalidFilterError):
-                list(wikidata_client.iterate_public_institutions(max_results=0))
+                list(
+                    wikidata_client.iterate_public_organizations(
+                        types=["parliament"], max_results=0
+                    )
+                )
 
         fetch.assert_not_called()
 
@@ -163,11 +176,11 @@ class TestFailurePropagation:
                 wikidata_client, "_fetch_page", side_effect=QueryExecutionError("boom")
             ):
                 with pytest.raises(QueryExecutionError):
-                    list(wikidata_client.iterate_public_institutions())
+                    list(wikidata_client.iterate_public_organizations(types=["parliament"]))
 
         failures = [r for r in caplog.records if getattr(r, "event", None) == "iteration_failed"]
         assert failures
-        assert failures[0].entity_kind == "public_institution"
+        assert failures[0].entity_kind == "public_organization"
         assert failures[0].error_type == "QueryExecutionError"
 
     def test_a_failed_iteration_is_not_logged_as_completed(self, wikidata_client, caplog):
@@ -238,3 +251,368 @@ class TestFetchSeam:
             client.get_public_figures()
 
         assert "LIMIT 7" in captured["query"]
+
+
+class TestOrganizationFilterValidation:
+    """`types` is required for public organizations: an unfiltered scan always
+    times out on WDQS. Both entry points must fail fast, before SPARQL, the
+    same way the figures side's date validation does.
+    """
+
+    def test_omitting_types_is_a_type_error_on_iterate(self, wikidata_client):
+        """`types` has no default: omitting it entirely is a Python-level
+        TypeError, the strongest possible form of fail-fast — it never even
+        reaches the pipeline's own validation."""
+        with pytest.raises(TypeError):
+            wikidata_client.iterate_public_organizations()  # type: ignore[call-arg]
+
+    def test_none_types_is_rejected_by_iterate(self, wikidata_client):
+        """types=None is rejected once inside the pipeline's own validation."""
+        with pytest.raises(InvalidFilterError, match="types filter is required"):
+            list(wikidata_client.iterate_public_organizations(types=None))  # type: ignore[arg-type]
+
+    def test_empty_types_is_rejected_by_iterate(self, wikidata_client):
+        """types=[] is rejected: an empty list carries no filter at all."""
+        with pytest.raises(InvalidFilterError, match="types filter is required"):
+            list(wikidata_client.iterate_public_organizations(types=[]))
+
+    def test_omitting_types_is_a_type_error_on_get(self, wikidata_client):
+        """`get_public_organizations` has the same no-default contract."""
+        with pytest.raises(TypeError):
+            wikidata_client.get_public_organizations()  # type: ignore[call-arg]
+
+    def test_none_types_is_rejected_by_get(self, wikidata_client):
+        """`get_public_organizations` fails fast symmetrically with `iterate_*`."""
+        with patch.object(wikidata_client, "execute_sparql_query") as execute:
+            with pytest.raises(InvalidFilterError, match="types filter is required"):
+                wikidata_client.get_public_organizations(types=None)  # type: ignore[arg-type]
+
+        execute.assert_not_called()
+
+    def test_empty_types_is_rejected_by_get(self, wikidata_client):
+        """Empty `types` is rejected by `get_public_organizations` too."""
+        with pytest.raises(InvalidFilterError, match="types filter is required"):
+            wikidata_client.get_public_organizations(types=[])
+
+    def test_bare_string_types_is_rejected(self, wikidata_client):
+        """A bare string is the classic footgun: Python would iterate its
+        characters as if each were a type. Reject it outright."""
+        with pytest.raises(InvalidFilterError, match="must be a list"):
+            list(wikidata_client.iterate_public_organizations(types="newspaper"))  # type: ignore[arg-type]
+
+    def test_non_string_type_entry_is_rejected(self, wikidata_client):
+        """Every entry in `types` must be a string."""
+        with pytest.raises(InvalidFilterError, match="must be strings"):
+            list(wikidata_client.iterate_public_organizations(types=[123]))  # type: ignore[list-item]
+
+    def test_non_string_country_is_rejected(self, wikidata_client):
+        """`country`, when given, must be a string."""
+        with pytest.raises(InvalidFilterError, match="country must be a string"):
+            list(
+                wikidata_client.iterate_public_organizations(
+                    types=["newspaper"],
+                    country=123,  # type: ignore[arg-type]
+                )
+            )
+
+    def test_none_country_is_accepted(self, wikidata_client):
+        """`country` stays optional: None is not an error."""
+        with patch.object(wikidata_client, "_fetch_page", side_effect=_pages([])) as fetch:
+            list(wikidata_client.iterate_public_organizations(types=["newspaper"], country=None))
+
+        fetch.assert_called_once()
+
+    def test_valid_filters_reach_the_fetch_seam(self, wikidata_client):
+        """A well-formed `types` list is not itself rejected."""
+        with patch.object(wikidata_client, "_fetch_page", side_effect=_pages([])) as fetch:
+            list(wikidata_client.iterate_public_organizations(types=["newspaper"]))
+
+        fetch.assert_called_once()
+
+    def test_unknown_country_label_raises_invalid_filter_error_on_get(self, wikidata_client):
+        """A value-level builder failure (unknown country label) surfaces as
+        `InvalidFilterError` from `get_public_organizations`, honoring its
+        documented contract and matching `iterate_public_organizations`. The
+        type-only validator passes it through, so the builder's `ValueError`
+        must be translated at the shared fetch boundary before it escapes."""
+        with patch.object(wikidata_client, "execute_sparql_query") as execute:
+            with pytest.raises(InvalidFilterError, match="Unknown country"):
+                wikidata_client.get_public_organizations(types=["newspaper"], country="Atlantis")
+
+        execute.assert_not_called()
+
+    def test_unknown_country_label_raises_invalid_filter_error_on_iterate(self, wikidata_client):
+        """The same value-level builder failure is `InvalidFilterError` from
+        the iterator too — get_ and iterate_ stay symmetric."""
+        with pytest.raises(InvalidFilterError, match="Unknown country"):
+            list(
+                wikidata_client.iterate_public_organizations(
+                    types=["newspaper"], country="Atlantis"
+                )
+            )
+
+
+class TestOrganizationFilterDecomposition:
+    """Multi-type iteration runs one keyset stream per type, sharing a single
+    de-dupe set and a global `max_results` budget across streams. A single
+    type (or the figures entity kind, which never decomposes) keeps exactly
+    one stream, matching the pipeline's pre-decomposition behaviour.
+    """
+
+    def test_multi_type_iterate_runs_one_stream_per_type(self, wikidata_client):
+        """Each type value gets its own `_paginate_sparql_results` call, with a
+        filter dict carrying only that one type."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1", "Q2")), iter(_organizations("Q3"))],
+        ) as paginate:
+            results = list(
+                wikidata_client.iterate_public_organizations(types=["newspaper", "parliament"])
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2", "Q3"]
+        assert paginate.call_count == 2
+        sub_filters = [call.args[1] for call in paginate.call_args_list]
+        assert sub_filters == [
+            {"country": None, "types": ["newspaper"]},
+            {"country": None, "types": ["parliament"]},
+        ]
+
+    def test_order_within_each_stream_is_preserved(self, wikidata_client):
+        """Records within one type's stream keep their original order."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q5", "Q1")), iter(_organizations("Q9", "Q3"))],
+        ):
+            results = list(
+                wikidata_client.iterate_public_organizations(types=["newspaper", "parliament"])
+            )
+
+        assert [record.qid for record in results] == ["Q5", "Q1", "Q9", "Q3"]
+
+    def test_duplicate_entity_across_streams_is_yielded_once(self, wikidata_client):
+        """An entity matching two types is only yielded the first time."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1", "Q2")), iter(_organizations("Q2", "Q3"))],
+        ):
+            results = list(
+                wikidata_client.iterate_public_organizations(types=["newspaper", "parliament"])
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2", "Q3"]
+
+    def test_max_results_caps_across_streams(self, wikidata_client):
+        """A cap smaller than the combined stream output truncates globally,
+        stopping mid-way through the second stream."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1", "Q2")), iter(_organizations("Q3", "Q4"))],
+        ) as paginate:
+            results = list(
+                wikidata_client.iterate_public_organizations(
+                    types=["newspaper", "parliament"], max_results=3
+                )
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2", "Q3"]
+        assert paginate.call_count == 2
+
+    def test_duplicate_type_entries_collapse_to_one_stream(self, wikidata_client):
+        """A repeated type does not spawn a second, wholly redundant keyset
+        stream: the second stream would paginate the entire (potentially slow)
+        WDQS result set only for every record to be dropped by de-duplication.
+        Duplicates are collapsed, order-preserving, before sub-streams are built."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1", "Q2"))],
+        ) as paginate:
+            results = list(
+                wikidata_client.iterate_public_organizations(types=["newspaper", "newspaper"])
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2"]
+        assert paginate.call_count == 1
+        sub_filters = [call.args[1] for call in paginate.call_args_list]
+        assert sub_filters == [{"country": None, "types": ["newspaper"]}]
+
+    def test_duplicate_types_are_collapsed_but_distinct_ones_kept_in_order(self, wikidata_client):
+        """Collapsing duplicates preserves the first occurrence and the order of
+        the remaining distinct types."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1")), iter(_organizations("Q2"))],
+        ) as paginate:
+            list(
+                wikidata_client.iterate_public_organizations(
+                    types=["newspaper", "parliament", "newspaper"]
+                )
+            )
+
+        sub_filters = [call.args[1] for call in paginate.call_args_list]
+        assert sub_filters == [
+            {"country": None, "types": ["newspaper"]},
+            {"country": None, "types": ["parliament"]},
+        ]
+
+
+class TestOrganizationTypesMustBeAList:
+    """`types` must be an actual list, not just any iterable. A one-shot
+    iterable (generator) would be consumed by validation and then arrive at
+    decomposition already exhausted, yielding zero streams and silently
+    returning no records with no request made — a silent fallback the
+    fail-fast contract forbids.
+    """
+
+    def test_generator_types_is_rejected(self, wikidata_client):
+        """A generator is not a list: reject it rather than silently draining it."""
+        with patch.object(wikidata_client, "_paginate_sparql_results") as paginate:
+            with pytest.raises(InvalidFilterError, match="must be a list"):
+                list(
+                    wikidata_client.iterate_public_organizations(
+                        types=(t for t in ["newspaper"])  # type: ignore[arg-type]
+                    )
+                )
+
+        paginate.assert_not_called()
+
+    def test_tuple_types_is_rejected(self, wikidata_client):
+        """Any non-list container (here a tuple) is rejected for the same
+        reason — the public contract is a list of strings."""
+        with pytest.raises(InvalidFilterError, match="must be a list"):
+            list(
+                wikidata_client.iterate_public_organizations(
+                    types=("newspaper",)  # type: ignore[arg-type]
+                )
+            )
+
+
+class TestOrganizationTypesAreValidatedAtomically:
+    """Every type is resolved up front, before any decomposed stream runs. A
+    malformed value in a multi-type filter must fail the whole call before a
+    single request — otherwise an earlier valid stream could issue requests
+    (and, under `max_results`, satisfy the cap) before the bad value is ever
+    reached.
+    """
+
+    def test_invalid_type_rejected_before_any_stream_runs(self, wikidata_client):
+        """An unknown type anywhere in the list fails before the first stream,
+        even though an earlier type is valid."""
+        with patch.object(wikidata_client, "_paginate_sparql_results") as paginate:
+            with pytest.raises(InvalidFilterError, match="Unknown organization type"):
+                list(
+                    wikidata_client.iterate_public_organizations(types=["newspaper", "not_a_type"])
+                )
+
+        paginate.assert_not_called()
+
+    def test_invalid_type_not_masked_by_max_results(self, wikidata_client):
+        """Even when `max_results` could be satisfied by the first valid type
+        alone, a later invalid type is still rejected — validation is atomic
+        and precedes pagination."""
+        with patch.object(wikidata_client, "_paginate_sparql_results") as paginate:
+            with pytest.raises(InvalidFilterError, match="Unknown organization type"):
+                list(
+                    wikidata_client.iterate_public_organizations(
+                        types=["newspaper", "not_a_type"], max_results=1
+                    )
+                )
+
+        paginate.assert_not_called()
+
+    def test_invalid_type_rejected_on_get(self, wikidata_client):
+        """`get_public_organizations` rejects the malformed type before any
+        request too."""
+        with patch.object(wikidata_client, "execute_sparql_query") as execute:
+            with pytest.raises(InvalidFilterError, match="Unknown organization type"):
+                wikidata_client.get_public_organizations(types=["newspaper", "not_a_type"])
+
+        execute.assert_not_called()
+
+
+class TestOrganizationTypesAreCanonicalizedBeforeDedup:
+    """Values that resolve to the same class must not each spawn a redundant
+    keyset stream, even when they differ only by surrounding whitespace or by
+    label-vs-QID form.
+    """
+
+    def test_whitespace_equivalent_types_collapse_to_one_stream(self, wikidata_client):
+        """ "newspaper" and " newspaper " resolve to the same class; only one
+        stream runs."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1", "Q2"))],
+        ) as paginate:
+            results = list(
+                wikidata_client.iterate_public_organizations(types=["newspaper", " newspaper "])
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2"]
+        assert paginate.call_count == 1
+
+    def test_label_and_equivalent_qid_collapse_to_one_stream(self, wikidata_client):
+        """A mapped label and the QID it maps to are the same class; only one
+        stream runs."""
+        newspaper_qid = ORGANIZATION_TYPE_MAPPINGS["newspaper"]
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1"))],
+        ) as paginate:
+            list(wikidata_client.iterate_public_organizations(types=["newspaper", newspaper_qid]))
+
+        assert paginate.call_count == 1
+
+    def test_duplicate_does_not_count_toward_max_results(self, wikidata_client):
+        """A skipped duplicate must not consume the caller's result budget."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[
+                iter(_organizations("Q1", "Q2")),
+                iter(_organizations("Q2", "Q3")),  # Q2 is a duplicate of the first stream
+            ],
+        ):
+            results = list(
+                wikidata_client.iterate_public_organizations(
+                    types=["newspaper", "parliament"], max_results=3
+                )
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2", "Q3"]
+
+    def test_single_type_iterate_uses_one_stream(self, wikidata_client):
+        """A single type is identity-decomposed: exactly one stream, matching
+        pre-decomposition behaviour."""
+        with patch.object(
+            wikidata_client, "_paginate_sparql_results", side_effect=[iter(_organizations("Q1"))]
+        ) as paginate:
+            list(wikidata_client.iterate_public_organizations(types=["newspaper"]))
+
+        assert paginate.call_count == 1
+
+    def test_figures_decomposition_is_a_no_op(self, wikidata_client):
+        """Figures never decompose: exactly one stream, filters unchanged."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_figures("Q1", "Q2"))],
+        ) as paginate:
+            results = list(wikidata_client.iterate_public_figures(nationality="Q30"))
+
+        assert [record.qid for record in results] == ["Q1", "Q2"]
+        assert paginate.call_count == 1
+        assert paginate.call_args.args[1] == {
+            "birthday_from": None,
+            "birthday_to": None,
+            "nationality": "Q30",
+            "occupations": None,
+            "gender": None,
+        }

@@ -16,7 +16,7 @@ from wikidata_collector import WikidataClient
 from wikidata_collector.config import WikidataCollectorConfig
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
-    PublicInstitutionNormalizedRecord,
+    PublicOrganizationNormalizedRecord,
 )
 
 
@@ -139,14 +139,92 @@ class TestLiveSparqlConnectivity:
             assert first_result.id is not None, "Result should have an ID"
             assert first_result.name is not None, "Result should have a name"
 
-    def test_iterate_public_institutions_live_endpoint(self):
+    def test_iterate_public_organizations_newspapers_in_switzerland_live_endpoint(self):
         """
-        End-to-end test for institutions SPARQL query template and iterator.
+        Live smoke test for a single-type organization query.
 
         Verifies:
-        - iterate_public_institutions iterator works against live Wikidata endpoint
+        - iterate_public_organizations(types=["newspaper"], country="Switzerland")
+          works end-to-end against live Wikidata
+        - At least one result is returned
+        - Every result is a PublicOrganizationNormalizedRecord with
+          entity_kind == "public_organization" and a non-empty `countries` list
+        """
+        # Create client with no proxies and reasonable timeout
+        config = WikidataCollectorConfig(
+            proxy_list=[],  # No proxies - direct connection only
+            sparql_timeout_seconds=55,  # Allow enough time for query execution
+            max_retries=1,  # Single attempt for live test
+        )
+        client = WikidataClient(config)
+
+        results = list(
+            client.iterate_public_organizations(
+                types=["newspaper"],
+                country="Switzerland",
+                max_results=5,  # Limit results to keep test fast
+                lang="en",
+            )
+        )
+
+        assert len(results) >= 1, (
+            "Expected at least 1 result with types=['newspaper'], "
+            f"country='Switzerland', but got {len(results)}"
+        )
+
+        assert all(isinstance(r, PublicOrganizationNormalizedRecord) for r in results), (
+            "All results should be PublicOrganizationNormalizedRecord instances"
+        )
+        assert all(r.entity_kind == "public_organization" for r in results), (
+            "All results should have entity_kind 'public_organization'"
+        )
+        assert all(r.countries for r in results), (
+            "All results should have a non-empty countries list"
+        )
+
+    def test_iterate_public_organizations_parliaments_in_germany_live_endpoint(self):
+        """
+        Live smoke test for a single-type organization query in a different
+        country, mirroring the Switzerland/newspaper test above.
+
+        Verifies:
+        - iterate_public_organizations(types=["parliament"], country="Germany")
+          works end-to-end against live Wikidata
+        - At least one result is returned
+        """
+        config = WikidataCollectorConfig(
+            proxy_list=[],
+            sparql_timeout_seconds=55,
+            max_retries=1,
+        )
+        client = WikidataClient(config)
+
+        results = list(
+            client.iterate_public_organizations(
+                types=["parliament"],
+                country="Germany",
+                max_results=5,
+                lang="en",
+            )
+        )
+
+        assert len(results) >= 1, (
+            "Expected at least 1 result with types=['parliament'], "
+            f"country='Germany', but got {len(results)}"
+        )
+
+        assert all(isinstance(r, PublicOrganizationNormalizedRecord) for r in results), (
+            "All results should be PublicOrganizationNormalizedRecord instances"
+        )
+
+    def test_iterate_public_organizations_live_endpoint(self):
+        """
+        End-to-end test for organizations SPARQL query template and iterator.
+
+        Verifies:
+        - iterate_public_organizations iterator works against live Wikidata endpoint
         - Iterator functionality (lazy evaluation, can be consumed incrementally)
-        - SPARQL query template for institutions generates valid queries
+        - SPARQL query template for organizations generates valid queries
         - At least one result is returned with restrictive filters
         - Total call duration is within configured time budget
         """
@@ -164,7 +242,7 @@ class TestLiveSparqlConnectivity:
         # Exercise iterator with restrictive filters (one country + one type)
         # Using United States (Q30) and government_agency to get deterministic results
         results = list(
-            client.iterate_public_institutions(
+            client.iterate_public_organizations(
                 country="United States",
                 types=["Q327333"],  # Government agency QID
                 max_results=5,  # Limit results for faster test execution
@@ -179,9 +257,9 @@ class TestLiveSparqlConnectivity:
             f"types=['government_agency'], but got {len(results)}"
         )
 
-        # Verify all results are PublicInstitution instances
-        assert all(isinstance(r, PublicInstitutionNormalizedRecord) for r in results), (
-            "All results should be PublicInstitutionNormalizedRecord instances"
+        # Verify all results are PublicOrganization instances
+        assert all(isinstance(r, PublicOrganizationNormalizedRecord) for r in results), (
+            "All results should be PublicOrganizationNormalizedRecord instances"
         )
 
         # Verify end-to-end call duration is within time budget

@@ -5,15 +5,17 @@ pages; everything above it — keyset pagination, unique-QID stop condition,
 filter forwarding — runs for real.
 """
 
+from typing import Any, Dict, List
 from unittest.mock import patch
 
 import pytest
 
+from tests.conftest import sparql_response
 from wikidata_collector import InvalidFilterError, WikidataClient
 from wikidata_collector.config import DEFAULT_LIMIT, WikidataCollectorConfig
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
-    PublicInstitutionNormalizedRecord,
+    PublicOrganizationNormalizedRecord,
 )
 
 
@@ -21,8 +23,8 @@ def _figure(qid: str) -> PublicFigureNormalizedRecord:
     return PublicFigureNormalizedRecord(qid=qid, name=f"Person {qid}")
 
 
-def _institution(qid: str) -> PublicInstitutionNormalizedRecord:
-    return PublicInstitutionNormalizedRecord(qid=qid, name=f"Institution {qid}")
+def _organization(qid: str) -> PublicOrganizationNormalizedRecord:
+    return PublicOrganizationNormalizedRecord(qid=qid, name=f"Organization {qid}")
 
 
 def _client_with_page_size(page_size: int) -> WikidataClient:
@@ -131,35 +133,39 @@ class TestIteratePublicFiguresPagination:
         }
 
 
-class TestIteratePublicInstitutionsPagination:
-    """Test pagination behavior of iterate_public_institutions."""
+class TestIteratePublicOrganizationsPagination:
+    """Test pagination behavior of iterate_public_organizations."""
 
     def test_single_page(self, wikidata_client):
         """Results fitting in a single page are yielded once."""
         mock_results = [
-            _institution("Q1"),
-            _institution("Q2"),
+            _organization("Q1"),
+            _organization("Q2"),
         ]
 
         with patch.object(
             wikidata_client, "_fetch_page", return_value=(mock_results, "direct")
         ) as mock:
-            results = list(wikidata_client.iterate_public_institutions(country="Q30"))
+            results = list(
+                wikidata_client.iterate_public_organizations(country="Q30", types=["parliament"])
+            )
 
         mock.assert_called_once()
         assert results == mock_results
 
     def test_multiple_pages(self, wikidata_client):
         """A full page triggers a keyset-paginated fetch of the next page."""
-        page1_results = [_institution(f"Q{i}") for i in range(1, DEFAULT_LIMIT + 1)]
-        page2_results = [_institution("Q100")]
+        page1_results = [_organization(f"Q{i}") for i in range(1, DEFAULT_LIMIT + 1)]
+        page2_results = [_organization("Q100")]
 
         with patch.object(
             wikidata_client,
             "_fetch_page",
             side_effect=[(page1_results, "direct"), (page2_results, "direct")],
         ) as mock:
-            results = list(wikidata_client.iterate_public_institutions(country="Q30"))
+            results = list(
+                wikidata_client.iterate_public_organizations(country="Q30", types=["parliament"])
+            )
 
         assert len(results) == DEFAULT_LIMIT + 1
         assert mock.call_count == 2
@@ -168,17 +174,19 @@ class TestIteratePublicInstitutionsPagination:
     def test_empty_results(self, wikidata_client):
         """No results yields an empty iteration."""
         with patch.object(wikidata_client, "_fetch_page", return_value=([], "direct")):
-            results = list(wikidata_client.iterate_public_institutions(country="Q30"))
+            results = list(
+                wikidata_client.iterate_public_organizations(country="Q30", types=["parliament"])
+            )
 
         assert results == []
 
     def test_custom_page_size_from_config(self):
         """Page size comes from config.default_limit."""
         client = _client_with_page_size(10)
-        mock_results = [_institution(f"Q{i}") for i in range(1, 9)]  # 8 results
+        mock_results = [_organization(f"Q{i}") for i in range(1, 9)]  # 8 results
 
         with patch.object(client, "_fetch_page", return_value=(mock_results, "direct")) as mock:
-            results = list(client.iterate_public_institutions(country="Q30"))
+            results = list(client.iterate_public_organizations(country="Q30", types=["parliament"]))
 
         mock.assert_called_once()
         assert mock.call_args.kwargs["limit"] == 10
@@ -188,28 +196,48 @@ class TestIteratePublicInstitutionsPagination:
         """Stop condition must be based on unique QIDs, not raw record count."""
         client = _client_with_page_size(5)
         page_results = [
-            _institution("Q1"),
-            _institution("Q1"),
-            _institution("Q2"),
-            _institution("Q2"),
-            _institution("Q3"),
-            _institution("Q3"),
+            _organization("Q1"),
+            _organization("Q1"),
+            _organization("Q2"),
+            _organization("Q2"),
+            _organization("Q3"),
+            _organization("Q3"),
         ]
 
         with patch.object(client, "_fetch_page", return_value=(page_results, "direct")) as mock:
-            results = list(client.iterate_public_institutions(country="Q30"))
+            results = list(client.iterate_public_organizations(country="Q30", types=["parliament"]))
 
         mock.assert_called_once()
         assert len(results) == len(page_results)
 
+    def test_duplicate_qid_rows_within_a_page_count_as_unique_for_pagination(
+        self, make_client, organization_page
+    ):
+        """Row-expanded duplicate QIDs from a raw SPARQL page must not look like a
+        full page and trigger a phantom second fetch.
+
+        Mirrors the figure family's pinned unique-QID stop condition, but exercises
+        it through raw bindings (via ``organization_page``) and the real
+        ``execute_sparql_query`` -> normalize -> pagination path, rather than
+        pre-built normalized records.
+        """
+        client = make_client(default_limit=3)
+        page = organization_page(["Q1", "Q1", "Q2"])
+
+        with patch.object(client, "execute_sparql_query", return_value=(page, "direct")) as mock:
+            results = list(client.iterate_public_organizations(country="Q30", types=["parliament"]))
+
+        mock.assert_called_once()
+        assert [record.qid for record in results] == ["Q1", "Q2"]
+
     def test_filters_forwarded(self, wikidata_client):
         """All public filters reach the fetch seam under their public names."""
-        mock_results = [_institution("Q1")]
+        mock_results = [_organization("Q1")]
 
         with patch.object(
             wikidata_client, "_fetch_page", return_value=(mock_results, "direct")
         ) as mock:
-            list(wikidata_client.iterate_public_institutions(country="Q30", types=["Q327333"]))
+            list(wikidata_client.iterate_public_organizations(country="Q30", types=["Q327333"]))
 
         filters = mock.call_args.args[1]
         assert filters == {"country": "Q30", "types": ["Q327333"]}
@@ -234,11 +262,11 @@ class TestGetPageDelegates:
         assert mock.call_args.kwargs["limit"] == 7
         assert mock.call_args.kwargs["after_qid"] == "Q5"
 
-    def test_get_public_institutions_forwards_filters(self, wikidata_client):
+    def test_get_public_organizations_forwards_filters(self, wikidata_client):
         with patch.object(
-            wikidata_client, "_fetch_page", return_value=([_institution("Q1")], "direct")
+            wikidata_client, "_fetch_page", return_value=([_organization("Q1")], "direct")
         ) as mock:
-            records, proxy = wikidata_client.get_public_institutions(
+            records, proxy = wikidata_client.get_public_organizations(
                 country="Q30", types=["Q327333"], limit=3
             )
 
@@ -259,6 +287,95 @@ class TestGetPageDelegates:
             wikidata_client.get_public_figures(birthday_to="2000/12/31")
 
         assert "Invalid birthday_to format" in str(exc_info.value)
+
+
+class TestOrganizationMultiTypeQueryShape:
+    """End-to-end through the real query builder (only `execute_sparql_query`
+    is substituted): `get_public_organizations` stays a single VALUES-OR
+    query for multiple types, while `iterate_public_organizations` decomposes
+    into one query per type.
+    """
+
+    def test_get_multi_type_produces_one_query_with_both_qids_in_one_values(self, make_client):
+        """A single page request never decomposes: both types ride in one
+        VALUES clause of one query."""
+        client = make_client()
+        captured: Dict[str, Any] = {}
+
+        def _capture(query: str, override_proxies: Any = None):
+            captured["query"] = query
+            return sparql_response([]), "direct"
+
+        with patch.object(client, "execute_sparql_query", side_effect=_capture) as execute:
+            client.get_public_organizations(types=["newspaper", "parliament"])
+
+        execute.assert_called_once()
+        assert "VALUES ?orgClass { wd:Q11032 wd:Q35749 }" in captured["query"]
+
+    def test_iterate_multi_type_issues_one_query_stream_per_type(self, make_client):
+        """Each type value drives its own query, containing only that type's
+        QID in its VALUES clause."""
+        client = make_client(default_limit=50)
+        captured_queries: List[str] = []
+
+        def _capture(query: str, override_proxies: Any = None):
+            captured_queries.append(query)
+            return sparql_response([]), "direct"
+
+        with patch.object(client, "execute_sparql_query", side_effect=_capture):
+            list(client.iterate_public_organizations(types=["newspaper", "parliament"]))
+
+        assert len(captured_queries) == 2
+        assert "VALUES ?orgClass { wd:Q11032 }" in captured_queries[0]
+        assert "VALUES ?orgClass { wd:Q35749 }" in captured_queries[1]
+
+    def test_iterate_single_type_issues_one_query(self, make_client):
+        """A single type never decomposes: exactly one query is issued."""
+        client = make_client(default_limit=50)
+
+        with patch.object(
+            client, "execute_sparql_query", return_value=(sparql_response([]), "direct")
+        ) as execute:
+            list(client.iterate_public_organizations(types=["newspaper"]))
+
+        execute.assert_called_once()
+
+    def test_iterate_multi_type_deduplicates_and_normalizes_through_the_real_pipeline(
+        self, make_client, organization_page
+    ):
+        """A duplicate entity across two type streams is yielded once, through
+        the real fetch -> normalize -> pagination -> decomposition path."""
+        client = make_client(default_limit=50)
+        pages = [organization_page(["Q1", "Q2"]), organization_page(["Q2", "Q3"])]
+
+        def _capture(query: str, override_proxies: Any = None):
+            return pages.pop(0), "direct"
+
+        with patch.object(client, "execute_sparql_query", side_effect=_capture):
+            results = list(client.iterate_public_organizations(types=["newspaper", "parliament"]))
+
+        assert [record.qid for record in results] == ["Q1", "Q2", "Q3"]
+
+    def test_iterate_multi_type_max_results_caps_across_streams(
+        self, make_client, organization_page
+    ):
+        """max_results=3 with 2 types x 2 results each yields exactly 3, with
+        the second stream's query issued but only partially consumed."""
+        client = make_client(default_limit=50)
+        pages = [organization_page(["Q1", "Q2"]), organization_page(["Q3", "Q4"])]
+
+        def _capture(query: str, override_proxies: Any = None):
+            return pages.pop(0), "direct"
+
+        with patch.object(client, "execute_sparql_query", side_effect=_capture) as execute:
+            results = list(
+                client.iterate_public_organizations(
+                    types=["newspaper", "parliament"], max_results=3
+                )
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2", "Q3"]
+        assert execute.call_count == 2
 
 
 class TestDefaultPageSize:

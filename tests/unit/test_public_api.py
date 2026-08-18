@@ -16,8 +16,7 @@ from wikidata_collector.exceptions import WikidataCollectorError
 EXPECTED_EXPORTS = {
     "WikidataClient",
     "PublicFigureNormalizedRecord",
-    "PublicInstitutionNormalizedRecord",
-    "SubInstitution",
+    "PublicOrganizationNormalizedRecord",
     "WikidataCollectorError",
     "InvalidQIDError",
     "EntityNotFoundError",
@@ -79,9 +78,9 @@ class TestClientSurface:
         "method",
         [
             "get_public_figures",
-            "get_public_institutions",
+            "get_public_organizations",
             "iterate_public_figures",
-            "iterate_public_institutions",
+            "iterate_public_organizations",
             "execute_sparql_query",
         ],
     )
@@ -89,7 +88,7 @@ class TestClientSurface:
         """Renaming a public method breaks consumers and must be deliberate."""
         assert callable(getattr(wikidata_collector.WikidataClient, method))
 
-    @pytest.mark.parametrize("method", ["iterate_public_figures", "iterate_public_institutions"])
+    @pytest.mark.parametrize("method", ["iterate_public_figures", "iterate_public_organizations"])
     def test_iterator_arguments_are_keyword_only(self, method: str):
         """Keyword-only filters keep call sites readable and order-independent."""
         parameters = inspect.signature(
@@ -118,7 +117,7 @@ class TestClientSurface:
                     "lang",
                 },
             ),
-            ("iterate_public_institutions", {"country", "types", "max_results", "lang"}),
+            ("iterate_public_organizations", {"country", "types", "max_results", "lang"}),
         ],
     )
     def test_iterator_filter_vocabulary_is_stable(self, method: str, expected: set):

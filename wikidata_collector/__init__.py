@@ -20,16 +20,14 @@ from .exceptions import (
 )
 from .models import (
     PublicFigureNormalizedRecord,
-    PublicInstitutionNormalizedRecord,
-    SubInstitution,
+    PublicOrganizationNormalizedRecord,
 )
 
 __version__ = version("wikidata-collector")
 __all__ = [
     "WikidataClient",
     "PublicFigureNormalizedRecord",
-    "PublicInstitutionNormalizedRecord",
-    "SubInstitution",
+    "PublicOrganizationNormalizedRecord",
     "WikidataCollectorError",
     "InvalidQIDError",
     "EntityNotFoundError",

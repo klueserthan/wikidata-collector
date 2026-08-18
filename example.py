@@ -65,19 +65,19 @@ def example_get_public_figures():
         print()
 
 
-def example_get_public_institutions():
-    """Fetch a single page of public institutions using the low-level API."""
+def example_get_public_organizations():
+    """Fetch a single page of public organizations using the low-level API."""
     client = example_default_client()
 
-    institutions, proxy = client.get_public_institutions(
+    organizations, proxy = client.get_public_organizations(
         types=["government_agency"],  # mapped key
         country="US",
         lang="en",
         limit=5,
     )
 
-    print(f"Fetched {len(institutions)} institutions (proxy: {proxy})\n")
-    for inst in institutions:
+    print(f"Fetched {len(organizations)} organizations (proxy: {proxy})\n")
+    for inst in organizations:
         print(inst.generate_pretty_string())
         print()
 
@@ -123,8 +123,8 @@ if __name__ == "__main__":
     print("=== Public Figures (single page) ===\n")
     example_get_public_figures()
 
-    print("\n=== Public Institutions (single page) ===\n")
-    example_get_public_institutions()
+    print("\n=== Public Organizations (single page) ===\n")
+    example_get_public_organizations()
 
     print("\n=== Keyset Pagination ===\n")
     example_keyset_pagination()

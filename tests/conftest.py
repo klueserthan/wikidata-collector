@@ -45,22 +45,22 @@ def figure_binding(qid: str = "Q42", name: str = "Douglas Adams", **fields: Any)
     return binding
 
 
-def institution_binding(
+def organization_binding(
     qid: str = "Q1", name: str = "United Nations", **fields: Any
 ) -> Dict[str, Any]:
-    """Build one SPARQL result row for a public institution.
+    """Build one SPARQL result row for a public organization.
 
     Args:
-        qid: Entity QID; becomes the ``institution`` IRI.
-        name: Value for ``institutionLabel``.
+        qid: Entity QID; becomes the ``organization`` IRI.
+        name: Value for ``organizationLabel``.
         **fields: Any further SPARQL variables to bind (``None`` omits one).
 
     Returns:
         One binding row.
     """
     binding: Dict[str, Any] = {
-        "institution": {"value": f"{WIKIDATA_ENTITY_PREFIX}{qid}"},
-        "institutionLabel": {"value": name},
+        "organization": {"value": f"{WIKIDATA_ENTITY_PREFIX}{qid}"},
+        "organizationLabel": {"value": name},
     }
     binding.update({key: {"value": value} for key, value in fields.items() if value is not None})
     return binding
@@ -137,6 +137,24 @@ def figure_page():
         labels = names or [f"Figure {qid}" for qid in qids]
         return sparql_response(
             [figure_binding(qid, name, **fields) for qid, name in zip(qids, labels)]
+        )
+
+    return _page
+
+
+@pytest.fixture
+def organization_page():
+    """Return a factory producing a SPARQL response page of public organizations.
+
+    Returns:
+        A callable taking QIDs (and optional shared field overrides) and
+        returning a full SPARQL response envelope.
+    """
+
+    def _page(qids: List[str], names: Optional[List[str]] = None, **fields: Any) -> Dict[str, Any]:
+        labels = names or [f"Organization {qid}" for qid in qids]
+        return sparql_response(
+            [organization_binding(qid, name, **fields) for qid, name in zip(qids, labels)]
         )
 
     return _page

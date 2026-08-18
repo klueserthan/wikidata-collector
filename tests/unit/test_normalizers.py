@@ -1,5 +1,5 @@
 """
-Unit tests for models (PublicFigure* and PublicInstitution* classes).
+Unit tests for models (PublicFigure* and PublicOrganization* classes).
 """
 
 from datetime import datetime, timezone
@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
     PublicFigureWikiRecord,
-    PublicInstitutionNormalizedRecord,
-    PublicInstitutionWikiRecord,
+    PublicOrganizationNormalizedRecord,
+    PublicOrganizationWikiRecord,
 )
 
 
@@ -173,24 +173,24 @@ class TestPublicFigureNormalizedRecord:
         assert len(updated.accounts) == 1
 
 
-class TestPublicInstitutionWikiRecord:
-    """Test PublicInstitutionWikiRecord model validation and edge cases."""
+class TestPublicOrganizationWikiRecord:
+    """Test PublicOrganizationWikiRecord model validation and edge cases."""
 
     def test_minimal_wiki_record(self):
-        """Test creating PublicInstitutionWikiRecord with minimal required fields."""
-        record = PublicInstitutionWikiRecord(qid="Q123", name="Test Organization")
+        """Test creating PublicOrganizationWikiRecord with minimal required fields."""
+        record = PublicOrganizationWikiRecord(qid="Q123", name="Test Organization")
 
         assert record.qid == "Q123"
-        assert record.entity_kind == "public_institution"
+        assert record.entity_kind == "public_organization"
         assert record.name == "Test Organization"
         assert record.description is None
         assert record.founded_date is None
 
     def test_wiki_record_from_wikidata(self):
-        """Test creating PublicInstitutionWikiRecord from Wikidata item."""
+        """Test creating PublicOrganizationWikiRecord from Wikidata item."""
         item = {
-            "institution": {"value": "http://www.wikidata.org/entity/Q123"},
-            "institutionLabel": {"value": "Test Organization"},
+            "organization": {"value": "http://www.wikidata.org/entity/Q123"},
+            "organizationLabel": {"value": "Test Organization"},
             "description": {"value": "A test organization"},
             "foundedDate": {"value": "2000-01-01T00:00:00Z"},
             "dissolvedDate": {"value": "2020-12-31T00:00:00Z"},
@@ -200,7 +200,7 @@ class TestPublicInstitutionWikiRecord:
             "twitterHandle": {"value": "@testorg"},
         }
 
-        record = PublicInstitutionWikiRecord.from_wikidata(item)
+        record = PublicOrganizationWikiRecord.from_wikidata(item)
 
         assert record.qid == "Q123"
         assert record.name == "Test Organization"
@@ -211,39 +211,39 @@ class TestPublicInstitutionWikiRecord:
         assert record.type == "Government Agency"
         assert record.twitter_handle == "@testorg"
 
-    def test_wiki_record_from_wikidata_missing_institution(self):
-        """Test that from_wikidata raises KeyError when institution field is missing."""
+    def test_wiki_record_from_wikidata_missing_organization(self):
+        """Test that from_wikidata raises KeyError when organization field is missing."""
         item = {
-            "institutionLabel": {"value": "Test Organization"},
+            "organizationLabel": {"value": "Test Organization"},
         }
 
         try:
-            PublicInstitutionWikiRecord.from_wikidata(item)
+            PublicOrganizationWikiRecord.from_wikidata(item)
             assert False, "Should have raised KeyError"
         except KeyError as e:
-            assert "institution" in str(e).lower()
+            assert "organization" in str(e).lower()
 
     def test_wiki_record_from_wikidata_partial_data(self):
         """Test from_wikidata with only required fields."""
         item = {
-            "institution": {"value": "http://www.wikidata.org/entity/Q999"},
-            "institutionLabel": {"value": "Minimal Institution"},
+            "organization": {"value": "http://www.wikidata.org/entity/Q999"},
+            "organizationLabel": {"value": "Minimal Organization"},
         }
 
-        record = PublicInstitutionWikiRecord.from_wikidata(item)
+        record = PublicOrganizationWikiRecord.from_wikidata(item)
 
         assert record.qid == "Q999"
-        assert record.name == "Minimal Institution"
+        assert record.name == "Minimal Organization"
         assert record.description is None
         assert record.twitter_handle is None
 
 
-class TestPublicInstitutionNormalizedRecord:
-    """Test PublicInstitutionNormalizedRecord model validation and edge cases."""
+class TestPublicOrganizationNormalizedRecord:
+    """Test PublicOrganizationNormalizedRecord model validation and edge cases."""
 
     def test_normalized_record_from_wiki_record(self):
-        """Test creating PublicInstitutionNormalizedRecord from WikiRecord."""
-        wiki_record = PublicInstitutionWikiRecord(
+        """Test creating PublicOrganizationNormalizedRecord from WikiRecord."""
+        wiki_record = PublicOrganizationWikiRecord(
             qid="Q123",
             name="Test Organization",
             description="A test organization",
@@ -253,7 +253,7 @@ class TestPublicInstitutionNormalizedRecord:
             twitter_handle="@testorg",
         )
 
-        normalized = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record)
+        normalized = PublicOrganizationNormalizedRecord.from_wikidata_record(wiki_record)
 
         assert normalized.qid == "Q123"
         assert normalized.name == "Test Organization"
@@ -267,8 +267,8 @@ class TestPublicInstitutionNormalizedRecord:
 
     def test_normalized_record_empty_lists(self):
         """Test that list fields default to empty lists."""
-        wiki_record = PublicInstitutionWikiRecord(qid="Q1", name="Test Institution")
-        normalized = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record)
+        wiki_record = PublicOrganizationWikiRecord(qid="Q1", name="Test Organization")
+        normalized = PublicOrganizationNormalizedRecord.from_wikidata_record(wiki_record)
 
         assert isinstance(normalized.countries, list)
         assert isinstance(normalized.types, list)
@@ -280,24 +280,24 @@ class TestPublicInstitutionNormalizedRecord:
     def test_add_from_wikidata_record(self):
         """Test adding data from multiple wiki records."""
         # Create initial record
-        wiki_record1 = PublicInstitutionWikiRecord(
+        wiki_record1 = PublicOrganizationWikiRecord(
             qid="Q123",
             name="Test Organization",
             country="United States",
             type="Government Agency",
             twitter_handle="@testorg",
         )
-        normalized = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record1)
+        normalized = PublicOrganizationNormalizedRecord.from_wikidata_record(wiki_record1)
 
         # Add another record with additional data
-        wiki_record2 = PublicInstitutionWikiRecord(
+        wiki_record2 = PublicOrganizationWikiRecord(
             qid="Q123",
             name="Test Organization",
             country="Canada",
             type="Public Agency",
             instagram_handle="@testorg_insta",
         )
-        updated = PublicInstitutionNormalizedRecord.add_from_wikidata_record(
+        updated = PublicOrganizationNormalizedRecord.add_from_wikidata_record(
             normalized, wiki_record2
         )
 
@@ -311,22 +311,22 @@ class TestPublicInstitutionNormalizedRecord:
 
     def test_add_from_wikidata_record_no_duplicates(self):
         """Test that add_from_wikidata_record doesn't create duplicates."""
-        wiki_record1 = PublicInstitutionWikiRecord(
+        wiki_record1 = PublicOrganizationWikiRecord(
             qid="Q123",
             name="Test Organization",
             country="United States",
             twitter_handle="@testorg",
         )
-        normalized = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record1)
+        normalized = PublicOrganizationNormalizedRecord.from_wikidata_record(wiki_record1)
 
         # Add same data again
-        wiki_record2 = PublicInstitutionWikiRecord(
+        wiki_record2 = PublicOrganizationWikiRecord(
             qid="Q123",
             name="Test Organization",
             country="United States",
             twitter_handle="@testorg",
         )
-        updated = PublicInstitutionNormalizedRecord.add_from_wikidata_record(
+        updated = PublicOrganizationNormalizedRecord.add_from_wikidata_record(
             normalized, wiki_record2
         )
 
@@ -354,9 +354,9 @@ class TestSocialMediaHandles:
         assert platforms == {"twitter", "instagram", "facebook", "youtube"}
         assert len(normalized.accounts) == 4
 
-    def test_all_social_media_platforms_institution(self):
-        """Test extraction of all supported social media platforms for institutions."""
-        wiki_record = PublicInstitutionWikiRecord(
+    def test_all_social_media_platforms_organization(self):
+        """Test extraction of all supported social media platforms for organizations."""
+        wiki_record = PublicOrganizationWikiRecord(
             qid="Q123",
             name="Test Org",
             twitter_handle="@twitter",
@@ -365,7 +365,7 @@ class TestSocialMediaHandles:
             youtube_handle="youtube",
         )
 
-        normalized = PublicInstitutionNormalizedRecord.from_wikidata_record(wiki_record)
+        normalized = PublicOrganizationNormalizedRecord.from_wikidata_record(wiki_record)
 
         platforms = {acc.platform for acc in normalized.accounts}
         assert platforms == {"twitter", "instagram", "facebook", "youtube"}

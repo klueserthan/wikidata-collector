@@ -6,13 +6,13 @@ This directory contains unit tests and integration tests for the Wikidata Collec
 
 ### Unit Tests (`tests/unit/`)
 - `test_sparql_builders.py` - Unit tests for SPARQL query builders (including iterator-focused query construction)
-- `test_normalizers.py` - Unit tests for data normalizers (PublicFigure, PublicInstitution models)
+- `test_normalizers.py` - Unit tests for data normalizers (PublicFigure, PublicOrganization models)
 - `test_proxy_service.py` - Unit tests for proxy configuration and behavior
 - `test_sparql_security.py` - Unit tests for SPARQL security and safety checks
 
 ### Integration Tests (`tests/integration/`)
 - `test_iterate_public_figures.py` - Integration tests for `iterate_public_figures` API
-- `test_iterate_public_institutions.py` - Integration tests for `iterate_public_institutions` API
+- `test_iterate_public_organizations.py` - Integration tests for `iterate_public_organizations` API
 - `test_resilience_and_logging.py` - Integration tests for proxy, retries, and structured logging
 
 ### Shared Fixtures
@@ -82,7 +82,7 @@ ruff check wikidata_collector tests
 
 ### Iterator-Based APIs (New Feature)
 
-- Unit tests for `iterate_public_figures` and `iterate_public_institutions`
+- Unit tests for `iterate_public_figures` and `iterate_public_organizations`
 - Internal pagination logic (stable ID ordering, page size handling)
 - Filter translation (human-readable labels to SPARQL)
 - Empty results and error handling
@@ -91,13 +91,13 @@ ruff check wikidata_collector tests
 ### SPARQL Query Builders
 
 - Query construction with filters (birthday, nationality, founding date, country, types, headquarter)
-- Label-to-SPARQL translation for nationality, country, and institution types
+- Label-to-SPARQL translation for nationality, country, and organization types
 - SPARQL sub-templates for reusable query fragments
 - Security and SPARQL injection protection
 
 ### Data Models & Normalizers
 
-- Pydantic v2 model validation for `PublicFigure` and `PublicInstitution`
+- Pydantic v2 model validation for `PublicFigure` and `PublicOrganization`
 - Supporting types: `WebsiteEntry`, `AccountEntry`, `Identifier`
 - Multi-valued attribute handling (nationalities, professions, types)
 - Normalizers mapping SPARQL rows to Pydantic models
