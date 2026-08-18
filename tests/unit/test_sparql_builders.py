@@ -174,29 +174,60 @@ class TestBuildPublicFiguresQuery:
 
 
 class TestBuildPublicOrganizationsQuery:
-    """Test build_public_organizations_query method."""
+    """Test build_public_organizations_query method.
+
+    ``types`` is a required filter (see live WDQS benchmarks in the PR
+    description): an unfiltered P31/P279* subclass-closure scan of the
+    organization umbrella (51k subclasses) always times out upstream, so the
+    builder refuses to build that query at all.
+    """
 
     def test_basic_query(self):
-        """Test basic query without filters."""
-        query = build_public_organizations_query()
+        """Test basic query with a single type filter."""
+        query = build_public_organizations_query(types=["political_party"])
 
         assert "SELECT ?organization" in query
-        assert "?organization wdt:P31 ?type" in query
+        assert "SELECT DISTINCT ?organization ?qidNum WHERE" in query
+        assert "VALUES ?orgClass { wd:Q7278 }" in query
+        assert "?organization wdt:P31/wdt:P279* ?orgClass ." in query
         assert "ORDER BY ?qidNum" in query  # Keyset pagination ordering
         assert "LIMIT" in query
         assert "OPTIONAL" in query  # Should have optional clauses for outer query
 
+    def test_types_none_raises_error(self):
+        """types=None is rejected: an unfiltered scan always times out on WDQS."""
+        with pytest.raises(ValueError, match="types filter is required"):
+            build_public_organizations_query(types=None)
+
+    def test_types_empty_list_raises_error(self):
+        """types=[] is rejected the same way as types=None."""
+        with pytest.raises(ValueError, match="types filter is required"):
+            build_public_organizations_query(types=[])
+
+    def test_types_required_error_names_supported_keys_and_qids(self):
+        """The required-types error is actionable: it names the vocabulary and
+        that raw QIDs are also accepted, not just the mapped keys."""
+        with pytest.raises(ValueError) as exc_info:
+            build_public_organizations_query(types=None)
+
+        message = str(exc_info.value)
+        assert "political_party" in message  # a sample curated key
+        assert "QID" in message
+
     def test_country_filter_qid(self):
         """Test country filter with QID."""
         query = build_public_organizations_query(
-            country="Q145"  # United Kingdom QID
+            types=["political_party"],
+            country="Q145",  # United Kingdom QID
         )
 
-        assert "?organization wdt:P17 wd:Q145" in query
+        assert "?organization wdt:P17 wd:Q145 ." in query
 
     def test_country_filter_name(self):
         """Test country filter with mapped country name."""
-        query = build_public_organizations_query(country="United Kingdom", lang="en")
+        query = build_public_organizations_query(
+            types=["political_party"], country="United Kingdom", lang="en"
+        )
 
         # United Kingdom is mapped to Q145 in constants
         assert "wdt:P17 wd:Q145" in query
@@ -205,30 +236,30 @@ class TestBuildPublicOrganizationsQuery:
         """Test type filter with mapped type name."""
         query = build_public_organizations_query(types=["political_party"])
 
-        assert "wdt:P31 wd:Q7278" in query  # political_party mapping
+        assert "VALUES ?orgClass { wd:Q7278 }" in query  # political_party mapping
 
     def test_type_filter_qid(self):
-        """Test type filter with QID."""
+        """Test type filter with a raw QID."""
         query = build_public_organizations_query(types=["Q7278"])
 
-        assert "wdt:P31 wd:Q7278" in query
+        assert "VALUES ?orgClass { wd:Q7278 }" in query
 
     def test_country_filter_with_qid(self):
         """Test country filter with QID works correctly."""
-        query = build_public_organizations_query(country="Q30")
+        query = build_public_organizations_query(types=["political_party"], country="Q30")
 
         assert "wdt:P17 wd:Q30" in query
 
     def test_keyset_pagination(self):
         """Test keyset pagination with QID."""
-        query = build_public_organizations_query(after_qid="Q1000")
+        query = build_public_organizations_query(types=["political_party"], after_qid="Q1000")
 
         assert 'BIND(xsd:integer(STRAFTER(STR(?organization), "/entity/Q")) AS ?qidNum)' in query
         assert "FILTER(?qidNum > 1000)" in query
 
     def test_country_filter_iso_code_mapped(self):
         """Test country filter with ISO-like code mapped via constants."""
-        query = build_public_organizations_query(country="USA")
+        query = build_public_organizations_query(types=["political_party"], country="USA")
 
         # USA is mapped to Q30 in constants
         assert "wdt:P17 wd:Q30" in query
@@ -238,21 +269,49 @@ class TestBuildPublicOrganizationsQuery:
         with pytest.raises(ValueError, match="Unknown organization type"):
             build_public_organizations_query(types=["government agency"], lang="en")
 
+    def test_multiple_types_or_semantics_single_values_clause(self):
+        """Multiple types are ORed via one VALUES clause and one property-path
+        triple — not the old AND-joined `;`-chained `wdt:P31 wd:Q...` pattern,
+        which is semantically wrong (an entity cannot be P31 two different
+        classes at once via `;`) and returns nothing on real data."""
+        query = build_public_organizations_query(types=["newspaper", "parliament"])
+
+        assert query.count("VALUES ?orgClass {") == 1
+        assert "VALUES ?orgClass { wd:Q11032 wd:Q35749 }" in query
+        assert query.count("wdt:P31/wdt:P279* ?orgClass") == 1
+        # The old AND-joined pattern must be entirely absent.
+        assert "wdt:P31 wd:Q11032" not in query
+        assert "wdt:P31 wd:Q35749" not in query
+
+    def test_subquery_selects_distinct(self):
+        """`SELECT DISTINCT` is mandatory in the subquery: the multi-class
+        `wdt:P31/wdt:P279*` property path produces duplicate ?organization
+        rows for entities matching more than one VALUES class, and keyset
+        pagination ends a page when unique QIDs < limit — without DISTINCT,
+        those duplicate rows would silently truncate a page's results."""
+        query = build_public_organizations_query(types=["newspaper", "parliament"])
+
+        assert "SELECT DISTINCT ?organization ?qidNum WHERE" in query
+
+    def test_mixed_mapped_key_and_raw_qid_both_land_in_values(self):
+        """A mapped key and a raw QID can be combined in the same VALUES list."""
+        query = build_public_organizations_query(types=["newspaper", "Q484652"])
+
+        assert "VALUES ?orgClass { wd:Q11032 wd:Q484652 }" in query
+
     def test_multiple_type_filters(self):
         """Test multiple type filters."""
         query = build_public_organizations_query(
             types=["political_party", "Q327333"]  # mapped key and QID
         )
 
-        assert "wdt:P31 wd:Q7278" in query  # political_party mapping
-        assert "wdt:P31 wd:Q327333" in query
+        assert "VALUES ?orgClass { wd:Q7278 wd:Q327333 }" in query
 
     def test_multiple_type_filters_combined(self):
         """Test multiple types combined correctly in subquery."""
         query = build_public_organizations_query(types=["political_party", "government_agency"])
 
-        assert "wdt:P31 wd:Q7278" in query  # political_party
-        assert "wdt:P31 wd:Q327333" in query  # government_agency
+        assert "VALUES ?orgClass { wd:Q7278 wd:Q327333 }" in query
 
     def test_combined_filters(self):
         """Test combining multiple filters."""
@@ -263,23 +322,23 @@ class TestBuildPublicOrganizationsQuery:
         )
 
         assert "wdt:P17 wd:Q30" in query
-        assert "wdt:P31 wd:Q327333" in query  # government_agency mapping
+        assert "VALUES ?orgClass { wd:Q327333 }" in query  # government_agency mapping
 
     def test_offset_pagination(self):
         """Test offset pagination (backward compatibility)."""
-        query = build_public_organizations_query(cursor=25)
+        query = build_public_organizations_query(types=["political_party"], cursor=25)
 
         assert "OFFSET 25" in query
 
     def test_limit_parameter(self):
         """Test limit parameter."""
-        query = build_public_organizations_query(limit=50)
+        query = build_public_organizations_query(types=["political_party"], limit=50)
 
         assert "LIMIT 50" in query  # Pagination now checks distinct QIDs
 
-    def test_optional_fields_without_filters(self):
-        """Test that optional fields are included when no filters applied."""
-        query = build_public_organizations_query()
+    def test_optional_fields_present(self):
+        """Test that optional fields are included in the outer query."""
+        query = build_public_organizations_query(types=["political_party"])
 
         assert "OPTIONAL { ?organization wdt:P17 ?country" in query
         assert "OPTIONAL { ?organization wdt:P571 ?foundedDate" in query
@@ -287,7 +346,7 @@ class TestBuildPublicOrganizationsQuery:
 
     def test_social_media_fields_included(self):
         """Test that social media fields are included in query."""
-        query = build_public_organizations_query()
+        query = build_public_organizations_query(types=["political_party"])
 
         assert "OPTIONAL { ?organization wdt:P2003 ?instagramHandle" in query
         assert "OPTIONAL { ?organization wdt:P2002 ?twitterHandle" in query
@@ -296,7 +355,7 @@ class TestBuildPublicOrganizationsQuery:
 
     def test_service_label_block(self):
         """Test that SERVICE wikibase:label block is included."""
-        query = build_public_organizations_query(lang="en")
+        query = build_public_organizations_query(types=["political_party"], lang="en")
 
         assert "SERVICE wikibase:label" in query
         assert "bd:serviceParam wikibase:language" in query
@@ -305,10 +364,7 @@ class TestBuildPublicOrganizationsQuery:
         """Test type filter with mixed QID and mapping key."""
         query = build_public_organizations_query(types=["Q7278", "government_agency"], lang="en")
 
-        # QID
-        assert "wdt:P31 wd:Q7278" in query
-        # Mapping
-        assert "wdt:P31 wd:Q327333" in query
+        assert "VALUES ?orgClass { wd:Q7278 wd:Q327333 }" in query
 
     def test_type_filter_with_whitespace(self):
         """Test that type filter handles whitespace correctly."""
@@ -317,7 +373,7 @@ class TestBuildPublicOrganizationsQuery:
         )
 
         # Should be stripped and matched to mapping
-        assert "wdt:P31 wd:Q7278" in query
+        assert "VALUES ?orgClass { wd:Q7278 }" in query
 
 
 class TestOrganizationTypeVocabulary:
@@ -347,11 +403,13 @@ class TestOrganizationTypeVocabulary:
             assert re.fullmatch(r"Q\d+", value), f"{key!r} maps to non-QID value {value!r}"
 
     def test_the_builder_resolves_every_vocabulary_key(self):
-        """Every curated key builds a query containing its mapped QID triple."""
+        """Every curated key builds a query containing its mapped QID in VALUES."""
         for key, qid in ORGANIZATION_TYPE_MAPPINGS.items():
             query = build_public_organizations_query(types=[key])
 
-            assert f"wdt:P31 wd:{qid}" in query, f"{key!r} did not resolve to {qid!r} in the query"
+            assert f"VALUES ?orgClass {{ wd:{qid} }}" in query, (
+                f"{key!r} did not resolve to {qid!r} in the query"
+            )
 
     def test_the_vocabulary_key_set_is_pinned(self):
         """The exact key set is pinned so accidental additions or removals fail loudly."""
@@ -398,7 +456,7 @@ class TestQueryBuilderEdgeCases:
 
     def test_organizations_with_limit_one(self):
         """Test query with limit=1 (minimum valid limit)."""
-        query = build_public_organizations_query(limit=1)
+        query = build_public_organizations_query(types=["political_party"], limit=1)
 
         # Pagination now checks distinct QIDs, so LIMIT matches requested limit
         assert "LIMIT 1" in query
@@ -414,8 +472,7 @@ class TestQueryBuilderEdgeCases:
 
         # Verify all filters are present
         assert "wdt:P17 wd:Q30" in query
-        assert "wdt:P31 wd:Q327333" in query
-        assert "wdt:P31 wd:Q7278" in query  # political_party mapping
+        assert "VALUES ?orgClass { wd:Q327333 wd:Q7278 }" in query  # QID + political_party
         assert "LIMIT 50" in query
 
     def test_figures_none_nationality(self):
@@ -425,9 +482,8 @@ class TestQueryBuilderEdgeCases:
         # Should have OPTIONAL clause for country
         assert "OPTIONAL { ?person wdt:P27  ?country. }" in query
 
-    def test_organizations_empty_type_list(self):
-        """Test query with empty type list."""
-        query = build_public_organizations_query(types=[])
-
-        # Should still have basic structure
-        assert "?organization wdt:P31 ?type" in query
+    def test_organizations_empty_type_list_raises_error(self):
+        """types=[] is treated the same as types=None: it must raise, not silently
+        build an unfiltered scan (which always times out on WDQS)."""
+        with pytest.raises(ValueError, match="types filter is required"):
+            build_public_organizations_query(types=[])

@@ -217,7 +217,7 @@ class TestIteratePublicOrganizationsPagination:
         page = organization_page(["Q1", "Q1", "Q2"])
 
         with patch.object(client, "execute_sparql_query", return_value=(page, "direct")) as mock:
-            results = list(client.iterate_public_organizations(country="Q30"))
+            results = list(client.iterate_public_organizations(country="Q30", types=["parliament"]))
 
         mock.assert_called_once()
         assert [record.qid for record in results] == ["Q1", "Q2"]

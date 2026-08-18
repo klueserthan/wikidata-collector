@@ -16,11 +16,22 @@ def build_public_organizations_query(
     cursor: int = 0,
     after_qid: Optional[str] = None,
 ) -> str:
-    """Build SPARQL query for public organizations with optional filters.
+    """Build SPARQL query for public organizations, filtered by type (required).
+
+    Live WDQS benchmarking (see the ADR / PR description) showed that an
+    unfiltered organization-umbrella subclass scan
+    (``wdt:P31/wdt:P279* wd:Q43229``, ~51k subclasses) always times out (504)
+    on WDQS, in every query shape tested. ``types`` is therefore a required
+    filter, never an optional narrowing. Multiple values are ORed together via
+    a single ``VALUES`` clause feeding one ``wdt:P31/wdt:P279*`` property-path
+    triple — never AND-joined ``;``-chained ``wdt:P31`` triples, which is
+    semantically wrong (one entity cannot simultaneously be a direct instance
+    of two different classes) and returns no results on real data.
 
     Args:
         country: Country filter (QID or label)
-        types: List of organization type filters (mapped keys, QIDs, or labels)
+        types: List of organization type filters (mapped keys or raw QIDs).
+            Required: at least one value must be given.
         lang: Language code for labels
         limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
@@ -30,37 +41,52 @@ def build_public_organizations_query(
         SPARQL query string
 
     Raises:
-        ValueError: If QID validation fails
+        ValueError: If ``types`` is missing/empty, if any type or country
+            value fails validation or is not recognized, or if QID validation
+            fails for ``after_qid``.
     """
     if limit is None:
         limit = DEFAULT_LIMIT
+
+    if not types:
+        raise ValueError(
+            "types filter is required for public organizations (an unfiltered "
+            "scan always times out on WDQS). "
+            f"Supported values: {', '.join(sorted(ORGANIZATION_TYPE_MAPPINGS.keys()))}, "
+            "or a QID starting with Q"
+        )
+
+    # Resolve every type entry to a class QID. Multiple classes are combined
+    # with OR semantics via VALUES, never AND-joined `;` triples.
+    class_qids: List[str] = []
+    for value in types:
+        value = value.strip()
+        if value in ORGANIZATION_TYPE_MAPPINGS:
+            class_qids.append(ORGANIZATION_TYPE_MAPPINGS[value])
+        elif value.startswith("Q"):
+            class_qids.append(validate_qid(value))
+        else:
+            raise ValueError(
+                f"Unknown organization type '{value}'. "
+                f"Supported types: {', '.join(sorted(ORGANIZATION_TYPE_MAPPINGS.keys()))}, "
+                "or a QID starting with Q"
+            )
+
+    values_clause = " ".join(f"wd:{qid}" for qid in class_qids)
+
     # Build efficient subquery with core filters. ?qidNum must be selected so it is
-    # available for keyset pagination and ordering in the outer query.
-    subquery = """
-  {
-    SELECT ?organization ?qidNum WHERE {"""
-
-    # Build the WHERE clause conditions
-    conditions = []
-
-    # Add type filters to subquery if provided
-    if types:
-        for value in types:
-            value = value.strip()
-            if value in ORGANIZATION_TYPE_MAPPINGS:
-                # Use mapped QID
-                mapped_qid = ORGANIZATION_TYPE_MAPPINGS[value]
-                conditions.append(f"wdt:P31 wd:{mapped_qid}")
-            elif value.startswith("Q"):
-                # Validate QID format
-                validated_qid = validate_qid(value)
-                conditions.append(f"wdt:P31 wd:{validated_qid}")
-            else:
-                # Unknown type - skip or raise error
-                raise ValueError(
-                    f"Unknown organization type '{value}'. "
-                    f"Supported types: {', '.join(sorted(ORGANIZATION_TYPE_MAPPINGS.keys()))}"
-                )
+    # available for keyset pagination and ordering in the outer query. SELECT
+    # DISTINCT is mandatory: the multi-class wdt:P31/wdt:P279* property path
+    # produces duplicate ?organization rows for entities matching more than
+    # one VALUES class, and keyset pagination ends a page once the number of
+    # *unique* QIDs falls below the limit — without DISTINCT, duplicate rows
+    # would silently truncate a page's results.
+    subquery = f"""
+  {{
+    SELECT DISTINCT ?organization ?qidNum WHERE {{
+      VALUES ?orgClass {{ {values_clause} }}
+      ?organization wdt:P31/wdt:P279* ?orgClass .
+"""
 
     # Add country filter to subquery if provided
     if country:
@@ -68,26 +94,17 @@ def build_public_organizations_query(
         if country_value.startswith("Q"):
             # Direct QID - validate it
             validated_qid = validate_qid(country_value)
-            conditions.append(f"wdt:P17 wd:{validated_qid}")
-
+            subquery += f"      ?organization wdt:P17 wd:{validated_qid} .\n"
         elif country_value in COUNTRY_MAPPINGS:
             # Map country name to QID
             country_qid = COUNTRY_MAPPINGS[country_value]
-            conditions.append(f"wdt:P17 wd:{country_qid}")
+            subquery += f"      ?organization wdt:P17 wd:{country_qid} .\n"
         else:
             raise ValueError(
-                f"Country filter must be a QID (starting with Q), got: {country_value}"
+                f"Unknown country '{country_value}'. "
+                f"Supported values: {', '.join(sorted(COUNTRY_MAPPINGS.keys()))}, "
+                "or a QID starting with Q"
             )
-
-    # Build the triple pattern
-    if conditions:
-        subquery += "\n      ?organization " + conditions[0]
-        for condition in conditions[1:]:
-            subquery += " ;\n                   " + condition
-        subquery += " .\n"
-    else:
-        # If no filters, just match any organization with a type
-        subquery += "\n      ?organization wdt:P31 ?type .\n"
 
     # Add quidNum for keyset pagination and outer ordering
     subquery += '      BIND(xsd:integer(STRAFTER(STR(?organization), "/entity/Q")) AS ?qidNum)\n'
