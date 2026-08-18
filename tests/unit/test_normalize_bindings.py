@@ -7,6 +7,7 @@ than only through the pipeline.
 """
 
 import logging
+from datetime import datetime, timezone
 
 from tests.conftest import figure_binding, organization_binding
 from wikidata_collector.models import (
@@ -164,6 +165,81 @@ class TestOrganizationFamily:
             )
 
         assert [record.qid for record in records] == ["Q1"]
+
+    def test_multi_country_rows_accumulate_into_countries(self):
+        """Country rows expand over P17 and fold into one record's country list."""
+        records = normalize(
+            [
+                organization_binding("Q1", countryLabel="Germany"),
+                organization_binding("Q1", countryLabel="France"),
+            ],
+            *ORGANIZATION_FAMILY,
+        )
+
+        assert records[0].countries == ["Germany", "France"]
+
+    def test_account_handles_merge_without_duplicates(self):
+        """Repeating a handle across expanded rows must not duplicate the account."""
+        records = normalize(
+            [
+                organization_binding(
+                    "Q1", instagramHandle="un", typeLabel="international organization"
+                ),
+                organization_binding(
+                    "Q1", instagramHandle="un", typeLabel="intergovernmental organization"
+                ),
+                organization_binding(
+                    "Q1", twitterHandle="unitednations", typeLabel="intergovernmental organization"
+                ),
+            ],
+            *ORGANIZATION_FAMILY,
+        )
+
+        accounts = {(account.platform, account.handle) for account in records[0].accounts}
+        assert accounts == {("instagram", "un"), ("twitter", "unitednations")}
+
+    def test_scalar_fields_keep_the_first_rows_value(self):
+        """description, image, and founded_date are first-wins, not last-wins."""
+        records = normalize(
+            [
+                organization_binding(
+                    "Q1",
+                    description="original description",
+                    image="https://example.org/first.jpg",
+                    foundedDate="1945-06-26T00:00:00Z",
+                    typeLabel="international organization",
+                ),
+                organization_binding(
+                    "Q1",
+                    description="a different description",
+                    image="https://example.org/second.jpg",
+                    foundedDate="1946-01-01T00:00:00Z",
+                    typeLabel="intergovernmental organization",
+                ),
+            ],
+            *ORGANIZATION_FAMILY,
+        )
+
+        assert records[0].description == "original description"
+        assert records[0].image == "https://example.org/first.jpg"
+        assert records[0].founded_date == datetime(1945, 6, 26, tzinfo=timezone.utc)
+
+    def test_non_consecutive_rows_for_one_entity_do_not_fold(self):
+        """Folding is by adjacency; an interleaved QID splits the entity in two.
+
+        Mirrors the figure family's pinned behaviour: keyset pagination orders by
+        QID precisely so this cannot happen upstream.
+        """
+        records = normalize(
+            [
+                organization_binding("Q1", typeLabel="international organization"),
+                organization_binding("Q2"),
+                organization_binding("Q1", typeLabel="intergovernmental organization"),
+            ],
+            *ORGANIZATION_FAMILY,
+        )
+
+        assert [record.qid for record in records] == ["Q1", "Q2", "Q1"]
 
 
 class TestSocialAccounts:

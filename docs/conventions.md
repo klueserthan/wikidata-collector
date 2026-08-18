@@ -119,7 +119,8 @@ Non-negotiable, and the reason `security.py` carries a 100% coverage floor:
   `live` is deselected by default; opt in with `uv run pytest -m live`.
 - Shared builders live in `tests/conftest.py`: `sparql_response`,
   `figure_binding`, `organization_binding`, `make_config`, `make_client`,
-  `figure_page`. Reach for those before hand-rolling a SPARQL envelope.
+  `figure_page`, `organization_page`. Reach for those before hand-rolling a
+  SPARQL envelope.
 - The public surface is pinned by `tests/unit/test_public_api.py`. Changing
   `__all__`, a public signature, or the filter vocabulary means updating that
   test deliberately — which is the point.

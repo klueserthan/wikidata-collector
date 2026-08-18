@@ -140,3 +140,21 @@ def figure_page():
         )
 
     return _page
+
+
+@pytest.fixture
+def organization_page():
+    """Return a factory producing a SPARQL response page of public organizations.
+
+    Returns:
+        A callable taking QIDs (and optional shared field overrides) and
+        returning a full SPARQL response envelope.
+    """
+
+    def _page(qids: List[str], names: Optional[List[str]] = None, **fields: Any) -> Dict[str, Any]:
+        labels = names or [f"Organization {qid}" for qid in qids]
+        return sparql_response(
+            [organization_binding(qid, name, **fields) for qid, name in zip(qids, labels)]
+        )
+
+    return _page

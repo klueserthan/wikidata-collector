@@ -202,6 +202,26 @@ class TestIteratePublicOrganizationsPagination:
         mock.assert_called_once()
         assert len(results) == len(page_results)
 
+    def test_duplicate_qid_rows_within_a_page_count_as_unique_for_pagination(
+        self, make_client, organization_page
+    ):
+        """Row-expanded duplicate QIDs from a raw SPARQL page must not look like a
+        full page and trigger a phantom second fetch.
+
+        Mirrors the figure family's pinned unique-QID stop condition, but exercises
+        it through raw bindings (via ``organization_page``) and the real
+        ``execute_sparql_query`` -> normalize -> pagination path, rather than
+        pre-built normalized records.
+        """
+        client = make_client(default_limit=3)
+        page = organization_page(["Q1", "Q1", "Q2"])
+
+        with patch.object(client, "execute_sparql_query", return_value=(page, "direct")) as mock:
+            results = list(client.iterate_public_organizations(country="Q30"))
+
+        mock.assert_called_once()
+        assert [record.qid for record in results] == ["Q1", "Q2"]
+
     def test_filters_forwarded(self, wikidata_client):
         """All public filters reach the fetch seam under their public names."""
         mock_results = [_organization("Q1")]
