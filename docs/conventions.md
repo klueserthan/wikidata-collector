@@ -110,10 +110,18 @@ Non-negotiable, and the reason `security.py` carries a 100% coverage floor:
   out, no abbreviations.
 - Mock external calls with `pytest-mock`'s `mocker`, or the shared fixtures in
   `tests/conftest.py`.
-- Unit tests never sleep and never touch the network. Real waits are neutralised
-  by the autouse `_no_real_sleep` fixture in `tests/unit/conftest.py`; a test that
-  needs to assert on wait durations reads the recorded sleeps instead.
-- Markers: `integration` (full pipeline over mocked HTTP), `iterator`, `live`
-  (real Wikidata; never runs in PR CI).
+- Unit tests never sleep and never touch the network, and both are enforced by
+  autouse fixtures in `tests/unit/conftest.py`: `recorded_sleeps` swaps
+  `time.sleep` for a recorder tests can assert on, and `no_network` blocks
+  `socket.connect`. The integration suite records sleeps the same way, except on
+  `live` tests.
+- Markers: `integration` (full pipeline over mocked HTTP), `iterator`, `live`.
+  `live` is deselected by default; opt in with `uv run pytest -m live`.
+- Shared builders live in `tests/conftest.py`: `sparql_response`,
+  `figure_binding`, `institution_binding`, `make_config`, `make_client`,
+  `figure_page`. Reach for those before hand-rolling a SPARQL envelope.
+- The public surface is pinned by `tests/unit/test_public_api.py`. Changing
+  `__all__`, a public signature, or the filter vocabulary means updating that
+  test deliberately — which is the point.
 - Warnings are errors. If a dependency emits one that cannot be fixed, add a
   narrow `filterwarnings` entry in `pyproject.toml` with a comment saying why.
