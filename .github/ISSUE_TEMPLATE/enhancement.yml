@@ -1,0 +1,51 @@
+---
+name: Enhancement
+description: Propose a change or addition to the library
+title: "[ENHANCEMENT] <brief description>"
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard or impossible today? Describe the situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should change? Sketch the API if the public surface moves.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Public API impact
+      description: This is a library; a changed export or signature breaks consumers.
+      options:
+        - None — internal only
+        - Additive — new export or new optional argument
+        - Breaking — changes or removes something consumers use
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How will we know this is done? These become the tests.
+      placeholder: |
+        - iterate_public_figures accepts ...
+        - an unknown value raises InvalidFilterError
+    validations:
+      required: true

@@ -10,113 +10,143 @@ concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  UV_FROZEN: "1"
+
 jobs:
-  typecheck:
-    name: Type check (pyright)
+  static:
+    name: Static checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
       - name: Install uv
-        run: pip install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
-      - name: Type check with pyright
-        run: uv run pyright wikidata_collector tests
-
-  format:
-    name: Format (ruff)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Install uv
-        run: pip install uv
-
-      - name: Install dependencies
-        run: uv sync --dev
-
-      - name: Format check with ruff
+      # Ordered cheapest-first so the fastest signal fails first.
+      - name: Format (ruff)
         run: uv run ruff format --check wikidata_collector tests
 
-  lint:
-    name: Lint (ruff)
+      - name: Lint (ruff)
+        run: uv run ruff check --output-format=github wikidata_collector tests
+
+      - name: Type check (pyright)
+        run: uv run pyright wikidata_collector tests
+
+  lockfile:
+    name: Lockfile up to date
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
       - name: Install uv
-        run: pip install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
-      - name: Install dependencies
-        run: uv sync --dev
+      # Fails if pyproject.toml changed without a matching `uv lock`, which would
+      # otherwise make every other job resolve different versions than a developer.
+      - name: Check uv.lock matches pyproject.toml
+        run: uv lock --check
 
-      - name: Lint with ruff
-        run: uv run ruff check wikidata_collector tests
-
-  unit-tests:
-    name: Unit tests
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
       - name: Install uv
-        run: pip install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
-      - name: Run unit tests
-        run: uv run pytest tests/unit -v --tb=short --cov=wikidata_collector --cov-report=term --cov-report=xml
+      # Deterministic order, and the run that carries the coverage gate
+      # (fail_under lives in pyproject.toml).
+      - name: Unit tests
+        run: >-
+          uv run pytest tests/unit -p no:randomly
+          --cov=wikidata_collector
+          --cov-report=term
+          --cov-report=xml
+
+      # Same tests, shuffled by pytest-randomly, to surface order dependence and
+      # leaked state. The seed is printed in the log so a failure is reproducible.
+      - name: Unit tests (shuffled)
+        run: uv run pytest tests/unit --no-cov -q
+
+      - name: Integration tests
+        run: uv run pytest tests/integration --no-cov
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: warn
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: unittests
-          name: codecov-umbrella
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         continue-on-error: true
 
-  integration-tests:
-    name: Integration tests (non-live)
+  package:
+    name: Package installs and imports
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
       - name: Install uv
-        run: pip install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
-      - name: Install dependencies
-        run: uv sync --dev
+      - name: Build sdist and wheel
+        run: uv build
 
-      - name: Run integration tests (non-live)
-        run: uv run pytest tests/integration -v -m "not live" --tb=short
+      # This is a library: a wheel that builds but does not import is broken for
+      # every consumer, and no other job would notice.
+      - name: Install the wheel into a clean environment and import it
+        run: |
+          uv venv /tmp/smoke
+          uv pip install --python /tmp/smoke/bin/python dist/*.whl
+          /tmp/smoke/bin/python -c "
+          import wikidata_collector as wc
+          missing = [name for name in wc.__all__ if not hasattr(wc, name)]
+          assert not missing, f'exported but missing: {missing}'
+          print('imported', wc.__name__, wc.__version__, '-', len(wc.__all__), 'exports')
+          "
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
