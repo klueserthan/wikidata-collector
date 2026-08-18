@@ -1,6 +1,7 @@
 """Configuration for the Wikidata Collector module (no FastAPI dependencies)."""
 
 import os
+import threading
 from typing import List, Optional
 
 from dotenv import find_dotenv, load_dotenv
@@ -36,6 +37,33 @@ DEFAULT_LIMIT = int(
 
 # HTTP status codes requiring retry
 RETRYABLE_STATUS_CODES = {429, 502, 503, 504}  # 429: throttled, 5xx: upstream unavailable
+
+# Process-wide random User-Agent pool, built on first use.
+# Constructing a UserAgent parses a large bundled dataset (1.5-5s of CPU), so it
+# must never be rebuilt per request. None means "not built yet".
+_user_agent_pool: Optional[UserAgent] = None
+_user_agent_pool_lock = threading.Lock()
+
+
+def _random_user_agent() -> str:
+    """Return a random browser User-Agent from the shared pool.
+
+    The pool is constructed lazily on first call and reused for the lifetime of
+    the process, so import stays cheap and requests do not each pay to rebuild it.
+    Construction is serialized: concurrent first calls would otherwise each build
+    their own copy of the dataset, multiplying the cost the cache exists to avoid.
+
+    Returns:
+        A random User-Agent string.
+    """
+    global _user_agent_pool
+    # Double-checked locking: the fast path never takes the lock, and only a
+    # fully built pool is ever published to other threads.
+    if _user_agent_pool is None:
+        with _user_agent_pool_lock:
+            if _user_agent_pool is None:
+                _user_agent_pool = UserAgent()
+    return _user_agent_pool.get_random_user_agent()
 
 
 class WikidataCollectorConfig:
@@ -129,4 +157,4 @@ class WikidataCollectorConfig:
                 f"(https://github.com/klueserthan/wikidata-collector, contact: {self.contact_email})"
             )
         else:
-            return UserAgent().get_random_user_agent()
+            return _random_user_agent()

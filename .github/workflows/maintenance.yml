@@ -1,0 +1,65 @@
+name: Maintenance
+
+# Checks that depend on the outside world rather than on the diff: a dependency
+# advisory or a Wikidata change can turn these red without anyone touching the
+# repo, so they run on a schedule instead of blocking pull requests.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/maintenance.yml
+
+concurrency:
+  group: maintenance-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Audit locked runtime dependencies
+        run: |
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt > requirements.txt
+          uvx pip-audit --requirement requirements.txt --strict
+
+  live:
+    name: Live Wikidata smoke test
+    # Never on pull requests: these calls spend real upstream quota.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      # Catches upstream drift — a renamed property, a changed result shape, an
+      # endpoint policy change — that mocked tests cannot see.
+      - name: Run live tests
+        env:
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+        run: uv run pytest -m live --no-cov -v

@@ -1,0 +1,67 @@
+---
+name: Bug report
+description: Something in the library behaves incorrectly
+title: "[BUG] <brief description>"
+labels: ["bug", "needs-triage"]
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How much damage does this do?
+      options:
+        - Critical (wrong data returned, silent data loss, injection risk)
+        - Major (a documented workflow fails, or fails only sometimes)
+        - Minor (cosmetic, docs, cleanup)
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happens
+      description: One paragraph. What did you observe?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: |
+        Smallest snippet or command that shows the problem. Include the filters
+        used, and redact proxies and contact emails.
+      render: python
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Suspected location
+      description: File and line, if you have one.
+      placeholder: wikidata_collector/client.py:544
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Library version, Python version, and whether proxies are configured.
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: Suggested fix
+    validations:
+      required: false

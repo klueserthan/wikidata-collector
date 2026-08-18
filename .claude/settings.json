@@ -1,4 +1,29 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(uv sync:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run pyright:*)",
+      "Bash(uv build:*)",
+      "Bash(.github/scripts/pre-commit-checks.sh)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr list:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

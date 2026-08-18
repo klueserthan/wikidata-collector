@@ -38,9 +38,14 @@ env/
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+
+# Agent tooling (personal overrides only — shared config is committed)
+.claude/settings.local.json
 
 # IDE
 .vscode/

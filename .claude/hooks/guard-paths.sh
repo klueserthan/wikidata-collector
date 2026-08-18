@@ -25,8 +25,8 @@ esac
 
 # Vendored / generated trees that must not be hand-edited.
 case "$file" in
-  */.opencode/*|.opencode/*|*/.opencode_*|.opencode_*)
-    deny "the .opencode tree is vendored/generated — do not edit it by hand." ;;
+  */.agents/skills/*|.agents/skills/*|*/.claude/skills/*|.claude/skills/*)
+    deny "the skills tree is vendored from mattpocock/skills and pinned by skills-lock.json — re-run skills.sh instead of editing it by hand." ;;
   */.venv/*|.venv/*)
     deny "the .venv virtualenv is generated — change pyproject.toml and run 'uv sync' instead." ;;
 esac

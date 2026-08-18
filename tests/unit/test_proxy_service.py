@@ -3,8 +3,6 @@ Unit tests for wikidata_collector/proxy.py
 Focus on proxy URL validation and SSRF prevention
 """
 
-import time
-
 import pytest
 
 from wikidata_collector.exceptions import ProxyMisconfigurationError
@@ -179,7 +177,7 @@ class TestProxyManager:
     def test_failed_proxy_cooldown(self):
         """Test that failed proxies are excluded during cooldown period"""
         proxies = ["http://proxy1.example.com:8080", "http://proxy2.example.com:8080"]
-        manager = ProxyManager(proxy_list=proxies, cooldown_period=2)
+        manager = ProxyManager(proxy_list=proxies, cooldown_period=300)
 
         # Mark first proxy as failed
         manager.mark_proxy_failed("http://proxy1.example.com:8080")
@@ -189,12 +187,13 @@ class TestProxyManager:
         assert len(available) == 1
         assert available[0] == "http://proxy2.example.com:8080"
 
-        # Wait for cooldown to expire
-        time.sleep(2.1)
+        # Age the recorded failure past the cooldown instead of waiting it out.
+        manager.failed_proxies["http://proxy1.example.com:8080"] -= 301
 
-        # Now both should be available again
+        # Now both should be available again, and the entry is forgotten.
         available = manager.get_available_proxies()
         assert len(available) == 2
+        assert manager.failed_proxies == {}
 
     def test_get_next_proxy_skips_failed(self):
         """Test that get_next_proxy skips failed proxies during cooldown"""
