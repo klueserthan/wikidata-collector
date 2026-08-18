@@ -2,8 +2,11 @@
 Unit tests for SPARQL query builders.
 """
 
+import re
+
 import pytest
 
+from wikidata_collector.constants import ORGANIZATION_TYPE_MAPPINGS
 from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
 from wikidata_collector.query_builders.organizations_query_builder import (
     build_public_organizations_query,
@@ -315,6 +318,44 @@ class TestBuildPublicOrganizationsQuery:
 
         # Should be stripped and matched to mapping
         assert "wdt:P31 wd:Q7278" in query
+
+
+class TestOrganizationTypeVocabulary:
+    """The curated ORGANIZATION_TYPE_MAPPINGS vocabulary is pinned end to end."""
+
+    EXPECTED_KEYS = [
+        "broadcaster",
+        "court",
+        "government_agency",
+        "international_organization",
+        "legislature",
+        "media_outlet",
+        "ministry",
+        "municipality",
+        "news_agency",
+        "newspaper",
+        "ngo",
+        "parliament",
+        "political_party",
+        "trade_union",
+        "university",
+    ]
+
+    def test_every_mapping_value_is_a_qid(self):
+        """Every mapped value looks like a Wikidata QID, not a label or typo."""
+        for key, value in ORGANIZATION_TYPE_MAPPINGS.items():
+            assert re.fullmatch(r"Q\d+", value), f"{key!r} maps to non-QID value {value!r}"
+
+    def test_the_builder_resolves_every_vocabulary_key(self):
+        """Every curated key builds a query containing its mapped QID triple."""
+        for key, qid in ORGANIZATION_TYPE_MAPPINGS.items():
+            query = build_public_organizations_query(types=[key])
+
+            assert f"wdt:P31 wd:{qid}" in query, f"{key!r} did not resolve to {qid!r} in the query"
+
+    def test_the_vocabulary_key_set_is_pinned(self):
+        """The exact key set is pinned so accidental additions or removals fail loudly."""
+        assert sorted(ORGANIZATION_TYPE_MAPPINGS.keys()) == self.EXPECTED_KEYS
 
 
 class TestQueryBuilderEdgeCases:

@@ -9,14 +9,27 @@ GENDER_MAPPINGS = {
     "other": "other",
 }
 
-# Supported organization type mappings
+# Supported organization type mappings.
+# Keys are the public `types` vocabulary (see CONTEXT.md). Subclass closure
+# (P279*) is applied at query time, so each key maps to the most precise
+# umbrella class rather than an exhaustive leaf list; raw QIDs are also
+# accepted directly by the builder.
 ORGANIZATION_TYPE_MAPPINGS = {
-    "political_party": "Q7278",
-    "government_agency": "Q327333",
-    "municipality": "Q15284",
-    "media_outlet": "Q1193236",
-    "ngo": "Q79913",
-    "ministry": "Q192350",
+    "political_party": "Q7278",  # political party
+    "government_agency": "Q327333",  # government agency
+    "municipality": "Q15284",  # municipality
+    "media_outlet": "Q1193236",  # news media
+    "ngo": "Q79913",  # non-governmental organization
+    "ministry": "Q192350",  # ministry
+    "parliament": "Q35749",  # parliament
+    "legislature": "Q11204",  # legislature
+    "newspaper": "Q11032",  # newspaper
+    "broadcaster": "Q15265344",  # broadcaster
+    "news_agency": "Q192283",  # news agency
+    "international_organization": "Q484652",  # international organization
+    "court": "Q41487",  # court
+    "university": "Q3918",  # university
+    "trade_union": "Q178790",  # labor union
 }
 
 # TODO: Verify and select

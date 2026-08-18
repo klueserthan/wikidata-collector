@@ -74,7 +74,7 @@ for inst in client.iterate_public_organizations(
     ...  # inst is a PublicOrganizationNormalizedRecord
 ```
 
-Supported type keys: `political_party`, `government_agency`, `municipality`, `media_outlet`, `ngo`, `ministry`. Or pass QIDs directly (e.g., `"Q327333"`).
+Supported type keys: `political_party`, `government_agency`, `municipality`, `media_outlet`, `ngo`, `ministry`, `parliament`, `legislature`, `newspaper`, `broadcaster`, `news_agency`, `international_organization`, `court`, `university`, `trade_union`. Or pass QIDs directly (e.g., `"Q327333"`).
 
 ### Low-Level Page Methods
 
