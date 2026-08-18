@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 
 from tests.conftest import figure_binding, sparql_response
+from wikidata_collector.constants import ORGANIZATION_TYPE_MAPPINGS
 from wikidata_collector.exceptions import InvalidFilterError, QueryExecutionError
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
@@ -490,6 +491,84 @@ class TestOrganizationTypesMustBeAList:
                     types=("newspaper",)  # type: ignore[arg-type]
                 )
             )
+
+
+class TestOrganizationTypesAreValidatedAtomically:
+    """Every type is resolved up front, before any decomposed stream runs. A
+    malformed value in a multi-type filter must fail the whole call before a
+    single request — otherwise an earlier valid stream could issue requests
+    (and, under `max_results`, satisfy the cap) before the bad value is ever
+    reached.
+    """
+
+    def test_invalid_type_rejected_before_any_stream_runs(self, wikidata_client):
+        """An unknown type anywhere in the list fails before the first stream,
+        even though an earlier type is valid."""
+        with patch.object(wikidata_client, "_paginate_sparql_results") as paginate:
+            with pytest.raises(InvalidFilterError, match="Unknown organization type"):
+                list(
+                    wikidata_client.iterate_public_organizations(types=["newspaper", "not_a_type"])
+                )
+
+        paginate.assert_not_called()
+
+    def test_invalid_type_not_masked_by_max_results(self, wikidata_client):
+        """Even when `max_results` could be satisfied by the first valid type
+        alone, a later invalid type is still rejected — validation is atomic
+        and precedes pagination."""
+        with patch.object(wikidata_client, "_paginate_sparql_results") as paginate:
+            with pytest.raises(InvalidFilterError, match="Unknown organization type"):
+                list(
+                    wikidata_client.iterate_public_organizations(
+                        types=["newspaper", "not_a_type"], max_results=1
+                    )
+                )
+
+        paginate.assert_not_called()
+
+    def test_invalid_type_rejected_on_get(self, wikidata_client):
+        """`get_public_organizations` rejects the malformed type before any
+        request too."""
+        with patch.object(wikidata_client, "execute_sparql_query") as execute:
+            with pytest.raises(InvalidFilterError, match="Unknown organization type"):
+                wikidata_client.get_public_organizations(types=["newspaper", "not_a_type"])
+
+        execute.assert_not_called()
+
+
+class TestOrganizationTypesAreCanonicalizedBeforeDedup:
+    """Values that resolve to the same class must not each spawn a redundant
+    keyset stream, even when they differ only by surrounding whitespace or by
+    label-vs-QID form.
+    """
+
+    def test_whitespace_equivalent_types_collapse_to_one_stream(self, wikidata_client):
+        """ "newspaper" and " newspaper " resolve to the same class; only one
+        stream runs."""
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1", "Q2"))],
+        ) as paginate:
+            results = list(
+                wikidata_client.iterate_public_organizations(types=["newspaper", " newspaper "])
+            )
+
+        assert [record.qid for record in results] == ["Q1", "Q2"]
+        assert paginate.call_count == 1
+
+    def test_label_and_equivalent_qid_collapse_to_one_stream(self, wikidata_client):
+        """A mapped label and the QID it maps to are the same class; only one
+        stream runs."""
+        newspaper_qid = ORGANIZATION_TYPE_MAPPINGS["newspaper"]
+        with patch.object(
+            wikidata_client,
+            "_paginate_sparql_results",
+            side_effect=[iter(_organizations("Q1"))],
+        ) as paginate:
+            list(wikidata_client.iterate_public_organizations(types=["newspaper", newspaper_qid]))
+
+        assert paginate.call_count == 1
 
     def test_duplicate_does_not_count_toward_max_results(self, wikidata_client):
         """A skipped duplicate must not consume the caller's result budget."""

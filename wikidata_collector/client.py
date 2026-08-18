@@ -46,7 +46,10 @@ from .models import (
 )
 from .proxy import ProxyManager, validate_proxy_list
 from .query_builders.figures_query_builder import build_public_figures_query
-from .query_builders.organizations_query_builder import build_public_organizations_query
+from .query_builders.organizations_query_builder import (
+    build_public_organizations_query,
+    resolve_organization_type,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +266,17 @@ def _validate_organization_filters(filters: Dict[str, Any]) -> None:
         if not isinstance(value, str):
             raise InvalidFilterError(f"types entries must be strings, got {value!r}")
 
+    # Resolve every type up front so a malformed value in a multi-type filter
+    # fails the whole call before any decomposed stream issues a request.
+    # Without this, resolution happens one stream at a time in the builder, so
+    # an earlier valid type could yield records — and, under max_results, even
+    # satisfy the cap — before a later invalid type is ever reached.
+    try:
+        for value in types:
+            resolve_organization_type(value)
+    except ValueError as e:
+        raise InvalidFilterError(f"Invalid filter parameters: {e}") from e
+
     country = filters.get("country")
     if country is not None and not isinstance(country, str):
         raise InvalidFilterError(f"country must be a string, got {country!r}")
@@ -287,15 +301,23 @@ def _decompose_organization_filters(filters: Dict[str, Any]) -> List[Dict[str, A
             holds one or more values.
 
     Returns:
-        One filter dict per distinct type value, in the original order, each
-        carrying a single-element `types` list and every other filter
-        unchanged. Repeated type values are collapsed: a duplicate would spawn
-        a second, wholly redundant keyset stream whose every record is later
-        dropped by cross-stream de-duplication.
+        One filter dict per distinct type *class*, in first-appearance order,
+        each carrying a single-element `types` list and every other filter
+        unchanged. Values that resolve to the same class — whether repeated
+        outright, differing only by surrounding whitespace, or given once as a
+        label and once as the QID it maps to — are collapsed: each redundant
+        value would otherwise spawn a wholly redundant keyset stream whose
+        every record is later dropped by cross-stream de-duplication.
     """
     types = filters.get("types") or []
-    unique_types = list(dict.fromkeys(types))
-    return [{**filters, "types": [one_type]} for one_type in unique_types]
+    # De-duplicate by resolved class QID, keeping the first value seen for each
+    # class (stripped, so the sub-stream filter is canonical). Validation has
+    # already run, so resolution here never raises.
+    canonical_by_qid: Dict[str, str] = {}
+    for value in types:
+        qid = resolve_organization_type(value)
+        canonical_by_qid.setdefault(qid, value.strip())
+    return [{**filters, "types": [one_type]} for one_type in canonical_by_qid.values()]
 
 
 def _normalize_figure_bindings(

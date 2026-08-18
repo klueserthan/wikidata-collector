@@ -188,15 +188,13 @@ class TestIteratePublicOrganizationsEdgeCases:
     """Test edge cases and error handling for iterate_public_organizations."""
 
     def test_iterate_empty_results(self, mocker):
-        """Test iteration with no matching results."""
+        """Test iteration with valid filters that happen to match nothing."""
         client = WikidataClient()
         mocker.patch.object(client, "_fetch_page", return_value=([], "direct"))
 
-        # Call the iterator with filters that return no results
+        # Well-formed filters (they pass validation); the mocked page is empty.
         results = list(
-            client.iterate_public_organizations(
-                country="NonexistentCountry", types=["nonexistent_type"]
-            )
+            client.iterate_public_organizations(country="Switzerland", types=["newspaper"])
         )
 
         # Verify empty results

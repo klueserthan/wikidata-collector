@@ -8,6 +8,36 @@ from ..constants import COUNTRY_MAPPINGS, ORGANIZATION_TYPE_MAPPINGS
 from ..security import validate_qid
 
 
+def resolve_organization_type(value: str) -> str:
+    """Resolve one organization type to a validated Wikidata class QID.
+
+    Accepts a curated mapping key (from ``ORGANIZATION_TYPE_MAPPINGS``) or a
+    raw QID; surrounding whitespace is ignored. This is the single source of
+    truth for organization-type resolution — the query builder, the client's
+    filter validator, and stream decomposition all go through it, so a type is
+    validated and canonicalized exactly once and identically everywhere.
+
+    Args:
+        value: A mapping key (e.g. ``"newspaper"``) or a QID (e.g. ``"Q11032"``).
+
+    Returns:
+        The Wikidata class QID the type resolves to.
+
+    Raises:
+        ValueError: If the value is neither a known mapping key nor a valid QID.
+    """
+    value = value.strip()
+    if value in ORGANIZATION_TYPE_MAPPINGS:
+        return ORGANIZATION_TYPE_MAPPINGS[value]
+    if value.startswith("Q"):
+        return validate_qid(value)
+    raise ValueError(
+        f"Unknown organization type '{value}'. "
+        f"Supported types: {', '.join(sorted(ORGANIZATION_TYPE_MAPPINGS.keys()))}, "
+        "or a QID starting with Q"
+    )
+
+
 def build_public_organizations_query(
     country: Optional[str] = None,
     types: Optional[List[str]] = None,
@@ -58,19 +88,7 @@ def build_public_organizations_query(
 
     # Resolve every type entry to a class QID. Multiple classes are combined
     # with OR semantics via VALUES, never AND-joined `;` triples.
-    class_qids: List[str] = []
-    for value in types:
-        value = value.strip()
-        if value in ORGANIZATION_TYPE_MAPPINGS:
-            class_qids.append(ORGANIZATION_TYPE_MAPPINGS[value])
-        elif value.startswith("Q"):
-            class_qids.append(validate_qid(value))
-        else:
-            raise ValueError(
-                f"Unknown organization type '{value}'. "
-                f"Supported types: {', '.join(sorted(ORGANIZATION_TYPE_MAPPINGS.keys()))}, "
-                "or a QID starting with Q"
-            )
+    class_qids: List[str] = [resolve_organization_type(value) for value in types]
 
     values_clause = " ".join(f"wd:{qid}" for qid in class_qids)
 
