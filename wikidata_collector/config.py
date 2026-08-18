@@ -37,6 +37,26 @@ DEFAULT_LIMIT = int(
 # HTTP status codes requiring retry
 RETRYABLE_STATUS_CODES = {429, 502, 503, 504}  # 429: throttled, 5xx: upstream unavailable
 
+# Process-wide random User-Agent pool, built on first use.
+# Constructing a UserAgent parses a large bundled dataset (1.5-5s of CPU), so it
+# must never be rebuilt per request. None means "not built yet".
+_user_agent_pool: Optional[UserAgent] = None
+
+
+def _random_user_agent() -> str:
+    """Return a random browser User-Agent from the shared pool.
+
+    The pool is constructed lazily on first call and reused for the lifetime of
+    the process, so import stays cheap and requests do not each pay to rebuild it.
+
+    Returns:
+        A random User-Agent string.
+    """
+    global _user_agent_pool
+    if _user_agent_pool is None:
+        _user_agent_pool = UserAgent()
+    return _user_agent_pool.get_random_user_agent()
+
 
 class WikidataCollectorConfig:
     """Module-only configuration for Wikidata retrieval."""
@@ -129,4 +149,4 @@ class WikidataCollectorConfig:
                 f"(https://github.com/klueserthan/wikidata-collector, contact: {self.contact_email})"
             )
         else:
-            return UserAgent().get_random_user_agent()
+            return _random_user_agent()
