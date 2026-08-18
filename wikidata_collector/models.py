@@ -71,18 +71,6 @@ class Identifier(BaseModel):
     id: str
 
 
-class Coordinates(BaseModel):
-    lat: float
-    lon: float
-
-
-class SubInstitution(BaseModel):
-    _id: str
-    name: Optional[str] = None
-    description: Optional[str] = None
-    image: Optional[str] = None
-
-
 class PublicFigureBase(BaseModel):
     entity_kind: Literal["public_figure"] = "public_figure"
     qid: str

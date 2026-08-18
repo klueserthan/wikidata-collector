@@ -17,7 +17,6 @@ EXPECTED_EXPORTS = {
     "WikidataClient",
     "PublicFigureNormalizedRecord",
     "PublicOrganizationNormalizedRecord",
-    "SubInstitution",
     "WikidataCollectorError",
     "InvalidQIDError",
     "EntityNotFoundError",
