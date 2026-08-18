@@ -6,8 +6,9 @@ Shared vocabulary for wikidata-collector. Use these terms exactly in code, docs,
 
 - **Public figure** — a human Wikidata entity (`wdt:P31 wd:Q5`), filterable by birthday range,
   nationality (P27, country of citizenship), occupations (P106), and gender (P21).
-- **Public organization** — an organizational Wikidata entity, filterable by country (P17) and
-  types (P31).
+- **Public organization** — an organizational Wikidata entity, filterable by country (P17,
+  optional) and types (P31 with P279\* subclass closure, required — Wikidata has no bounded
+  "organization" umbrella class a query can scan without it).
 - **Entity kind** — the discriminator string on every model (`"public_figure"` /
   `"public_organization"`).
 
@@ -32,6 +33,13 @@ Shared vocabulary for wikidata-collector. Use these terms exactly in code, docs,
   pipeline; production fetches via SPARQL + proxy.
 - **Keyset pagination** — paging ordered by numeric QID with an `after_qid` filter; end-of-results
   is decided on *unique* QIDs per page (rows are expanded per value combination).
+- **Filter decomposition** (`_EntitySpec.decompose_filters`) — splitting one call's filters into
+  several sub-streams run sequentially through the same pipeline, sharing one keyset-pagination
+  loop and one `seen_qids` de-dupe set. Default is identity (one sub-stream, filters unchanged).
+  Multi-type organization iteration decomposes into one keyset stream per `types` value, because a
+  single combined multi-type query degrades badly on WDQS; a duplicate entity across streams is
+  yielded once and does not count twice toward `max_results`, which is a global budget spanning
+  every sub-stream. `get_public_organizations` (a single page) never decomposes.
 
 ## Filter vocabulary
 
@@ -44,7 +52,7 @@ One name per concept, end to end (public method → pipeline → query builder):
 | Gender (P21) | `gender` | public figures |
 | Birth date range (P569) | `birthday_from` / `birthday_to` | public figures |
 | Country (P17) | `country` | public organizations |
-| Organization types (P31) | `types` | public organizations |
+| Organization types (P31, with P279\* subclass closure, OR across values) | `types` (required) | public organizations |
 
 Human-readable filter labels resolve to QIDs only via the mappings in `constants.py`; unknown
 labels are rejected (never interpolated into SPARQL).

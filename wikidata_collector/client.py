@@ -21,6 +21,7 @@ from typing import (
     List,
     Optional,
     Protocol,
+    Set,
     Tuple,
     TypeVar,
 )
@@ -28,6 +29,7 @@ from typing import (
 import requests
 
 from .config import WikidataCollectorConfig
+from .constants import ORGANIZATION_TYPE_MAPPINGS
 from .exceptions import (
     InvalidFilterError,
     ProxyMisconfigurationError,
@@ -216,6 +218,76 @@ def _validate_figure_filters(filters: Dict[str, Any]) -> None:
             )
 
 
+def _validate_organization_filters(filters: Dict[str, Any]) -> None:
+    """Validate public organization filters (fail-fast on missing/malformed input).
+
+    `types` is a required filter: Wikidata has no bounded "organization"
+    umbrella class the builder can scan without it (see
+    `build_public_organizations_query`'s docstring — an unfiltered scan always
+    times out on WDQS), so a missing, `None`, or empty `types` is rejected
+    here before any SPARQL is built. A bare string is rejected too: Python
+    would otherwise iterate its characters as if each were a type, which is
+    never what a caller means.
+
+    Args:
+        filters: Filter dict keyed by the public filter vocabulary
+
+    Raises:
+        InvalidFilterError: If `types` is missing, `None`, empty, a bare
+            string, or contains a non-string entry; or if `country` is given
+            and is not a string.
+    """
+    types = filters.get("types")
+
+    if not types:
+        raise InvalidFilterError(
+            "types filter is required for public organizations (an unfiltered "
+            "scan always times out on WDQS). "
+            f"Supported values: {', '.join(sorted(ORGANIZATION_TYPE_MAPPINGS.keys()))}, "
+            "or a QID starting with Q"
+        )
+
+    if isinstance(types, str):
+        raise InvalidFilterError(
+            f"types must be a list of strings, not a bare string ({types!r}); "
+            f"did you mean [{types!r}]?"
+        )
+
+    for value in types:
+        if not isinstance(value, str):
+            raise InvalidFilterError(f"types entries must be strings, got {value!r}")
+
+    country = filters.get("country")
+    if country is not None and not isinstance(country, str):
+        raise InvalidFilterError(f"country must be a string, got {country!r}")
+
+
+def _no_decomposition(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Default entity spec decomposer: run the filters as a single stream."""
+    return [filters]
+
+
+def _decompose_organization_filters(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Split multi-type organization filters into one filter dict per type.
+
+    A single combined multi-type SPARQL query degrades badly on WDQS (see
+    `build_public_organizations_query`'s docstring), so iteration instead runs
+    one keyset-paginated query stream per type value and de-duplicates
+    client-side. A single type decomposes to itself — one stream, same as the
+    figures entity kind's identity decomposition.
+
+    Args:
+        filters: Filter dict keyed by the public filter vocabulary; `types`
+            holds one or more values.
+
+    Returns:
+        One filter dict per type value, in the original order, each carrying
+        a single-element `types` list and every other filter unchanged.
+    """
+    types = filters.get("types") or []
+    return [{**filters, "types": [one_type]} for one_type in types]
+
+
 def _normalize_figure_bindings(
     bindings: List[Dict[str, Any]],
 ) -> List[PublicFigureNormalizedRecord]:
@@ -243,6 +315,7 @@ class _EntitySpec(Generic[TRecord]):
     build_query: Callable[..., str]
     normalize: Callable[[List[Dict[str, Any]]], List[TRecord]]
     validate_filters: Callable[[Dict[str, Any]], None] = _no_filter_validation
+    decompose_filters: Callable[[Dict[str, Any]], List[Dict[str, Any]]] = _no_decomposition
 
 
 _PUBLIC_FIGURES: "_EntitySpec[PublicFigureNormalizedRecord]" = _EntitySpec(
@@ -258,6 +331,8 @@ _PUBLIC_ORGANIZATIONS: "_EntitySpec[PublicOrganizationNormalizedRecord]" = _Enti
     query_type="public_organizations",
     build_query=build_public_organizations_query,
     normalize=_normalize_organization_bindings,
+    validate_filters=_validate_organization_filters,
+    decompose_filters=_decompose_organization_filters,
 )
 
 
@@ -731,7 +806,17 @@ class WikidataClient:
         max_results: Optional[int],
         lang: str,
     ) -> Iterator[TRecord]:
-        """Run the full entity pipeline: validate, paginate, cap, log lifecycle.
+        """Run the full entity pipeline: validate, decompose, paginate, cap, log lifecycle.
+
+        Filters are validated once, against the original (pre-decomposition)
+        filter dict. `spec.decompose_filters` then splits them into one or
+        more sub-streams run sequentially (identity decomposition — the
+        default — yields exactly one sub-stream, so single-type organization
+        calls and all figure calls behave exactly as before decomposition was
+        introduced). When there is more than one sub-stream, a QID already
+        yielded by an earlier sub-stream is skipped by a later one and does
+        not count toward `max_results`, which is a single global budget
+        spanning every sub-stream.
 
         Args:
             spec: Entity spec for the entity kind being iterated
@@ -749,6 +834,13 @@ class WikidataClient:
         spec.validate_filters(filters)
         self._validate_max_results(max_results)
 
+        sub_filter_list = spec.decompose_filters(filters)
+        # Only decomposition into more than one sub-stream needs cross-stream
+        # de-duplication; a single sub-stream must behave exactly as before
+        # decomposition existed, including yielding raw, unfolded duplicate
+        # QIDs coming out of one page (see the keyset pagination tests).
+        seen_qids: Optional[Set[str]] = set() if len(sub_filter_list) > 1 else None
+
         count = 0
         success = False
 
@@ -765,19 +857,31 @@ class WikidataClient:
         start_time = time.time()
 
         try:
-            for record in self._paginate_sparql_results(spec, filters, lang=lang):
-                yield record
-                count += 1
+            for sub_filters in sub_filter_list:
+                reached_cap = False
 
-                if max_results is not None and count >= max_results:
-                    logger.info(
-                        f"Reached max_results limit of {max_results}",
-                        extra={
-                            "event": "max_results_reached",
-                            "entity_kind": spec.entity_kind,
-                            "result_count": count,
-                        },
-                    )
+                for record in self._paginate_sparql_results(spec, sub_filters, lang=lang):
+                    if seen_qids is not None:
+                        if record.qid in seen_qids:
+                            continue
+                        seen_qids.add(record.qid)
+
+                    yield record
+                    count += 1
+
+                    if max_results is not None and count >= max_results:
+                        logger.info(
+                            f"Reached max_results limit of {max_results}",
+                            extra={
+                                "event": "max_results_reached",
+                                "entity_kind": spec.entity_kind,
+                                "result_count": count,
+                            },
+                        )
+                        reached_cap = True
+                        break
+
+                if reached_cap:
                     break
 
             # Mark as successful if we completed iteration without exception
@@ -880,19 +984,26 @@ class WikidataClient:
 
     def get_public_organizations(
         self,
+        types: List[str],
         country: Optional[str] = None,
-        types: Optional[List[str]] = None,
         lang: str = "en",
         limit: Optional[int] = None,
         cursor: int = 0,
         after_qid: Optional[str] = None,
         override_proxies: Optional[List[str]] = None,
     ) -> Tuple[List[PublicOrganizationNormalizedRecord], str]:
-        """Get one page of public organizations with optional filters.
+        """Get one page of public organizations, filtered by type (required).
+
+        `types` is required: an unfiltered organization scan always times out
+        on WDQS (see `build_public_organizations_query`). Multiple values are
+        combined with OR semantics in a single query — unlike
+        `iterate_public_organizations`, a single page never decomposes into
+        multiple query streams.
 
         Args:
+            types: List of organization type filters (mapped keys, QIDs, or
+                labels). Required: at least one value must be given.
             country: Country filter (QID, ISO code, or label)
-            types: List of organization type filters (mapped keys, QIDs, or labels)
             lang: Language code for labels
             limit: Maximum results to return (defaults to config.default_limit)
             cursor: Offset for pagination
@@ -901,6 +1012,9 @@ class WikidataClient:
 
         Returns:
             Tuple of (List[PublicOrganizationNormalizedRecord], used_proxy)
+
+        Raises:
+            InvalidFilterError: If `types` is missing, empty, or malformed.
         """
         return self._fetch_page(
             _PUBLIC_ORGANIZATIONS,
@@ -964,23 +1078,33 @@ class WikidataClient:
     def iterate_public_organizations(
         self,
         *,
+        types: List[str],
         country: Optional[str] = None,
-        types: Optional[List[str]] = None,
         max_results: Optional[int] = None,
         lang: str = "en",
     ) -> Iterator[PublicOrganizationNormalizedRecord]:
         """Yield aggregated public organizations matching the given filters.
 
+        `types` is required: an unfiltered organization scan always times out
+        on WDQS (see `build_public_organizations_query`). Iterating over
+        multiple `types` values runs one keyset-paginated query stream per
+        type — a combined multi-type query degrades badly upstream — rather
+        than the single OR query `get_public_organizations` uses for one page.
+        Entities matching more than one type are de-duplicated across streams,
+        and `max_results` is a single budget spanning every stream, not a
+        per-stream one.
+
         Expects human-readable filter labels (e.g., "US", "government_agency") or QIDs;
         query builders translate these into appropriate SPARQL constraints.
-        Uses a stable internal ordering by entity ID.
+        Uses a stable internal ordering by entity ID within each stream.
         Hides SPARQL pagination; callers simply iterate over results.
         Respects `max_results` when provided; otherwise yields all matches subject to
         environment and upstream constraints.
 
         Args:
+            types: List of organization type filters (labels or QIDs).
+                Required: at least one value must be given.
             country: Country filter (single value: QID, ISO code, or label)
-            types: List of organization type filters (labels or QIDs)
             max_results: Maximum number of results to yield (None for unlimited)
             lang: Language code for labels (default: "en")
 

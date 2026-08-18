@@ -64,7 +64,7 @@ class TestIteratePublicOrganizationsHappyPath:
         client = WikidataClient()
         mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
-        # Call the iterator API
+        # Call the iterator API (single type: no decomposition, one fetch call)
         results = list(
             client.iterate_public_organizations(country="US", types=["government_agency"])
         )
@@ -87,8 +87,12 @@ class TestIteratePublicOrganizationsHappyPath:
         client = WikidataClient()
         mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
-        # Request only 10 results
-        results = list(client.iterate_public_organizations(country="US", max_results=10))
+        # Request only 10 results (single type: no decomposition)
+        results = list(
+            client.iterate_public_organizations(
+                country="US", types=["government_agency"], max_results=10
+            )
+        )
 
         # Verify only 10 results returned
         assert len(results) == 10
@@ -105,19 +109,22 @@ class TestIteratePublicOrganizationsHappyPath:
             client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
-        # Call with country filter
-        results = list(client.iterate_public_organizations(country="Germany", lang="en"))
+        # Call with country filter and the now-required types filter
+        results = list(
+            client.iterate_public_organizations(country="Germany", types=["ngo"], lang="en")
+        )
 
         # Verify the fetch seam received the filters under their public names
         mock_fetch.assert_called_once()
         filters = mock_fetch.call_args.args[1]
-        assert filters == {"country": "Germany", "types": None}
+        assert filters == {"country": "Germany", "types": ["ngo"]}
         assert mock_fetch.call_args.kwargs["lang"] == "en"
 
         assert len(results) == 1
 
     def test_iterate_with_types_filter(self, mocker):
-        """Test iteration with types filter."""
+        """Multiple types decompose into one fetch call per type; a record
+        returned by more than one stream is de-duplicated."""
         sample_records = [_pi("Q200", "Political Party Example", types=["political party"])]
 
         client = WikidataClient()
@@ -125,22 +132,24 @@ class TestIteratePublicOrganizationsHappyPath:
             client, "_fetch_page", return_value=(sample_records, "direct")
         )
 
-        # Call with types filter
+        # Call with two types filter
         results = list(
             client.iterate_public_organizations(
                 types=["political_party", "government_agency"], lang="en"
             )
         )
 
-        # Verify the fetch seam received the types filter
-        mock_fetch.assert_called_once()
-        filters = mock_fetch.call_args.args[1]
-        assert filters["types"] == ["political_party", "government_agency"]
+        # One fetch call per type, each carrying only that one type
+        assert mock_fetch.call_count == 2
+        sub_filters = [call.args[1]["types"] for call in mock_fetch.call_args_list]
+        assert sub_filters == [["political_party"], ["government_agency"]]
 
+        # The same fake record ("Q200") comes back from both streams; it is
+        # de-duplicated to a single yielded record.
         assert len(results) == 1
 
     def test_iterate_with_combined_filters(self, mocker):
-        """Test iteration with multiple filters combined."""
+        """Test iteration with country plus a single type filter combined."""
         sample_records = [
             _pi(
                 "Q400",
@@ -197,7 +206,7 @@ class TestIteratePublicOrganizationsEdgeCases:
         client = WikidataClient()
 
         with pytest.raises(InvalidFilterError) as exc_info:
-            list(client.iterate_public_organizations(max_results=0))
+            list(client.iterate_public_organizations(types=["ngo"], max_results=0))
 
         assert "max_results must be >= 1" in str(exc_info.value)
 
@@ -206,9 +215,24 @@ class TestIteratePublicOrganizationsEdgeCases:
         client = WikidataClient()
 
         with pytest.raises(InvalidFilterError) as exc_info:
-            list(client.iterate_public_organizations(max_results=-10))
+            list(client.iterate_public_organizations(types=["ngo"], max_results=-10))
 
         assert "max_results must be >= 1" in str(exc_info.value)
+
+    def test_none_types_raises_before_max_results_is_even_checked(self):
+        """`types` is validated first: a filters-level error, not a
+        max_results-level one, is what a caller with both invalid would see."""
+        client = WikidataClient()
+
+        with pytest.raises(InvalidFilterError) as exc_info:
+            list(
+                client.iterate_public_organizations(
+                    types=None,  # type: ignore[arg-type]
+                    max_results=0,
+                )
+            )
+
+        assert "types filter is required" in str(exc_info.value)
 
     def test_query_execution_error_propagated(self, mocker):
         """Test that QueryExecutionError from the fetch seam is propagated."""
@@ -221,7 +245,7 @@ class TestIteratePublicOrganizationsEdgeCases:
         )
 
         with pytest.raises(QueryExecutionError) as exc_info:
-            list(client.iterate_public_organizations(country="US"))
+            list(client.iterate_public_organizations(country="US", types=["ngo"]))
 
         assert "Upstream SPARQL endpoint unavailable" in str(exc_info.value)
 
@@ -232,19 +256,19 @@ class TestIteratePublicOrganizationsEdgeCases:
         mocker.patch.object(client, "_fetch_page", side_effect=ValueError("Invalid QID format"))
 
         with pytest.raises(InvalidFilterError) as exc_info:
-            list(client.iterate_public_organizations(country="Q!!!invalid"))
+            list(client.iterate_public_organizations(country="Q!!!invalid", types=["ngo"]))
 
         assert "Invalid filter parameters" in str(exc_info.value)
 
-    def test_iterate_without_filters(self, mocker):
-        """Test iteration without any filters."""
+    def test_iterate_with_only_the_required_types_filter(self, mocker):
+        """Test iteration with no other filter than the now-required `types`."""
         sample_records = [_pi("Q1", "Organization 1", founded="2000-01-01T00:00:00")]
 
         client = WikidataClient()
         mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
-        # Call without filters
-        results = list(client.iterate_public_organizations())
+        # Call with only the required types filter
+        results = list(client.iterate_public_organizations(types=["ngo"]))
 
         assert len(results) == 1
         assert results[0].id == "Q1"
@@ -256,7 +280,7 @@ class TestIteratePublicOrganizationsEdgeCases:
         client = WikidataClient()
         mocker.patch.object(client, "_fetch_page", return_value=(sample_records, "direct"))
 
-        results = list(client.iterate_public_organizations(max_results=1))
+        results = list(client.iterate_public_organizations(types=["ngo"], max_results=1))
 
         assert len(results) == 1
         assert results[0].id == "Q1"
@@ -271,7 +295,7 @@ class TestIteratePublicOrganizationsEdgeCases:
         )
 
         # Call with ISO code
-        results = list(client.iterate_public_organizations(country="USA"))
+        results = list(client.iterate_public_organizations(country="USA", types=["ngo"]))
 
         # Verify the ISO code was passed
         mock_fetch.assert_called_once()
@@ -290,7 +314,7 @@ class TestIteratePublicOrganizationsEdgeCases:
         )
 
         # Call with QID
-        results = list(client.iterate_public_organizations(country="Q145"))
+        results = list(client.iterate_public_organizations(country="Q145", types=["ngo"]))
 
         # Verify the QID was passed
         mock_fetch.assert_called_once()
@@ -300,7 +324,7 @@ class TestIteratePublicOrganizationsEdgeCases:
         assert len(results) == 1
 
     def test_types_with_mapped_keys(self, mocker):
-        """Test types filter with mapped keys."""
+        """Multiple mapped-key types decompose into one fetch call each."""
         sample_records = [_pi("Q777", "Party Example", types=["political party"])]
 
         client = WikidataClient()
@@ -313,28 +337,27 @@ class TestIteratePublicOrganizationsEdgeCases:
             client.iterate_public_organizations(types=["political_party", "municipality"])
         )
 
-        # Verify the types were passed
-        mock_fetch.assert_called_once()
-        filters = mock_fetch.call_args.args[1]
-        assert filters["types"] == ["political_party", "municipality"]
+        # One fetch call per type, each carrying only that one type
+        assert mock_fetch.call_count == 2
+        sub_filters = [call.args[1]["types"] for call in mock_fetch.call_args_list]
+        assert sub_filters == [["political_party"], ["municipality"]]
 
+        # The same fake record ("Q777") comes back from both streams; it is
+        # de-duplicated to a single yielded record.
         assert len(results) == 1
 
-    def test_empty_types_list(self, mocker):
-        """Test with empty types list."""
-        sample_records = [_pi("Q1", "Organization 1")]
-
+    def test_empty_types_list_raises(self, mocker):
+        """types=[] carries no filter at all and is rejected, not passed through:
+        an unfiltered organization scan always times out on WDQS."""
         client = WikidataClient()
-        mock_fetch = mocker.patch.object(
-            client, "_fetch_page", return_value=(sample_records, "direct")
-        )
 
-        # Call with empty types list - should be passed through as is
-        results = list(client.iterate_public_organizations(types=[]))
+        with pytest.raises(InvalidFilterError, match="types filter is required"):
+            list(client.iterate_public_organizations(types=[]))
 
-        mock_fetch.assert_called_once()
-        filters = mock_fetch.call_args.args[1]
-        # Empty list should be passed as is (query builder handles it)
-        assert filters["types"] == []
+    def test_none_types_raises(self, mocker):
+        """types=None is rejected the same way as `types=[]`; omitting `types`
+        entirely is instead a Python-level TypeError, since it has no default."""
+        client = WikidataClient()
 
-        assert len(results) == 1
+        with pytest.raises(InvalidFilterError, match="types filter is required"):
+            list(client.iterate_public_organizations(types=None))  # type: ignore[arg-type]
