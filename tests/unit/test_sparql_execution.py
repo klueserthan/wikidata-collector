@@ -233,10 +233,12 @@ class TestFailureClassification:
 
     def test_client_error_status_is_a_query_execution_error(self, make_client, http):
         """A 400 from a malformed query is raised, not retried into an outage."""
-        _register(http, 400, 400)
+        _register(http, 400)
 
         with pytest.raises(QueryExecutionError):
-            make_client().execute_sparql_query(QUERY)
+            make_client(max_retries=3).execute_sparql_query(QUERY)
+
+        assert len(http.calls) == 1
 
     def test_jitter_backoff_grows_with_the_attempt_number(self, make_client, http, recorded_sleeps):
         """Connection failures back off by base + increment * attempt."""
@@ -249,6 +251,39 @@ class TestFailureClassification:
             ).execute_sparql_query(QUERY)
 
         assert recorded_sleeps == [0.5, 0.75]
+
+
+class TestNonRetryableClientErrorFailsFast:
+    """A 4xx other than 429 is not transient, so it is not retried at all."""
+
+    def test_403_raises_after_a_single_request(self, make_client, http, recorded_sleeps):
+        """A WAF-style 403 rejects the query text itself; retrying cannot help."""
+        http.add(
+            responses.GET,
+            SPARQL_URL,
+            body="Request blocked by the Wikimedia Foundation firewall.",
+            status=403,
+        )
+
+        with pytest.raises(QueryExecutionError):
+            make_client(max_retries=3).execute_sparql_query(QUERY)
+
+        assert len(http.calls) == 1
+        assert recorded_sleeps == []
+
+    def test_403_message_carries_the_status_and_response_body(self, make_client, http):
+        """The message surfaces WDQS's human-readable rejection reason."""
+        http.add(
+            responses.GET,
+            SPARQL_URL,
+            body="Request blocked by the Wikimedia Foundation firewall.",
+            status=403,
+        )
+
+        with pytest.raises(QueryExecutionError, match="403") as exc_info:
+            make_client().execute_sparql_query(QUERY)
+
+        assert "Request blocked by the Wikimedia Foundation firewall." in str(exc_info.value)
 
 
 class TestProxyRotation:

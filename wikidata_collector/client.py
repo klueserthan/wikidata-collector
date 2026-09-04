@@ -28,7 +28,7 @@ from typing import (
 
 import requests
 
-from .config import WikidataCollectorConfig
+from .config import RETRYABLE_STATUS_CODES, WikidataCollectorConfig
 from .constants import ORGANIZATION_TYPE_MAPPINGS
 from .exceptions import (
     InvalidFilterError,
@@ -529,6 +529,11 @@ class WikidataClient:
         Does NOT perform deep-sleep — that is handled by the caller
         (``execute_sparql_query`` / ``_execute_sparql_with_deep_sleep``).
 
+        A response status in ``RETRYABLE_STATUS_CODES`` (429, 502, 503, 504) is
+        retried with backoff. Any other 4xx is not retryable — the query text
+        itself was rejected, so a retry would just repeat the same request — and
+        raises ``QueryExecutionError`` immediately, after a single request.
+
         Args:
             query: SPARQL query string
             override_proxies: Optional list of proxy URLs to use instead of configured ones
@@ -539,7 +544,8 @@ class WikidataClient:
         Raises:
             UpstreamUnavailableError: If Wikidata returns 502/503/504 on the final attempt
             ProxyMisconfigurationError: If proxies are configured and all fail
-            QueryExecutionError: If no proxies are configured and execution fails
+            QueryExecutionError: If no proxies are configured and execution fails, or if
+                Wikidata returns a non-retryable 4xx (any status but 429)
         """
         sparql_start_time = time.time()
 
@@ -595,7 +601,7 @@ class WikidataClient:
                         time.sleep(wait_s)
                     raise requests.exceptions.HTTPError("429 Too Many Requests", response=response)
 
-                if response.status_code in (502, 503, 504):
+                if response.status_code in RETRYABLE_STATUS_CODES:
                     last_status_code = response.status_code
                     wait_s = min(self.config.retry_max_wait_seconds, 2**attempt)
                     if attempt < self.config.max_retries - 1:
@@ -610,6 +616,17 @@ class WikidataClient:
                         time.sleep(wait_s)
                     raise requests.exceptions.HTTPError(
                         f"{response.status_code} Service Unavailable", response=response
+                    )
+
+                if 400 <= response.status_code < 500:
+                    # A non-retryable 4xx (e.g. a WDQS WAF 403, or a malformed-query
+                    # 400) means the query itself was rejected: retrying would send
+                    # the same query text and get the same result, so fail on the
+                    # first request instead of burning max_retries attempts and sleeps.
+                    body_snippet = response.text[:200]
+                    raise QueryExecutionError(
+                        f"Non-retryable client error {response.status_code} from Wikidata: "
+                        f"{body_snippet}"
                     )
 
                 response.raise_for_status()
@@ -647,8 +664,10 @@ class WikidataClient:
 
                 # If this was the last attempt, determine error type and raise
                 if attempt == self.config.max_retries - 1:
-                    # Check for upstream errors based on tracked status code (not string matching)
-                    if last_status_code in (502, 503, 504):
+                    # Check for upstream errors based on tracked status code (not string
+                    # matching). 429 is excluded: it is throttling, not an upstream outage,
+                    # so its exhaustion is classified as a QueryExecutionError below.
+                    if last_status_code in RETRYABLE_STATUS_CODES - {429}:
                         _log_query_failure(
                             query_type="sparql_query",
                             error_category="upstream_unavailable",

@@ -234,7 +234,7 @@ from wikidata_collector.exceptions import (
     WikidataCollectorError,  # Base exception
     InvalidQIDError,  # Malformed QID
     InvalidFilterError,  # Bad filter params (dates, max_results)
-    QueryExecutionError,  # SPARQL query failed after retries
+    QueryExecutionError,  # SPARQL query failed after retries, or a non-retryable 4xx (e.g. 400/403)
     ProxyMisconfigurationError,  # All proxies failed
     UpstreamUnavailableError,  # Wikidata returned 502/503/504
     EntityNotFoundError,  # Entity not found

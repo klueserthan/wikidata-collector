@@ -242,6 +242,14 @@ class TestPrecedence:
             WikidataCollectorConfig()
 
 
+class TestRetryableStatusCodes:
+    """The module-level constant the client's retry loop reads from."""
+
+    def test_retryable_status_codes_are_throttling_and_upstream_outage(self):
+        """429 (throttled) and the 5xx gateway statuses are the retryable set."""
+        assert config_module.RETRYABLE_STATUS_CODES == {429, 502, 503, 504}
+
+
 class TestUserAgent:
     """User-Agent selection, and the cost of building it."""
 
