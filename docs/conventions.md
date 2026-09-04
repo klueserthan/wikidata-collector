@@ -19,7 +19,8 @@ wikidata_collector/
 ├── security.py              # validate_qid, validate_pid, escape_sparql_literal
 └── query_builders/
     ├── figures_query_builder.py
-    └── organizations_query_builder.py
+    ├── organizations_query_builder.py
+    └── social_handles_query_builder.py
 
 tests/
 ├── conftest.py              # Shared fixtures and SPARQL binding builders
