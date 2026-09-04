@@ -139,6 +139,15 @@ class TestLiveSparqlConnectivity:
             assert first_result.id is not None, "Result should have an ID"
             assert first_result.name is not None, "Result should have a name"
 
+        # Regression guard for #53: the page query used to bundle the five
+        # social-handle OPTIONALs and trip Wikidata's edge WAF with an instant
+        # 403. They are now fetched by a second, WAF-safe query keyed by the
+        # page's QIDs (docs/adr/0002) and merged back in — at least one result
+        # must carry a non-empty accounts list.
+        assert any(record.accounts for record in results), (
+            "Expected at least one result with a non-empty accounts list"
+        )
+
     def test_iterate_public_organizations_newspapers_in_switzerland_live_endpoint(self):
         """
         Live smoke test for a single-type organization query.

@@ -83,7 +83,12 @@ class PublicFigureBase(BaseModel):
 
 
 class PublicFigureWikiRecord(PublicFigureBase):
-    """Normalized view of fields returned by build_public_figures_query."""
+    """Normalized view of fields returned by build_public_figures_query.
+
+    The `*_handle` fields come from the second, WAF-safe query,
+    build_social_handles_query, not from build_public_figures_query itself
+    (see docs/adr/0002-social-handles-second-query.md).
+    """
 
     description: Optional[str] = None  # ?description
     birth_date: Optional[datetime] = None  # ?birthDate
@@ -232,7 +237,12 @@ class PublicOrganizationBase(BaseModel):
 
 
 class PublicOrganizationWikiRecord(PublicOrganizationBase):
-    """Normalized view of fields returned by build_public_organizations_query."""
+    """Normalized view of fields returned by build_public_organizations_query.
+
+    The `*_handle` fields come from the second, WAF-safe query,
+    build_social_handles_query, not from build_public_organizations_query
+    itself (see docs/adr/0002-social-handles-second-query.md).
+    """
 
     description: Optional[str] = None  # ?description
     founded_date: Optional[datetime] = None  # ?foundedDate

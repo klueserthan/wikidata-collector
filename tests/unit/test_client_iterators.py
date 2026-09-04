@@ -223,12 +223,22 @@ class TestIteratePublicOrganizationsPagination:
         """
         client = make_client(default_limit=3)
         page = organization_page(["Q1", "Q1", "Q2"])
+        social = sparql_response([])
 
-        with patch.object(client, "execute_sparql_query", return_value=(page, "direct")) as mock:
+        with patch.object(
+            client, "execute_sparql_query", side_effect=[(page, "direct"), (social, "direct")]
+        ) as mock:
             results = list(client.iterate_public_organizations(country="Q30", types=["parliament"]))
 
-        mock.assert_called_once()
+        # One call for the page, one for the social-handles query it triggers.
+        assert mock.call_count == 2
         assert [record.qid for record in results] == ["Q1", "Q2"]
+
+        # The social-handles query is keyed by unique QIDs: the duplicate Q1
+        # row must not appear twice in its VALUES clause.
+        social_query = mock.call_args_list[1].args[0]
+        assert social_query.count("wd:Q1") == 1
+        assert social_query.count("wd:Q2") == 1
 
     def test_filters_forwarded(self, wikidata_client):
         """All public filters reach the fetch seam under their public names."""
@@ -349,6 +359,8 @@ class TestOrganizationMultiTypeQueryShape:
         pages = [organization_page(["Q1", "Q2"]), organization_page(["Q2", "Q3"])]
 
         def _capture(query: str, override_proxies: Any = None):
+            if "VALUES ?entity" in query:
+                return sparql_response([]), "direct"
             return pages.pop(0), "direct"
 
         with patch.object(client, "execute_sparql_query", side_effect=_capture):
@@ -365,6 +377,8 @@ class TestOrganizationMultiTypeQueryShape:
         pages = [organization_page(["Q1", "Q2"]), organization_page(["Q3", "Q4"])]
 
         def _capture(query: str, override_proxies: Any = None):
+            if "VALUES ?entity" in query:
+                return sparql_response([]), "direct"
             return pages.pop(0), "direct"
 
         with patch.object(client, "execute_sparql_query", side_effect=_capture) as execute:
@@ -375,7 +389,8 @@ class TestOrganizationMultiTypeQueryShape:
             )
 
         assert [record.qid for record in results] == ["Q1", "Q2", "Q3"]
-        assert execute.call_count == 2
+        # One page query per stream plus one social-handles query per page.
+        assert execute.call_count == 4
 
 
 class TestDefaultPageSize:

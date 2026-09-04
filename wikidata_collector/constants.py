@@ -109,3 +109,15 @@ PROFESSION_MAPPINGS = {
     "model": "Q4610556",
     "fashion model": "Q4610556",
 }
+
+# Social-media handle properties, fetched by the second, WAF-safe query
+# (docs/adr/0002-social-handles-second-query.md). Keys must equal
+# `SOCIAL_MEDIA_PLATFORMS` in models.py; each key names the outer-query
+# variable as f"{platform}Handle", which `from_wikidata` reads.
+SOCIAL_HANDLE_PROPERTIES = {
+    "instagram": "P2003",
+    "twitter": "P2002",
+    "facebook": "P2013",
+    "youtube": "P2397",
+    "tiktok": "P7085",
+}

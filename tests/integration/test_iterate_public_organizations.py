@@ -383,12 +383,22 @@ class TestIteratePublicOrganizationsMultiTypeOverMockedHTTP:
 
     @staticmethod
     def _http_get(pages: list):
-        """Build a `requests.get` stand-in that pops one mocked page per call."""
+        """Build a `requests.get` stand-in that pops one mocked page per call.
+
+        Each real page triggers a follow-up social-handles query (identified
+        by its ``VALUES ?entity`` clause); that call is answered with an
+        empty envelope rather than popping from `pages`, since these tests
+        care about the page-query round trips, not social handles.
+        """
 
         def _get(url, params=None, headers=None, proxies=None, timeout=None):
             response = MagicMock()
             response.status_code = 200
-            response.json.return_value = pages.pop(0)
+            query = (params or {}).get("query", "")
+            if "VALUES ?entity" in query:
+                response.json.return_value = {"results": {"bindings": []}}
+            else:
+                response.json.return_value = pages.pop(0)
             return response
 
         return _get
@@ -409,15 +419,19 @@ class TestIteratePublicOrganizationsMultiTypeOverMockedHTTP:
                 )
             )
 
-        assert mock_get.call_count == 2
-        queries = [call.kwargs["params"]["query"] for call in mock_get.call_args_list]
+        # Each stream's non-empty page also triggers a follow-up social-handles
+        # query, so 2 streams cost 4 HTTP round trips, not 2.
+        assert mock_get.call_count == 4
+        all_queries = [call.kwargs["params"]["query"] for call in mock_get.call_args_list]
+        page_queries = [query for query in all_queries if "VALUES ?entity" not in query]
+        assert len(page_queries) == 2
 
-        assert "VALUES ?orgClass { wd:Q11032 }" in queries[0]
-        assert "wd:Q35749" not in queries[0]
-        assert "VALUES ?orgClass { wd:Q35749 }" in queries[1]
-        assert "wd:Q11032" not in queries[1]
+        assert "VALUES ?orgClass { wd:Q11032 }" in page_queries[0]
+        assert "wd:Q35749" not in page_queries[0]
+        assert "VALUES ?orgClass { wd:Q35749 }" in page_queries[1]
+        assert "wd:Q11032" not in page_queries[1]
         # The country filter reaches every stream's query.
-        assert all("wdt:P17 wd:Q39" in query for query in queries)
+        assert all("wdt:P17 wd:Q39" in query for query in page_queries)
 
         assert [record.qid for record in results] == ["Q10", "Q20"]
 
@@ -449,5 +463,6 @@ class TestIteratePublicOrganizationsMultiTypeOverMockedHTTP:
 
         assert [record.qid for record in results] == ["Q10", "Q20", "Q30"]
         # Both streams' first pages are fetched (the cap is hit mid-second
-        # stream); no further page beyond that is fetched.
-        assert mock_get.call_count == 2
+        # stream); no further page beyond that is fetched. Each of those two
+        # page fetches also costs one follow-up social-handles round trip.
+        assert mock_get.call_count == 4
