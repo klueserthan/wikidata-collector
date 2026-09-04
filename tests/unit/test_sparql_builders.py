@@ -7,6 +7,7 @@ import re
 import pytest
 
 from wikidata_collector.constants import ORGANIZATION_TYPE_MAPPINGS, SOCIAL_HANDLE_PROPERTIES
+from wikidata_collector.models import SOCIAL_MEDIA_PLATFORMS
 from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
 from wikidata_collector.query_builders.organizations_query_builder import (
     build_public_organizations_query,
@@ -557,3 +558,12 @@ class TestBuildSocialHandlesQuery:
         """An empty page has nothing to key the VALUES clause on."""
         with pytest.raises(ValueError):
             build_social_handles_query([])
+
+    def test_properties_match_the_platforms_models_reads(self):
+        """SOCIAL_HANDLE_PROPERTIES and SOCIAL_MEDIA_PLATFORMS (models.py) must
+        name the same platforms: the record family's `from_wikidata` reads
+        `f"{platform}Handle"` for every entry in SOCIAL_MEDIA_PLATFORMS, and
+        this builder emits an OPTIONAL for every entry in
+        SOCIAL_HANDLE_PROPERTIES. A mismatch would silently drop or orphan a
+        platform's handle."""
+        assert set(SOCIAL_HANDLE_PROPERTIES) == set(SOCIAL_MEDIA_PLATFORMS)

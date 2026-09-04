@@ -234,6 +234,12 @@ class TestIteratePublicOrganizationsPagination:
         assert mock.call_count == 2
         assert [record.qid for record in results] == ["Q1", "Q2"]
 
+        # The social-handles query is keyed by unique QIDs: the duplicate Q1
+        # row must not appear twice in its VALUES clause.
+        social_query = mock.call_args_list[1].args[0]
+        assert social_query.count("wd:Q1") == 1
+        assert social_query.count("wd:Q2") == 1
+
     def test_filters_forwarded(self, wikidata_client):
         """All public filters reach the fetch seam under their public names."""
         mock_results = [_organization("Q1")]

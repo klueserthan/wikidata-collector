@@ -32,6 +32,8 @@ def build_social_handles_query(qids: List[str]) -> str:
         raise ValueError("qids must not be empty")
 
     validated_qids = [validate_qid(qid) for qid in qids]
+    # ponytail: unchunked VALUES list, sized by the caller's page limit;
+    # chunk if pages grow past a few hundred QIDs.
     values_clause = " ".join(f"wd:{qid}" for qid in validated_qids)
 
     select_vars = " ".join(f"?{platform}Handle" for platform in SOCIAL_HANDLE_PROPERTIES)
