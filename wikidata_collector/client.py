@@ -997,7 +997,7 @@ class WikidataClient:
             nationality: Nationality filter (QID, ISO code, or label)
             occupations: List of occupation filters (QIDs or labels)
             gender: Gender filter; one of "male", "female", "other", or a QID
-            lang: Language code for labels
+            lang: Language code for labels; falls back to English if unavailable
             limit: Maximum results to return (defaults to config.default_limit)
             cursor: Offset for pagination
             after_qid: QID for keyset pagination
@@ -1093,7 +1093,7 @@ class WikidataClient:
             occupations: List of occupation filters (labels or QIDs)
             gender: Gender filter; one of "male", "female", "other", or a QID
             max_results: Maximum number of results to yield (None for unlimited)
-            lang: Language code for labels (default: "en")
+            lang: Language code for labels (default: "en"); falls back to English if unavailable
 
         Yields:
             PublicFigureNormalizedRecord: Normalized public figure objects

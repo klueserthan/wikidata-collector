@@ -28,7 +28,7 @@ def build_public_figures_query(
         occupations: List of occupation filters (mapped keys or QIDs)
         gender: Gender filter; one of "male", "female", "other" (includes no gender info),
             or a direct Wikidata QID (e.g. "Q6581097")
-        lang: Language code for labels
+        lang: Language code for labels; falls back to English if unavailable
         limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
         after_qid: QID for keyset pagination
@@ -170,7 +170,7 @@ def build_public_figures_query(
     FILTER(LANG(?description) = "%s")
   }
 
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "%s". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "%s,en". }
 }
 ORDER BY ?qidNum
 """ % (lang, lang)

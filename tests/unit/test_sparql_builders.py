@@ -96,9 +96,14 @@ class TestBuildPublicFiguresQuery:
         """Test language parameter in SERVICE block."""
         query = build_public_figures_query(lang="fr")
 
-        assert (
-            'bd:serviceParam wikibase:language "en"' in query or 'wikibase:language "fr"' in query
-        )
+        assert 'bd:serviceParam wikibase:language "fr,en"' in query
+
+    def test_label_service_falls_back_to_english(self):
+        """Figures lacking a label in `lang` must fall back to English, matching
+        the organizations builder's fallback chain (see issue #55)."""
+        query = build_public_figures_query(lang="de")
+
+        assert 'bd:serviceParam wikibase:language "de,en".' in query
 
     def test_nationality_filter_mapped_name(self):
         """Test nationality filter with mapped country name."""

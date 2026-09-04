@@ -62,7 +62,7 @@ def build_public_organizations_query(
         country: Country filter (QID or label)
         types: List of organization type filters (mapped keys or raw QIDs).
             Required: at least one value must be given.
-        lang: Language code for labels
+        lang: Language code for labels; falls back to English if unavailable
         limit: Maximum results to return (defaults to DEFAULT_LIMIT)
         cursor: Offset for pagination
         after_qid: QID for keyset pagination
