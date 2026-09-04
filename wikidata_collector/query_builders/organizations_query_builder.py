@@ -151,7 +151,6 @@ def build_public_organizations_query(
         "       ?typeLabel ?countryLabel\n"
         "       ?foundedDate ?dissolvedDate\n"
         "       ?image\n"
-        "       ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle ?tiktokHandle\n"
         "WHERE {\n"
     )
     query += subquery
@@ -161,12 +160,6 @@ def build_public_organizations_query(
   OPTIONAL { ?organization wdt:P571 ?foundedDate. }
   OPTIONAL { ?organization wdt:P576 ?dissolvedDate. }
   OPTIONAL { ?organization wdt:P18 ?image. }
-
-  OPTIONAL { ?organization wdt:P2003 ?instagramHandle. }
-  OPTIONAL { ?organization wdt:P2002 ?twitterHandle. }
-  OPTIONAL { ?organization wdt:P2013 ?facebookHandle. }
-  OPTIONAL { ?organization wdt:P2397 ?youtubeHandle. }
-  OPTIONAL { ?organization wdt:P7085 ?tiktokHandle. }
 
   OPTIONAL {
     ?organization schema:description ?description.

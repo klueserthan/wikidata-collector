@@ -147,7 +147,6 @@ def build_public_figures_query(
         "       ?countryLabel\n"
         "       ?occupationLabel\n"
         "       ?image\n"
-        "       ?instagramHandle ?twitterHandle ?facebookHandle ?youtubeHandle ?tiktokHandle\n"
         "WHERE {\n"
     )
     query += subquery
@@ -158,12 +157,6 @@ def build_public_figures_query(
   OPTIONAL { ?person wdt:P18  ?image. }
 
   OPTIONAL { ?person wdt:P106 ?occupation. }
-
-  OPTIONAL { ?person wdt:P2003 ?instagramHandle. }
-  OPTIONAL { ?person wdt:P2002 ?twitterHandle. }
-  OPTIONAL { ?person wdt:P2013 ?facebookHandle. }
-  OPTIONAL { ?person wdt:P2397 ?youtubeHandle. }
-  OPTIONAL { ?person wdt:P7085 ?tiktokHandle. }
 
   OPTIONAL {
     ?person schema:description ?description.

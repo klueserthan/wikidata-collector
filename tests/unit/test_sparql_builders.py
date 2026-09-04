@@ -6,10 +6,13 @@ import re
 
 import pytest
 
-from wikidata_collector.constants import ORGANIZATION_TYPE_MAPPINGS
+from wikidata_collector.constants import ORGANIZATION_TYPE_MAPPINGS, SOCIAL_HANDLE_PROPERTIES
 from wikidata_collector.query_builders.figures_query_builder import build_public_figures_query
 from wikidata_collector.query_builders.organizations_query_builder import (
     build_public_organizations_query,
+)
+from wikidata_collector.query_builders.social_handles_query_builder import (
+    build_social_handles_query,
 )
 
 
@@ -171,6 +174,17 @@ class TestBuildPublicFiguresQuery:
 
         assert "wdt:P21 wd:" not in query.split("OPTIONAL")[0]  # not in subquery triple patterns
         assert "FILTER NOT EXISTS" not in query
+
+    def test_social_handle_optionals_are_not_emitted(self):
+        """The five social-handle OPTIONALs trip Wikidata's edge WAF combined
+        with this query's SELECT shape (see docs/adr/0002). They must not
+        appear anywhere in the page query; the social-handles query builder
+        fetches them separately, keyed by the page's QIDs."""
+        query = build_public_figures_query()
+
+        for pid in ("P2003", "P2002", "P2013", "P2397", "P7085"):
+            assert pid not in query
+        assert "Handle" not in query
 
 
 class TestBuildPublicOrganizationsQuery:
@@ -344,14 +358,16 @@ class TestBuildPublicOrganizationsQuery:
         assert "OPTIONAL { ?organization wdt:P571 ?foundedDate" in query
         assert "OPTIONAL { ?organization wdt:P18 ?image" in query
 
-    def test_social_media_fields_included(self):
-        """Test that social media fields are included in query."""
+    def test_social_handle_optionals_are_not_emitted(self):
+        """The five social-handle OPTIONALs trip Wikidata's edge WAF combined
+        with this query's SELECT shape (see docs/adr/0002). They must not
+        appear anywhere in the page query; the social-handles query builder
+        fetches them separately, keyed by the page's QIDs."""
         query = build_public_organizations_query(types=["political_party"])
 
-        assert "OPTIONAL { ?organization wdt:P2003 ?instagramHandle" in query
-        assert "OPTIONAL { ?organization wdt:P2002 ?twitterHandle" in query
-        assert "OPTIONAL { ?organization wdt:P2013 ?facebookHandle" in query
-        assert "OPTIONAL { ?organization wdt:P2397 ?youtubeHandle" in query
+        for pid in ("P2003", "P2002", "P2013", "P2397", "P7085"):
+            assert pid not in query
+        assert "Handle" not in query
 
     def test_service_label_block(self):
         """Test that SERVICE wikibase:label block is included."""
@@ -501,3 +517,43 @@ class TestQueryBuilderEdgeCases:
         build an unfiltered scan (which always times out on WDQS)."""
         with pytest.raises(ValueError, match="types filter is required"):
             build_public_organizations_query(types=[])
+
+
+class TestBuildSocialHandlesQuery:
+    """Test build_social_handles_query, the second, WAF-safe query that fetches
+    the five social-handle properties keyed by a page's QIDs (docs/adr/0002)."""
+
+    def test_qids_appear_in_the_values_clause(self):
+        """Every QID is rendered as `wd:Qn` inside `VALUES ?entity { }`."""
+        query = build_social_handles_query(["Q42", "Q1"])
+
+        values_line = next(line for line in query.splitlines() if "VALUES ?entity" in line)
+        assert "wd:Q42" in values_line
+        assert "wd:Q1" in values_line
+
+    def test_all_five_optional_handle_clauses_are_present(self):
+        """Every property in SOCIAL_HANDLE_PROPERTIES gets its own OPTIONAL,
+        binding `?<platform>Handle`."""
+        query = build_social_handles_query(["Q42"])
+
+        for platform, pid in SOCIAL_HANDLE_PROPERTIES.items():
+            assert f"OPTIONAL {{ ?entity wdt:{pid} ?{platform}Handle. }}" in query
+            assert f"?{platform}Handle" in query.splitlines()[0]  # in the outer SELECT
+
+    def test_no_label_service_or_order_by(self):
+        """This query is a lightweight lookup: no SERVICE wikibase:label, no
+        ORDER BY — unlike the page queries."""
+        query = build_social_handles_query(["Q42"])
+
+        assert "SERVICE" not in query
+        assert "ORDER BY" not in query
+
+    def test_invalid_qid_raises(self):
+        """A malformed QID fails validate_qid before any query is built."""
+        with pytest.raises(ValueError, match="Invalid QID format"):
+            build_social_handles_query(["not-a-qid"])
+
+    def test_empty_qid_list_raises(self):
+        """An empty page has nothing to key the VALUES clause on."""
+        with pytest.raises(ValueError):
+            build_social_handles_query([])
