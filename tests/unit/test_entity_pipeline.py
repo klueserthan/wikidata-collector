@@ -13,12 +13,15 @@ from unittest.mock import patch
 import pytest
 
 from tests.conftest import figure_binding, sparql_response
+from wikidata_collector.client import _merge_social_bindings
 from wikidata_collector.constants import ORGANIZATION_TYPE_MAPPINGS
 from wikidata_collector.exceptions import InvalidFilterError, QueryExecutionError
 from wikidata_collector.models import (
     PublicFigureNormalizedRecord,
     PublicOrganizationNormalizedRecord,
 )
+
+WIKIDATA_ENTITY_PREFIX = "http://www.wikidata.org/entity/"
 
 
 def _figures(*qids: str) -> List[PublicFigureNormalizedRecord]:
@@ -223,7 +226,10 @@ class TestFetchSeam:
                 figure_binding("Q42", "Douglas Adams", occupationLabel="humorist"),
             ]
         )
-        with patch.object(client, "execute_sparql_query", return_value=(page, "direct")):
+        social = sparql_response([])
+        with patch.object(
+            client, "execute_sparql_query", side_effect=[(page, "direct"), (social, "direct")]
+        ):
             records, used_proxy = client.get_public_figures()
 
         assert used_proxy == "direct"
@@ -251,6 +257,165 @@ class TestFetchSeam:
             client.get_public_figures()
 
         assert "LIMIT 7" in captured["query"]
+
+
+class TestFetchSeamSocialHandles:
+    """`_fetch_page` fetches social handles in a second, WAF-safe query keyed
+    by the page's QIDs (docs/adr/0002-social-handles-second-query.md),
+    merging them onto the page's bindings before normalization."""
+
+    def test_a_non_empty_page_triggers_a_second_call_keyed_by_its_qids(self, make_client):
+        """The page query runs first; the social-handles query runs second,
+        with exactly the page's QIDs in its VALUES clause."""
+        client = make_client()
+        page = sparql_response(
+            [
+                figure_binding("Q42", "Douglas Adams"),
+                figure_binding("Q1", "United Nations Person"),
+            ]
+        )
+        social = sparql_response([])
+        with patch.object(
+            client, "execute_sparql_query", side_effect=[(page, "direct"), (social, "direct")]
+        ) as execute:
+            client.get_public_figures()
+
+        assert execute.call_count == 2
+        first_query = execute.call_args_list[0].args[0]
+        second_query = execute.call_args_list[1].args[0]
+        assert "VALUES ?entity" not in first_query
+        assert "VALUES ?entity { wd:Q42 wd:Q1 }" in second_query
+
+    def test_an_empty_page_makes_only_one_call(self, make_client):
+        """No bindings means no QIDs to key a social-handles query on."""
+        client = make_client()
+        with patch.object(
+            client, "execute_sparql_query", return_value=(sparql_response([]), "direct")
+        ) as execute:
+            client.get_public_figures()
+
+        assert execute.call_count == 1
+
+    def test_used_proxy_is_the_page_querys_proxy(self, make_client):
+        """The social-handles query's proxy is not what `_fetch_page` reports."""
+        client = make_client()
+        page = sparql_response([figure_binding("Q42", "Douglas Adams")])
+        social = sparql_response([])
+        with patch.object(
+            client,
+            "execute_sparql_query",
+            side_effect=[(page, "proxy-a"), (social, "proxy-b")],
+        ):
+            _, used_proxy = client.get_public_figures()
+
+        assert used_proxy == "proxy-a"
+
+    def test_social_handles_are_merged_into_the_normalized_record(self, make_client):
+        """Two page rows for one QID plus two Instagram-handle rows from the
+        social query yield one record whose `accounts` has both handles and
+        no duplicates."""
+        client = make_client()
+        page = sparql_response(
+            [
+                figure_binding("Q42", "Douglas Adams", occupationLabel="writer"),
+                figure_binding("Q42", "Douglas Adams", occupationLabel="humorist"),
+            ]
+        )
+        social = sparql_response(
+            [
+                {
+                    "entity": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q42"},
+                    "instagramHandle": {"value": "douglasadams"},
+                },
+                {
+                    "entity": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q42"},
+                    "instagramHandle": {"value": "douglasadams_official"},
+                },
+            ]
+        )
+        with patch.object(
+            client, "execute_sparql_query", side_effect=[(page, "direct"), (social, "direct")]
+        ):
+            records, _ = client.get_public_figures()
+
+        assert [record.qid for record in records] == ["Q42"]
+        handles = {account.handle for account in records[0].accounts}
+        assert handles == {"douglasadams", "douglasadams_official"}
+        assert len(records[0].accounts) == 2
+
+
+class TestMergeSocialBindings:
+    """`_merge_social_bindings` is a pure function reproducing the row
+    cross-product a single combined query used to produce, given the page's
+    bindings and the social-handles query's bindings."""
+
+    def test_cross_product_for_a_shared_qid(self):
+        """2 page rows x 2 social rows for the same QID yields 4 merged rows."""
+        page = [
+            {"person": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q42"}, "personLabel": {"value": "A"}},
+            {
+                "person": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q42"},
+                "occupationLabel": {"value": "writer"},
+            },
+        ]
+        social = [
+            {
+                "entity": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q42"},
+                "instagramHandle": {"value": "a"},
+            },
+            {"entity": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q42"}, "twitterHandle": {"value": "b"}},
+        ]
+
+        merged = _merge_social_bindings(page, social, "person")
+
+        assert len(merged) == 4
+        assert {"personLabel": {"value": "A"}, "instagramHandle": {"value": "a"}}.items() <= merged[
+            0
+        ].items()
+
+    def test_page_row_without_a_matching_social_row_is_unchanged(self):
+        """A QID absent from the social bindings is emitted as-is."""
+        page = [{"person": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q1"}}]
+
+        merged = _merge_social_bindings(page, [], "person")
+
+        assert merged == page
+
+    def test_page_order_is_preserved(self):
+        """Same-QID rows must stay consecutive; unrelated QIDs keep page order."""
+        page = [
+            {"person": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q1"}},
+            {"person": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q2"}},
+        ]
+        social = [
+            {
+                "entity": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q2"},
+                "instagramHandle": {"value": "x"},
+            }
+        ]
+
+        merged = _merge_social_bindings(page, social, "person")
+
+        assert [row["person"]["value"] for row in merged] == [
+            f"{WIKIDATA_ENTITY_PREFIX}Q1",
+            f"{WIKIDATA_ENTITY_PREFIX}Q2",
+        ]
+
+    def test_entity_key_is_not_leaked_into_merged_rows(self):
+        """The social binding's `entity` key must not appear in a merged row —
+        only the page's own entity variable does."""
+        page = [{"person": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q42"}}]
+        social = [
+            {
+                "entity": {"value": f"{WIKIDATA_ENTITY_PREFIX}Q42"},
+                "instagramHandle": {"value": "a"},
+            }
+        ]
+
+        merged = _merge_social_bindings(page, social, "person")
+
+        assert "entity" not in merged[0]
+        assert merged[0]["instagramHandle"] == {"value": "a"}
 
 
 class TestOrganizationFilterValidation:

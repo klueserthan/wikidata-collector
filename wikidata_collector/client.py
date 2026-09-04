@@ -50,6 +50,7 @@ from .query_builders.organizations_query_builder import (
     build_public_organizations_query,
     resolve_organization_type,
 )
+from .query_builders.social_handles_query_builder import build_social_handles_query
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +335,49 @@ def _normalize_organization_bindings(
     )
 
 
+def _merge_social_bindings(
+    page_bindings: List[Dict[str, Any]],
+    social_bindings: List[Dict[str, Any]],
+    entity_var: str,
+) -> List[Dict[str, Any]]:
+    """Merge a page's bindings with a keyed social-handles query's bindings.
+
+    Reproduces the row cross-product a single combined query would have
+    produced, purely at the bindings level, before `spec.normalize` runs.
+    Every page row sharing a QID with one or more social rows is expanded
+    into one merged row per social row; a page row with no matching social
+    row is emitted unchanged. Page order is preserved throughout, so
+    same-QID rows stay consecutive — a requirement of `normalize_bindings`,
+    which folds consecutive same-QID rows into one record.
+
+    Args:
+        page_bindings: Bindings from the page query, keyed by `entity_var`.
+        social_bindings: Bindings from `build_social_handles_query`, keyed by
+            `?entity`.
+        entity_var: The page binding's entity variable (`"person"` or
+            `"organization"`) whose IRI ends in the QID.
+
+    Returns:
+        Merged rows in page order. The social binding's `entity` key is
+        dropped from every merged row.
+    """
+    social_by_qid: Dict[str, List[Dict[str, Any]]] = {}
+    for row in social_bindings:
+        qid = row["entity"]["value"].split("/")[-1]
+        social_row = {key: value for key, value in row.items() if key != "entity"}
+        social_by_qid.setdefault(qid, []).append(social_row)
+
+    merged: List[Dict[str, Any]] = []
+    for page_row in page_bindings:
+        qid = page_row[entity_var]["value"].split("/")[-1]
+        social_rows = social_by_qid.get(qid)
+        if social_rows:
+            merged.extend({**page_row, **social_row} for social_row in social_rows)
+        else:
+            merged.append(page_row)
+    return merged
+
+
 @dataclass(frozen=True)
 class _EntitySpec(Generic[TRecord]):
     """Everything the entity pipeline needs to know about one entity kind.
@@ -346,6 +390,7 @@ class _EntitySpec(Generic[TRecord]):
     query_type: str
     build_query: Callable[..., str]
     normalize: Callable[[List[Dict[str, Any]]], List[TRecord]]
+    entity_var: str
     validate_filters: Callable[[Dict[str, Any]], None] = _no_filter_validation
     decompose_filters: Callable[[Dict[str, Any]], List[Dict[str, Any]]] = _no_decomposition
 
@@ -355,6 +400,7 @@ _PUBLIC_FIGURES: "_EntitySpec[PublicFigureNormalizedRecord]" = _EntitySpec(
     query_type="public_figures",
     build_query=build_public_figures_query,
     normalize=_normalize_figure_bindings,
+    entity_var="person",
     validate_filters=_validate_figure_filters,
 )
 
@@ -363,6 +409,7 @@ _PUBLIC_ORGANIZATIONS: "_EntitySpec[PublicOrganizationNormalizedRecord]" = _Enti
     query_type="public_organizations",
     build_query=build_public_organizations_query,
     normalize=_normalize_organization_bindings,
+    entity_var="organization",
     validate_filters=_validate_organization_filters,
     decompose_filters=_decompose_organization_filters,
 )
@@ -766,6 +813,27 @@ class WikidataClient:
             raise InvalidFilterError(f"Invalid filter parameters: {e}") from e
         result, used_proxy = self.execute_sparql_query(query, override_proxies)
         bindings = result.get("results", {}).get("bindings", [])
+
+        # Social handles are fetched in a second, WAF-safe query keyed by this
+        # page's QIDs (docs/adr/0002-social-handles-second-query.md): the five
+        # handle OPTIONALs trip Wikidata's edge WAF combined with the page
+        # query's SELECT shape. An empty page has no QIDs to key that query
+        # on, so it makes no second request. `used_proxy` stays the page
+        # query's proxy, not the social-handles query's.
+        if bindings:
+            qids: List[str] = []
+            seen_qids: Set[str] = set()
+            for row in bindings:
+                qid = row[spec.entity_var]["value"].split("/")[-1]
+                if qid not in seen_qids:
+                    seen_qids.add(qid)
+                    qids.append(qid)
+
+            social_query = build_social_handles_query(qids)
+            social_result, _ = self.execute_sparql_query(social_query, override_proxies)
+            social_bindings = social_result.get("results", {}).get("bindings", [])
+            bindings = _merge_social_bindings(bindings, social_bindings, spec.entity_var)
+
         return spec.normalize(bindings), used_proxy
 
     def _paginate_sparql_results(

@@ -388,7 +388,10 @@ class TestStructuredLoggingInIterators:
             mock_response_page2.status_code = 200
             mock_response_page2.json.return_value = {"results": {"bindings": []}}
 
-            mock_get.side_effect = [mock_response_page1, mock_response_page2]
+            # page1 is non-empty, so it triggers a follow-up social-handles
+            # query (answered with the same empty envelope) before the
+            # pipeline moves on to page2.
+            mock_get.side_effect = [mock_response_page1, mock_response_page2, mock_response_page2]
 
             with caplog.at_level(logging.DEBUG):
                 # Consume iterator
